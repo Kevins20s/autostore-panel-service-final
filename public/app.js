@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(n);
 const h = (tag, attrs = {}, ...kids) => {
@@ -255,7 +255,7 @@ async function bot() {
             h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async (ev) => {
                 const btn = ev.currentTarget;
                 if (btn.disabled) return;
-                const body = {}; BOT_FIELDS.forEach((k) => (body[k] = inp[k].value));
+                const body = {}; BOT_FIELDS.forEach((k) => { if (inp[k]) body[k] = inp[k].value; });
                 btn.disabled = true; btn.textContent = "Memeriksa…";
                 msg.textContent = "Memeriksa token & database, tunggu beberapa detik…";
                 try { const r = await api("PUT", "/api/config", body); SECRETS.forEach((k) => { if (inp[k].value) { inp[k].value = ""; inp[k].placeholder = "(tersimpan)"; } }); msg.textContent = r.restartNeeded ? "Tersimpan. Tekan Restart agar berlaku." : "Tersimpan. Sekarang tekan Start."; }

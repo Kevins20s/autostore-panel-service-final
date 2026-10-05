@@ -1,4 +1,18 @@
 require("colors");
+if (process.env.DNS_SERVERS) {
+    try {
+        const dns = require("dns");
+        dns.setServers(
+            process.env.DNS_SERVERS
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean)
+        );
+        console.log("[SERVICE] DNS:", dns.getServers().join(", "));
+    } catch (e) {
+        console.error("[SERVICE] DNS_SERVERS tidak valid:", e.message);
+    }
+}
 const { GatewayIntentBits, Client, Collection, Partials } = require("discord.js");
 const mongoose = require("mongoose");
 const config = require("./config/runtime.js");

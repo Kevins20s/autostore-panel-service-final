@@ -1,0 +1,21 @@
+{
+  "name": "autostore-panel",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "setup": "npm install && npm install --prefix bot && npm install --prefix service",
+    "test": "node test/smoke.js",
+    "test:shop": "node test/shop.js",
+    "test:ui": "node test/ui.js",
+    "test:all": "node test/smoke.js && node test/shop.js && node test/ui.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongodb": "^6.8.0"
+  },
+  "engines": {
+    "node": ">=20.6"
+  }
+}

@@ -1,0 +1,11 @@
+{
+    "TOKEN": "",
+    "MongoURL": "",
+    "CLIENTID": "",
+    "Owner": "",
+    "Admin": [],
+    "serverId": "",
+    "PaymentGatewayUrl": "",
+    "PaymentGatewayApiKey": "",
+    "PaymentWebhookSecret": ""
+}

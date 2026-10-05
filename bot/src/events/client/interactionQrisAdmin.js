@@ -1,0 +1,85 @@
+const client = require("../../index");
+const Qris = require("../../Schema/qris.js");
+const { creditDeposit, cancelDeposit, fetchDmMessage } = require("../../utils/depositWatcher.js");
+const { Owner, Admin } = require("../../config/config.json");
+const { Warning, Benar, Salah } = require("../../config/configemoji.json");
+
+module.exports = {
+    name: "interactionQrisAdmin",
+};
+
+function isAdminOrOwner(userId) {
+    return userId === Owner || (Array.isArray(Admin) && Admin.includes(userId));
+}
+
+client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isButton()) return;
+    if (
+        !interaction.customId.startsWith("qrisadmin_success_") &&
+        !interaction.customId.startsWith("qrisadmin_cancel_")
+    ) {
+        return;
+    }
+
+    // Hanya Admin/Owner yang boleh menekan tombol ini
+    if (!isAdminOrOwner(interaction.user.id)) {
+        return interaction.reply({
+            content: `${Warning} Tombol ini cuma bisa dipakai oleh **Admin/Owner**.`,
+            ephemeral: true,
+        });
+    }
+
+    const isSuccess = interaction.customId.startsWith("qrisadmin_success_");
+    const orderId = interaction.customId.replace(isSuccess ? "qrisadmin_success_" : "qrisadmin_cancel_", "");
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const trx = await Qris.findOne({ orderId }).catch(console.error);
+
+        if (!trx) {
+            return interaction.editReply({
+                content: `${Warning} Transaksi dengan Order ID \`${orderId}\` tidak ditemukan.`,
+            });
+        }
+
+        if (trx.status !== "pending") {
+            return interaction.editReply({
+                content: `${Warning} Transaksi ini sudah diproses sebelumnya (status saat ini: **${trx.status}**).`,
+            });
+        }
+
+        const dmMessage = await fetchDmMessage(trx);
+
+        if (isSuccess) {
+            const ok = await creditDeposit(trx, dmMessage, interaction.user.id);
+
+            if (!ok) {
+                return interaction.editReply({
+                    content: `${Warning} Gagal memproses (kemungkinan sudah diproses admin lain barusan).`,
+                });
+            }
+
+            return interaction.editReply({
+                content: `${Benar} Deposit \`${trx.orderId}\` ditandai **SUCCESS**, balance **${trx.wlAmount} WL** sudah ditambahkan ke <@${trx.discordId}>.`,
+            });
+        } else {
+            const ok = await cancelDeposit(trx, dmMessage, interaction.user.id);
+
+            if (!ok) {
+                return interaction.editReply({
+                    content: `${Warning} Gagal memproses (kemungkinan sudah diproses admin lain barusan).`,
+                });
+            }
+
+            return interaction.editReply({
+                content: `${Salah} Deposit \`${trx.orderId}\` ditandai **CANCELLED**.`,
+            });
+        }
+    } catch (err) {
+        console.error("interactionQrisAdmin error:", err);
+        return interaction
+            .editReply({ content: `${Warning} Terjadi kesalahan: ${err.message}` })
+            .catch(() => {});
+    }
+});

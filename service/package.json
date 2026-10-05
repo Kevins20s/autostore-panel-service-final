@@ -1,0 +1,14 @@
+{
+  "name": "autostore-service",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node ."
+  },
+  "dependencies": {
+    "discord.js": "^14.7.1",
+    "mongoose": "^8.0.1",
+    "colors": "^1.4.0"
+  }
+}

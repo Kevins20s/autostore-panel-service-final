@@ -1,0 +1,93 @@
+const {
+    EmbedBuilder,
+    Client,
+    CommandInteraction,
+    ChannelType,
+    AttachmentBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ApplicationCommandOptionType,
+} = require("discord.js");
+const list = require("../../Schema/list.js");
+let shop = require("../../Schema/shop.js");
+const { Loading, Warning, CROWN, ARROW } = require("../../config/configemoji.json");
+module.exports = {
+    name: 'checkstock',
+    description: "Check Stock Of Product",
+    accessableby: "admin",
+    options: [
+        {
+            name: "code",
+            description: "Code Of Product",
+            type: ApplicationCommandOptionType.String,
+            required: true
+        }
+    ],
+    /** 
+     * @param {Client} client 
+     * @param {CommandInteraction} interaction
+     * @param {String[]} args 
+     */
+    run: async (client, interaction, args) => {
+        const code = interaction.options.getString("code");
+
+        const getCodes = await list
+            .findOne({ code: code })
+            .then((d) => {
+                return d;
+            })
+            .catch(console.error);
+
+        if (!getCodes) return interaction.reply({
+            content: `Product With That Code Doesn't Exist`,
+            ephemeral: true
+        });
+
+        let getCode = await shop
+            .find({ code: code })
+            .then((res) => {
+                return res;
+            })
+            .catch(console.error);
+
+        if (getCode.length < 1) return interaction.reply({
+            content: `**Not Have Stock Right Now!**`,
+            ephemeral: true
+        });
+
+        await interaction.reply({
+            content:`Proccesssing Your Data In Database! ${Loading}`,
+            ephemeral: true
+        });
+
+        let text = "";
+        for (let i = 0; i < getCode.length; i++) {
+            let data = await shop
+                .findOneAndDelete({ code: code })
+                .then((res) => {
+                    return res;
+                })
+                .catch(console.error);
+            text += data.data + "\n";
+
+            await new shop({
+                code: code,
+                data: data.data,
+            })
+            .save()
+            .catch(console.error);
+        }
+
+        let sam = '```\n' + text + '\n```';
+        let embed = new EmbedBuilder()
+            .setTitle(`${CROWN} CHECK STOCK ${CROWN}`)
+            .setDescription(`**${ARROW} Code:** ${code}\n**${ARROW} Total Stock:** ${getCode.length}\n\n${Warning} **Details Stock** ${Warning}\n${sam}`)
+            .setTimestamp();
+        
+        await interaction.followUp({
+            embeds:[embed],
+            ephemeral: true
+        });
+    }
+}

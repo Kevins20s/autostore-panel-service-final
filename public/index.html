@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoStore Panel</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<section id="login" class="login hide">
+  <h1>AutoStore Panel</h1><p class="mut">Masuk dengan key yang kamu terima dari penjual.</p>
+  <div class="card">
+    <input id="key" placeholder="AS-XXXX-XXXX-XXXX-XXXX atau SV-XXXX-XXXX-XXXX-XXXX" autocomplete="off">
+    <div class="row" style="margin-top:12px"><button class="pri" id="btnLogin">Masuk</button></div>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+</section>
+<div id="app" class="app hide">
+  <aside class="side">
+    <div class="brand">AutoStore</div>
+    <nav id="nav"></nav>
+    <div class="sidefoot"><span id="botState" class="badge"></span><button id="btnOut">Keluar</button></div>
+  </aside>
+  <div class="content"><div id="view"></div></div>
+</div>
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body></html>

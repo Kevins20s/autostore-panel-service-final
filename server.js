@@ -19,6 +19,8 @@ const { checkDiscord, checkMongo } = require("./src/validate");
 const { Runner } = require("./src/runner");
 const createShopRouter = require("./src/shopapi");
 const { closeConn } = require("./src/shopdb");
+const { getServiceDb, closeServiceDb, closeAllServiceDb } = require("./src/servicedb");
+const { JASA_TYPES, getJasaTypeKeys } = require("./service/src/utils/jasaTypes.js");
 
 const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080); // Railway mengisi PORT otomatis
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -189,6 +191,7 @@ app.put("/api/config", buyer, wrap(async (req, res) => {
     } catch (e) { return err(e.message); }
     l.config = encrypt(next);
     closeConn(l.id);
+    await closeServiceDb(l.id);
     store.save();
     res.json({ ok: true, restartNeeded: runner.status(l.id) !== "stopped" });
 }));
@@ -209,6 +212,69 @@ app.post("/api/bot/start", buyer, botAction("start"));
 app.post("/api/bot/stop", buyer, botAction("stop"));
 app.post("/api/bot/restart", buyer, botAction("restart"));
 app.get("/api/logs", buyer, (req, res) => res.json({ lines: runner.logs(req.lic.id).slice(-100) }));
+
+// ---------- AutoStore Service management (web) ----------
+function serviceOnly(req, res, next) {
+    if (req.lic.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
+    next();
+}
+
+function serviceMongo(l) {
+    if (!l.config) throw new Error("Isi konfigurasi bot Service terlebih dahulu.");
+    const cfg = decrypt(l.config);
+    if (!cfg.mongoUrl) throw new Error("MongoDB URL belum diatur.");
+    return getServiceDb(l.id, cfg.mongoUrl);
+}
+
+app.get("/api/service/settings", buyer, serviceOnly, wrap(async (req, res) => {
+    const db = await serviceMongo(req.lic);
+    const configs = await db.collection("jasaconfigs").find({}).toArray();
+    const byType = Object.fromEntries(configs.map((x) => [x.type, x]));
+    res.json({
+        services: getJasaTypeKeys().map((type) => {
+            const def = JASA_TYPES[type];
+            const cfg = byType[type] || {};
+            return {
+                type,
+                label: def.label,
+                unit: def.unit,
+                blockSize: def.blockSize || null,
+                defaultPrice: def.defaultPrice,
+                status: cfg.status === "OPEN" ? "OPEN" : "CLOSE",
+                price: Number.isFinite(cfg.price) ? cfg.price : def.defaultPrice,
+                completed: Number(cfg.completed || 0),
+            };
+        }),
+    });
+}));
+
+app.put("/api/service/settings", buyer, serviceOnly, wrap(async (req, res) => {
+    const db = await serviceMongo(req.lic);
+    const updates = Array.isArray(req.body?.services) ? req.body.services : [];
+    if (!updates.length) return res.status(400).json({ error: "Tidak ada perubahan jasa." });
+
+    const allowed = new Set(getJasaTypeKeys());
+    const ops = [];
+    for (const item of updates) {
+        const type = String(item?.type || "").trim();
+        if (!allowed.has(type)) continue;
+        const def = JASA_TYPES[type];
+        const status = item?.status === "OPEN" ? "OPEN" : item?.status === "CLOSE" ? "CLOSE" : null;
+        const price = Number(String(item?.price ?? "").replace(",", "."));
+        if (status === null) return res.status(400).json({ error: `Status ${type} tidak valid.` });
+        if (!Number.isFinite(price) || price < 0 || price > 1000000000) return res.status(400).json({ error: `Harga ${type} tidak valid.` });
+        ops.push({
+            updateOne: {
+                filter: { type },
+                update: { $set: { type, status, price }, $setOnInsert: { completed: 0, ...(def.defaultPrice != null ? {} : {}) } },
+                upsert: true,
+            },
+        });
+    }
+    if (!ops.length) return res.status(400).json({ error: "Tidak ada jasa yang valid." });
+    await db.collection("jasaconfigs").bulkWrite(ops, { ordered: true });
+    res.json({ ok: true, message: "Pengaturan jasa tersimpan." });
+}));
 
 // ---------- admin (kamu) ----------
 app.post("/api/admin/login", (req, res) => {
@@ -261,6 +327,7 @@ app.delete("/api/admin/licenses/:id", admin, wrap(async (req, res) => {
     const l = find(req, res); if (!l) return;
     await runner.stop(l.id);
     closeConn(l.id);
+    await closeServiceDb(l.id);
     store.data.licenses = licenses().filter((x) => x !== l);
     store.save(); res.json({ ok: true });
 }));
@@ -299,7 +366,7 @@ async function shutdown() {
     closing = true;
     setTimeout(() => process.exit(1), 10000).unref(); // jangan menggantung kalau ada yang macet
     server.close();
-    try { await Promise.all(licenses().map((l) => runner.stop(l.id))); } catch (e) { console.error(e); }
+    try { await Promise.all(licenses().map((l) => runner.stop(l.id))); await closeAllServiceDb(); } catch (e) { console.error(e); }
     process.exit(0);
 }
 process.on("SIGINT", shutdown);

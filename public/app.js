@@ -258,7 +258,7 @@ async function bot() {
                 const body = {}; BOT_FIELDS.forEach((k) => { if (inp[k]) body[k] = inp[k].value; });
                 btn.disabled = true; btn.textContent = "Memeriksa…";
                 msg.textContent = "Memeriksa token & database, tunggu beberapa detik…";
-                try { const r = await api("PUT", "/api/config", body); SECRETS.forEach((k) => { if (inp[k].value) { inp[k].value = ""; inp[k].placeholder = "(tersimpan)"; } }); msg.textContent = r.restartNeeded ? "Tersimpan. Tekan Restart agar berlaku." : "Tersimpan. Sekarang tekan Start."; }
+                try { const r = await api("PUT", "/api/config", body); SECRETS.forEach((k) => { if (inp[k] && inp[k].value) { inp[k].value = ""; inp[k].placeholder = "(tersimpan)"; } }); msg.textContent = r.restartNeeded ? "Tersimpan. Tekan Restart agar berlaku." : "Tersimpan. Sekarang tekan Start."; }
                 catch (e) { msg.textContent = ""; throw e; }
                 finally { btn.disabled = false; btn.textContent = "Simpan"; }
             }) }, "Simpan")), msg),

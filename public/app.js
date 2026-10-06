@@ -255,7 +255,7 @@ async function bot() {
             h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async (ev) => {
                 const btn = ev.currentTarget;
                 if (btn.disabled) return;
-                const body = {}; BOT_FIELDS.forEach((k) => { if (inp[k]) body[k] = inp[k].value; });
+                const body = {}; BOT_FIELDS.forEach((k) => (body[k] = inp[k].value));
                 btn.disabled = true; btn.textContent = "Memeriksa…";
                 msg.textContent = "Memeriksa token & database, tunggu beberapa detik…";
                 try { const r = await api("PUT", "/api/config", body); SECRETS.forEach((k) => { if (inp[k] && inp[k].value) { inp[k].value = ""; inp[k].placeholder = "(tersimpan)"; } }); msg.textContent = r.restartNeeded ? "Tersimpan. Tekan Restart agar berlaku." : "Tersimpan. Sekarang tekan Start."; }
@@ -270,15 +270,78 @@ async function bot() {
 async function serviceDashboard() {
     me = await api("GET", "/api/me");
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
-    return h("div", {}, head("AutoStore Service", "Panel khusus jasa / service. Fitur order dijalankan oleh bot Discord Service."),
-        h("div", { class: "grid" }, stat("Mode", "Service"), stat("Status key", me.valid ? "Aktif" : "Tidak aktif"), stat("Sisa", me.daysLeft + " hari"), stat("Bot", me.bot)),
-        card(h("h2", {}, "Fitur Service"), h("p", { class: "mut" }, "PLANT, HARVEST, HARVEST MOVE, MOVE, PROVIDER, SPLICE, queue order, promo, balance, GrowID, Take/Complete/Cancel & Refund, dan auto-refresh panel.")),
-        card(h("h2", {}, "Cara memakai"), h("ol", { class: "steps" },
-            h("li", {}, "Buka menu Bot & Server dan isi Bot Token, Client ID, MongoDB URL, Owner ID, Admin ID, dan ID Server."),
-            h("li", {}, "Simpan lalu Start bot Service."),
-            h("li", {}, "Di Discord gunakan /setjasapanel, /setjasaharga, dan /setjasapromo sesuai kebutuhan."),
-            h("li", {}, "Buyer melakukan Set GrowID, lalu memilih jasa dari panel Discord dan membuat order."))),
-        card(h("h2", {}, "Database"), h("p", { class: "mut" }, "Service memakai MongoDB yang kamu masukkan pada key ini. Collection balance (Bal) dapat dipakai bersama bot AutoStore jika keduanya diarahkan ke database yang sama.")));
+    return h("div", {},
+        head("AutoStore Service", "Panel khusus jasa / service.",
+            h("button", { class: "pri", onclick: () => (location.hash = "#/service-settings") }, "⚙ Kelola Jasa")),
+        h("div", { class: "grid" },
+            stat("Mode", "Service"),
+            stat("Status key", me.valid ? "Aktif" : "Tidak aktif"),
+            stat("Sisa", me.daysLeft + " hari"),
+            stat("Bot", me.bot)),
+        card(h("h2", {}, "Fitur Service"),
+            h("p", { class: "mut" }, "PLANT, HARVEST, HARVEST MOVE, MOVE, PROVIDER, SPLICE, queue order, promo, balance, GrowID, Take/Complete/Cancel & Refund, dan auto-refresh panel.")),
+        card(h("h2", {}, "Kelola dari web"),
+            h("p", {}, "Atur harga dan buka/tutup tiap jenis jasa langsung dari panel tanpa harus memakai command Discord."),
+            h("div", { class: "row gap" },
+                h("button", { class: "pri", onclick: () => (location.hash = "#/service-settings") }, "Buka Pengaturan Jasa"))),
+        card(h("h2", {}, "Database"),
+            h("p", { class: "mut" }, "Service memakai MongoDB yang kamu masukkan pada key ini. Perubahan harga/status dari web langsung memakai database Service yang sama dengan bot.")));
+}
+
+async function serviceSettings() {
+    const wrap = h("div", {});
+    let data = await api("GET", "/api/service/settings");
+    let rows = [];
+
+    const loadRows = () => {
+        rows = data.services.map((x) => {
+            const price = h("input", { value: x.price, inputmode: "decimal", class: "w80" });
+            const status = h("select", {},
+                h("option", { value: "OPEN", selected: x.status === "OPEN" }, "OPEN"),
+                h("option", { value: "CLOSE", selected: x.status !== "OPEN" }, "CLOSE"));
+            return { x, price, status };
+        });
+    };
+    loadRows();
+
+    const tableBox = h("div", {});
+    const renderTable = () => {
+        const body = h("tbody", {}, ...rows.map(({ x, price, status }) => h("tr", {},
+            h("td", {}, h("b", {}, x.label)),
+            h("td", {}, x.blockSize ? `Per ${x.blockSize} item` : `Per ${x.unit}`),
+            h("td", {}, price),
+            h("td", {}, status),
+            h("td", {}, fmt(x.completed))
+        )));
+        tableBox.replaceChildren(h("div", { class: "tbl" }, h("table", {},
+            h("thead", {}, h("tr", {}, ...["Jasa", "Satuan", "Harga (WL)", "Status", "Completed"].map((x) => h("th", {}, x)))),
+            body)));
+    };
+    renderTable();
+
+    const msg = h("div", { class: "mut mt" });
+    const save = guard(async () => {
+        const services = rows.map(({ x, price, status }) => ({ type: x.type, price: price.value, status: status.value }));
+        const r = await api("PUT", "/api/service/settings", { services });
+        msg.textContent = r.message || "Tersimpan.";
+        toast("Pengaturan jasa tersimpan.");
+        data = await api("GET", "/api/service/settings");
+        loadRows();
+        renderTable();
+    });
+
+    wrap.append(
+        head("Pengaturan Jasa", "Atur harga dan OPEN/CLOSE setiap jasa Service.",
+            h("button", { onclick: () => (location.hash = "#/service") }, "← Dashboard")),
+        card(h("p", { class: "mut" }, "Harga MOVE dihitung per block sesuai aturan bot. Setelah disimpan, panel Discord Service akan mengikuti database yang sama; auto-refresh bot memperbarui panel maksimal sekitar 30 detik."), tableBox,
+            h("div", { class: "row mt" }, h("button", { class: "pri", onclick: save }, "Simpan Semua"), msg)),
+        card(h("h2", {}, "Catatan"),
+            h("ul", { class: "steps" },
+                h("li", {}, "OPEN = buyer dapat memilih jasa tersebut dari panel Discord."),
+                h("li", {}, "CLOSE = jasa tidak ditampilkan sebagai pilihan order baru."),
+                h("li", {}, "Harga disimpan langsung ke collection jasaConfig milik Service.")))
+    );
+    return wrap;
 }
 
 // ---------- Tutorial & Subscription ----------
@@ -316,8 +379,8 @@ async function subscription() {
 
 // ---------- router ----------
 const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
-const SERVICE_NAV = [["service", "Service Dashboard"], ["bot", "Bot & Server"], ["subscription", "Subscription"]];
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard };
+const SERVICE_NAV = [["service", "Service Dashboard"], ["service-settings", "⚙ Pengaturan Jasa"], ["bot", "Bot & Server"], ["subscription", "Subscription"]];
+const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
@@ -326,7 +389,7 @@ function drawNav(cur) {
 async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";
     let name = VIEWS[location.hash.slice(2)] ? location.hash.slice(2) : defaultView;
-    if (me?.type === "service" && !["service", "bot", "subscription"].includes(name)) name = "service";
+    if (me?.type === "service" && !["service", "service-settings", "bot", "subscription"].includes(name)) name = "service";
     drawNav(name);
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");

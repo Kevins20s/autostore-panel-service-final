@@ -40,6 +40,22 @@ function applyEnvConfig(env = process.env) {
     const dnsList = String(env.DNS_SERVERS || "").split(",").map((x) => x.trim()).filter(Boolean);
     if (dnsList.length) { try { require("dns").setServers(dnsList); } catch (e) { console.error("[DNS] DNS_SERVERS tidak valid:", e.message); } }
 
+    // Emoji per-license untuk AutoStore. Semua file lama yang require configemoji.json
+    // akan menerima gabungan default + emoji dari key pembeli.
+    try {
+        const emojiFile = require.resolve("./configemoji.json");
+        const emojiDefaults = require(emojiFile);
+        let customEmoji = {};
+        if (env.AUTOSTORE_EMOJIS_JSON) customEmoji = JSON.parse(env.AUTOSTORE_EMOJIS_JSON) || {};
+        const emojiMod = new Module(emojiFile);
+        emojiMod.filename = emojiFile;
+        emojiMod.loaded = true;
+        emojiMod.exports = { ...emojiDefaults, ...customEmoji };
+        require.cache[emojiFile] = emojiMod;
+    } catch (e) {
+        console.error("[EMOJI] AUTOSTORE_EMOJIS_JSON tidak valid:", e.message);
+    }
+
     const { cfg, missing } = buildConfig(env);
     if (missing.length) {
         console.error(`[CONFIG] Env wajib belum diisi untuk: ${missing.join(", ")}`);

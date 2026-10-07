@@ -37,6 +37,7 @@ const head = (title, sub, action) => h("div", { class: "head" }, h("div", {}, h(
 const card = (...k) => h("div", { class: "card" }, ...k);
 
 let me = null;
+let logTimer = null;
 const rpText = (wl, rate) => (rate ? "Rp " + fmt(wl * rate) : "-");
 
 // ---------- Dashboard ----------

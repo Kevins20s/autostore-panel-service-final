@@ -44,6 +44,15 @@ const valid = (l) => !l.revoked && l.expiresAt > Date.now();
 const FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRET = new Set(["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"]);
 const isId = (v) => /^\d{17,20}$/.test(v);
+const SERVICE_EMOJI_KEYS = ["WL","DL","BGL","CROWN","ARROW","EARTH","BOT","Dolar","BALANCE","Warning","Benar","Salah","Megaphone","Loading","Buy","SetGrowID","BalanceButton","Deposit","DepositQRIS","AdminPanel","Queue","Waiting","imageUrl","imageUrl2","COLOR"];
+const SERVICE_EMOJI_DEFAULTS = require("./service/src/config/emoji.js").defaults;
+const sanitizeServiceEmojis = (input) => {
+    const out = {};
+    for (const k of SERVICE_EMOJI_KEYS) {
+        if (typeof input?.[k] === "string" && input[k].trim()) out[k] = input[k].trim().slice(0, 500);
+    }
+    return out;
+};
 
 function newKey(type = "autostore") {
     const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -164,6 +173,7 @@ app.get("/api/me", buyer, (req, res) => {
             clientId: c.clientId || "", ownerId: c.ownerId || "", adminIds: c.adminIds || "",
             guildId: c.guildId || "", paymentUrl: c.paymentUrl || "",
             has: { botToken: !!c.botToken, mongoUrl: !!c.mongoUrl, paymentApiKey: !!c.paymentApiKey, paymentSecret: !!c.paymentSecret },
+            serviceEmojis: l.type === "service" ? { ...SERVICE_EMOJI_DEFAULTS, ...(c.serviceEmojis || {}) } : {},
         },
     });
 });
@@ -248,6 +258,34 @@ app.put("/api/service/settings", buyer, wrap(async (req, res) => {
         for (const x of clean) await col.updateOne({ type: x.type }, { $set: { price: x.price, status: x.status }, $setOnInsert: { completed: 0 } }, { upsert: true });
     });
     res.json({ ok: true });
+}));
+
+// ---------- Service Custom Emoji ----------
+app.get("/api/service/emojis", buyer, (req, res) => {
+    if (req.lic.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
+    const c = req.lic.config ? decrypt(req.lic.config) : {};
+    res.json({ emojis: { ...SERVICE_EMOJI_DEFAULTS, ...(c.serviceEmojis || {}) }, keys: SERVICE_EMOJI_KEYS });
+});
+app.put("/api/service/emojis", buyer, wrap(async (req, res) => {
+    const l = req.lic;
+    if (l.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
+    const cur = l.config ? decrypt(l.config) : {};
+    const merged = { ...SERVICE_EMOJI_DEFAULTS, ...(cur.serviceEmojis || {}), ...sanitizeServiceEmojis(req.body?.emojis || {}) };
+    l.config = encrypt({ ...cur, serviceEmojis: merged });
+    store.save();
+    const wasRunning = runner.status(l.id) !== "stopped";
+    if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
+    res.json({ ok: true, restarted: wasRunning, emojis: merged });
+}));
+app.post("/api/service/emojis/reset", buyer, wrap(async (req, res) => {
+    const l = req.lic;
+    if (l.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
+    const cur = l.config ? decrypt(l.config) : {};
+    l.config = encrypt({ ...cur, serviceEmojis: { ...SERVICE_EMOJI_DEFAULTS } });
+    store.save();
+    const wasRunning = runner.status(l.id) !== "stopped";
+    if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
+    res.json({ ok: true, restarted: wasRunning, emojis: { ...SERVICE_EMOJI_DEFAULTS } });
 }));
 
 // ---------- admin (kamu) ----------

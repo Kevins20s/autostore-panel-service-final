@@ -269,84 +269,16 @@ async function bot() {
 // ---------- AutoStore Service ----------
 async function serviceDashboard() {
     me = await api("GET", "/api/me");
-    const stat = (icon, label, value, cls = "") => h("div", { class: "svc-stat " + cls },
-        h("div", { class: "svc-stat-icon" }, icon),
-        h("div", {}, h("span", { class: "mut" }, label), h("b", {}, value)));
-    const quick = (icon, title, desc, hash) => h("button", { class: "svc-quick", onclick: () => (location.hash = "#/" + hash) },
-        h("span", { class: "svc-quick-icon" }, icon),
-        h("span", {}, h("b", {}, title), h("small", {}, desc)),
-        h("span", { class: "svc-arrow" }, "→"));
-    const statusText = me.bot === "running" ? "Online" : me.bot === "starting" || me.bot === "restarting" ? "Starting" : "Offline";
-    const statusCls = me.bot === "running" ? "online" : me.bot === "starting" || me.bot === "restarting" ? "starting" : "offline";
-    return h("div", { class: "service-page" },
-        h("section", { class: "svc-hero" },
-            h("div", {}, h("div", { class: "svc-kicker" }, "AUTOSTORE SERVICE"),
-                h("h1", {}, "Kelola jasa lebih mudah."),
-                h("p", {}, "Atur harga, status jasa, bot, dan pengaturan Service dari satu panel.")),
-            h("div", { class: "svc-hero-status " + statusCls }, h("i", {}), h("span", {}, statusText), h("small", {}, me.bot))),
-        h("div", { class: "svc-stats" },
-            stat("✓", "Status key", me.valid ? "Aktif" : "Tidak aktif", me.valid ? "ok" : "bad"),
-            stat("◷", "Masa aktif", me.daysLeft + " hari"),
-            stat("◉", "Bot Service", statusText),
-            stat("◆", "Mode", "Service")),
-        h("div", { class: "svc-section-head" }, h("div", {}, h("h2", {}, "Akses cepat"), h("p", { class: "mut" }, "Kontrol yang paling sering digunakan."))),
-        h("div", { class: "svc-quick-grid" },
-            quick("₩", "Harga & Status Jasa", "Atur harga dan OPEN/CLOSE", "service-settings"),
-            quick("⚙", "Bot & Server", "Token, database, dan kontrol bot", "bot"),
-            quick("▣", "Subscription", "Lihat masa aktif key", "subscription")),
-        h("div", { class: "svc-section-head" }, h("div", {}, h("h2", {}, "Service yang tersedia"), h("p", { class: "mut" }, "Status aktual mengikuti pengaturan Service.")),
-            h("button", { class: "sm", onclick: () => (location.hash = "#/service-settings") }, "Kelola Semua →")),
-        h("div", { class: "svc-service-grid" },
-            ...[["🌱", "PLANT", "Tanam"], ["🌾", "HARVEST", "Panen"], ["🚚", "HARVEST MOVE", "Panen + pindah"], ["📦", "MOVE", "Pindah"], ["🏪", "PROVIDER", "Provider"], ["✂", "SPLICE", "Splice"]].map(([icon, name, desc]) =>
-                h("div", { class: "svc-service-card" }, h("div", { class: "svc-service-icon" }, icon), h("div", {}, h("b", {}, name), h("span", { class: "mut" }, desc)), h("span", { class: "pill" }, "Kelola →")))),
-        card(h("div", { class: "row sp" }, h("div", {}, h("h2", {}, "Tips"), h("p", { class: "mut", style: "margin:0" }, "Simpan harga dan status dari web. Bot Service akan membaca database yang sama.")), h("button", { class: "pri", onclick: () => (location.hash = "#/service-settings") }, "Buka Pengaturan")))
-    );
-}
-
-async function serviceSettings() {
-    const wrap = h("div", { class: "service-page" });
-    let data = await api("GET", "/api/service/settings");
-    let rows = [];
-    const iconFor = (type) => ({ PLANT: "🌱", HARVEST: "🌾", HARVESTMOVE: "🚚", MOVE: "📦", PROVIDER: "🏪", SPLICE: "✂" }[String(type).toUpperCase()] || "◆");
-    const loadRows = () => {
-        rows = data.services.map((x) => ({
-            x,
-            price: h("input", { value: x.price, inputmode: "decimal", class: "svc-price-input" }),
-            status: h("select", { class: "svc-status-select" },
-                h("option", { value: "OPEN", selected: x.status === "OPEN" }, "OPEN"),
-                h("option", { value: "CLOSE", selected: x.status !== "OPEN" }, "CLOSED"))
-        }));
-    };
-    loadRows();
-    const box = h("div", { class: "svc-price-grid" });
-    const render = () => {
-        box.replaceChildren(...rows.map(({ x, price, status }) => {
-            const open = status.value === "OPEN";
-            const unit = x.blockSize ? `Per ${x.blockSize} item` : `Per ${x.unit}`;
-            const toggle = h("button", { class: "svc-toggle " + (open ? "on" : "off"), type: "button", onclick: () => { status.value = open ? "CLOSE" : "OPEN"; render(); } }, h("span", {}), open ? "OPEN" : "CLOSED");
-            return h("div", { class: "svc-price-card" },
-                h("div", { class: "svc-price-top" }, h("div", { class: "svc-service-icon" }, iconFor(x.type)), h("div", {}, h("b", {}, x.label), h("span", { class: "mut" }, unit))), toggle),
-                h("label", { class: "svc-price-label" }, "Harga (WL)", price),
-                h("div", { class: "svc-completed" }, "Completed ", h("b", {}, fmt(x.completed || 0))));
-        }));
-    };
-    render();
-    const msg = h("div", { class: "mut mt" });
-    const save = guard(async () => {
-        const services = rows.map(({ x, price, status }) => ({ type: x.type, price: price.value, status: status.value }));
-        const r = await api("PUT", "/api/service/settings", { services });
-        msg.textContent = r.message || "Tersimpan.";
-        toast("Pengaturan jasa tersimpan.");
-        data = await api("GET", "/api/service/settings"); loadRows(); render();
-    });
-    wrap.append(
-        head("Harga & Status Jasa", "Kelola harga dan buka/tutup jasa tanpa command Discord.",
-            h("div", { class: "row gap" }, h("button", { onclick: () => (location.hash = "#/service") }, "← Dashboard"), h("button", { class: "pri", onclick: save }, "Simpan Semua"))),
-        h("div", { class: "svc-notice" }, h("b", {}, "Perubahan aman"), h("span", {}, "Harga dan status disimpan ke database Service yang sama dengan bot. Auto-refresh bot akan mengambil perubahan secara berkala.")),
-        box,
-        h("div", { class: "svc-savebar" }, h("span", { class: "mut" }, "OPEN = bisa dipesan · CLOSED = tidak menerima order baru"), h("div", { class: "row gap" }, msg, h("button", { class: "pri", onclick: save }, "Simpan Semua")))
-    );
-    return wrap;
+    const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
+    return h("div", {}, head("AutoStore Service", "Panel khusus jasa / service. Fitur order dijalankan oleh bot Discord Service."),
+        h("div", { class: "grid" }, stat("Mode", "Service"), stat("Status key", me.valid ? "Aktif" : "Tidak aktif"), stat("Sisa", me.daysLeft + " hari"), stat("Bot", me.bot)),
+        card(h("h2", {}, "Fitur Service"), h("p", { class: "mut" }, "PLANT, HARVEST, HARVEST MOVE, MOVE, PROVIDER, SPLICE, queue order, promo, balance, GrowID, Take/Complete/Cancel & Refund, dan auto-refresh panel.")),
+        card(h("h2", {}, "Cara memakai"), h("ol", { class: "steps" },
+            h("li", {}, "Buka menu Bot & Server dan isi Bot Token, Client ID, MongoDB URL, Owner ID, Admin ID, dan ID Server."),
+            h("li", {}, "Simpan lalu Start bot Service."),
+            h("li", {}, "Di Discord gunakan /setjasapanel, /setjasaharga, dan /setjasapromo sesuai kebutuhan."),
+            h("li", {}, "Buyer melakukan Set GrowID, lalu memilih jasa dari panel Discord dan membuat order."))),
+        card(h("h2", {}, "Database"), h("p", { class: "mut" }, "Service memakai MongoDB yang kamu masukkan pada key ini. Collection balance (Bal) dapat dipakai bersama bot AutoStore jika keduanya diarahkan ke database yang sama.")));
 }
 
 // ---------- Tutorial & Subscription ----------
@@ -384,8 +316,8 @@ async function subscription() {
 
 // ---------- router ----------
 const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
-const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings };
+const SERVICE_NAV = [["service", "Service Dashboard"], ["bot", "Bot & Server"], ["subscription", "Subscription"]];
+const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
@@ -394,7 +326,7 @@ function drawNav(cur) {
 async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";
     let name = VIEWS[location.hash.slice(2)] ? location.hash.slice(2) : defaultView;
-    if (me?.type === "service" && !["service", "service-settings", "bot", "subscription"].includes(name)) name = "service";
+    if (me?.type === "service" && !["service", "bot", "subscription"].includes(name)) name = "service";
     drawNav(name);
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");

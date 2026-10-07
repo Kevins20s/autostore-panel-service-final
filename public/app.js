@@ -350,21 +350,15 @@ function validServiceEmoji(value, key) {
 
 function discordEmojiUrl(v) {
     const text = String(v || '').trim();
-
-    // Supports static and animated Discord custom emoji:
-    // <:name:id> and <a:name:id>
-    const m = text.match(/^<([a]?):[A-Za-z0-9_~]+:(\d+)>$/);
+    const m = text.match(/^<([a]?):[A-Za-z0-9_~]+:(\d{17,20})>$/);
     if (!m) return null;
 
     const animated = m[1] === 'a';
     const id = m[2];
-    const ext = animated ? 'gif' : 'png';
 
     return [
-        `https://cdn.discordapp.com/emojis/${id}.${ext}?size=128&quality=lossless`,
-        `https://media.discordapp.net/emojis/${id}.${ext}?size=128&quality=lossless`,
-        `https://cdn.discordapp.com/emojis/${id}.${ext}?size=96`,
-        `https://media.discordapp.net/emojis/${id}.${ext}?size=96`
+        `https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`,
+        `https://media.discordapp.net/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`
     ];
 }
 
@@ -384,25 +378,30 @@ function emojiVisual(v, size = 52) {
             title: text,
             width: size,
             height: size,
-            loading: 'eager',
-            decoding: 'async',
             style: `width:${size}px;height:${size}px;object-fit:contain;display:block`
         });
 
-        let attempt = 0;
-        const loadNext = () => {
-            if (attempt >= urls.length) {
+        img.dataset.emojiUrls = JSON.stringify(urls);
+        img.dataset.emojiAttempt = '0';
+
+        img.onerror = () => {
+            const list = JSON.parse(img.dataset.emojiUrls || '[]');
+            const next = Number(img.dataset.emojiAttempt || '0') + 1;
+            img.dataset.emojiAttempt = String(next);
+
+            if (next < list.length) {
+                img.src = list[next];
+            } else {
+                // Keep the actual Discord emoji code visible instead of crashing
+                // the page when Discord's CDN rejects the image.
                 img.replaceWith(h('span', {
                     title: text,
-                    style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1`
-                }, '❓'));
-                return;
+                    style: `font-size:12px;line-height:1.2;max-width:${size}px;text-align:center;word-break:break-all`
+                }, text));
             }
-            img.src = urls[attempt++];
         };
 
-        img.onerror = loadNext;
-        loadNext();
+        img.src = urls[0];
         return img;
     }
 
@@ -424,7 +423,7 @@ async function serviceEmojis() {
     const title = h('h2', { style: 'margin:0' }, 'Emoji yang sedang digunakan');
     const help = h('p', { class: 'mut', style: 'margin:6px 0 0' }, 'Pilih satu emoji di daftar. Preview di kanan menampilkan emoji yang sedang dipakai.');
     const previewBox = h('div', {
-        style: 'width:96px;height:96px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden'
+        style: 'width:96px;height:96px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;flex:none'
     });
     const previewName = h('b', {});
     const previewValue = h('div', { class: 'mut', style: 'font-family:monospace;font-size:12px;word-break:break-all;margin-top:6px' });
@@ -561,7 +560,7 @@ async function subscription() {
 // ---------- router ----------
 const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
 const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["service-emojis", "🎨 Custom Emoji"], ["orders", "🛒 Orders"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
+const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, emojis: serviceEmojis, orders: serviceOrders };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;

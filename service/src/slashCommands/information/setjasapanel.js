@@ -3,6 +3,7 @@ const jasaPanel = require("../../Schema/jasaPanel.js");
 const jasaConfig = require("../../Schema/jasaConfig.js");
 const { getJasaTypeKeys, JASA_TYPES } = require("../../utils/jasaTypes.js");
 const { buildJasaPanel } = require("../../utils/jasaPanelBuilder.js");
+const { Benar, Salah, Warning } = require("../../config/emoji.js");
 
 module.exports = {
     name: "setjasapanel",
@@ -47,11 +48,11 @@ module.exports = {
             await jasaPanel.findOneAndUpdate({}, { $set: { channelId: channel.id, messageId: message.id } }, { upsert: true });
 
             await interaction.editReply({
-                content: `✅ Panel jasa berhasil dipasang di ${channel}. Semua jenis jasa masih **CLOSE** — buka pakai \`/setjasaharga\` dulu buat tiap jenis yang mau dibuka.`,
+                content: `${Benar} Panel jasa berhasil dipasang di ${channel}. Semua jenis jasa masih **CLOSE** — buka pakai \`/setjasaharga\` dulu buat tiap jenis yang mau dibuka.`,
             });
         } catch (err) {
             console.error("[setjasapanel] error:", err);
-            await interaction.editReply({ content: `⚠️ Gagal pasang panel: \`${err.message}\`` }).catch(() => {});
+            await interaction.editReply({ content: `${Warning} Gagal pasang panel: \`${err.message}\`` }).catch(() => {});
         }
     },
 };

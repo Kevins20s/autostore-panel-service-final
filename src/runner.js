@@ -23,6 +23,7 @@ function cfgToEnv(cfg, port, type) {
         PAYMENT_WEBHOOK_SECRET: cfg.paymentSecret || "",
         SERVICE_MODE: type === "service" ? "1" : "0",
         SERVICE_EMOJIS_JSON: type === "service" ? JSON.stringify(cfg.serviceEmojis || {}) : "",
+        AUTOSTORE_EMOJIS_JSON: type !== "service" ? JSON.stringify(cfg.emojis || {}) : "",
     };
 }
 

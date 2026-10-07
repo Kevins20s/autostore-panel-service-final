@@ -350,41 +350,65 @@ function validServiceEmoji(value, key) {
 
 function discordEmojiUrl(v) {
     const text = String(v || '').trim();
-    const m = text.match(/^<(a?):[A-Za-z0-9_~]+:(\d{17,20})>$/);
+
+    // Supports static and animated Discord custom emoji:
+    // <:name:id> and <a:name:id>
+    const m = text.match(/^<([a]?):[A-Za-z0-9_~]+:(\d+)>$/);
     if (!m) return null;
+
     const animated = m[1] === 'a';
     const id = m[2];
+    const ext = animated ? 'gif' : 'png';
+
     return [
-        `https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`,
-        `https://media.discordapp.net/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`
+        `https://cdn.discordapp.com/emojis/${id}.${ext}?size=128&quality=lossless`,
+        `https://media.discordapp.net/emojis/${id}.${ext}?size=128&quality=lossless`,
+        `https://cdn.discordapp.com/emojis/${id}.${ext}?size=96`,
+        `https://media.discordapp.net/emojis/${id}.${ext}?size=96`
     ];
 }
 
 function emojiVisual(v, size = 52) {
     const text = String(v || '').trim();
     const urls = discordEmojiUrl(text);
+
+    if (!text) {
+        return h('span', {
+            style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1`
+        }, '—');
+    }
+
     if (urls) {
         const img = h('img', {
-            alt: text,
+            alt: '',
             title: text,
             width: size,
             height: size,
-            style: `width:${size}px;height:${size}px;object-fit:contain;display:block`,
-            src: urls[0]
+            loading: 'eager',
+            decoding: 'async',
+            style: `width:${size}px;height:${size}px;object-fit:contain;display:block`
         });
-        img.onerror = () => {
-            if (img.dataset.fallback === '1') {
-                img.replaceWith(h('span', { style: `font-size:${Math.max(18, Math.round(size * .55))}px` }, '❓'));
+
+        let attempt = 0;
+        const loadNext = () => {
+            if (attempt >= urls.length) {
+                img.replaceWith(h('span', {
+                    title: text,
+                    style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1`
+                }, '❓'));
                 return;
             }
-            img.dataset.fallback = '1';
-            img.src = urls[1];
+            img.src = urls[attempt++];
         };
+
+        img.onerror = loadNext;
+        loadNext();
         return img;
     }
+
     return h('span', {
         style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1;display:block;white-space:nowrap`
-    }, text || '—');
+    }, text);
 }
 
 async function serviceEmojis() {
@@ -400,7 +424,7 @@ async function serviceEmojis() {
     const title = h('h2', { style: 'margin:0' }, 'Emoji yang sedang digunakan');
     const help = h('p', { class: 'mut', style: 'margin:6px 0 0' }, 'Pilih satu emoji di daftar. Preview di kanan menampilkan emoji yang sedang dipakai.');
     const previewBox = h('div', {
-        style: 'width:96px;height:96px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;flex:none'
+        style: 'width:96px;height:96px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden'
     });
     const previewName = h('b', {});
     const previewValue = h('div', { class: 'mut', style: 'font-family:monospace;font-size:12px;word-break:break-all;margin-top:6px' });

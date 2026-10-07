@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { WL, CROWN, COLOR, Benar, Salah, ARROW, Buy, Loading, imageUrl2 } = require("../config/configemoji.json");
+const { WL, CROWN, COLOR, Benar, Salah, ARROW, Buy, Loading, imageUrl2, Queue, Waiting, SetGrowID, BalanceButton, Deposit, DepositQRIS, AdminPanel } = require("../config/emoji.js");
 const jasaConfig = require("../Schema/jasaConfig.js");
 const jasaOrder = require("../Schema/jasaOrder.js");
 const jasaPanel = require("../Schema/jasaPanel.js");
@@ -9,7 +9,7 @@ const { JASA_TYPES, getJasaTypeKeys } = require("./jasaTypes.js");
 const DIVIDER = "-".repeat(43);
 // "waiting" pakai ⏳ (lagi ngantri, belum dikerjain), "in_progress" pakai emote Loading
 // custom kamu (yang sudah ada di configemoji.json) karena beneran lagi "diproses".
-const STATUS_ICON = { waiting: "⏳", in_progress: Loading };
+const STATUS_ICON = { waiting: Waiting, in_progress: Loading };
 const STATUS_TEXT = { waiting: "Waiting in Queue", in_progress: "In Progress" };
 
 function fmt(num) {
@@ -92,7 +92,7 @@ async function buildJasaPanel() {
         `${ARROW} Total Orders: ${fmt(totalOrders)}\n` +
         `${DIVIDER}\n\n` +
         serviceBlocks.join("\n") + `\n` +
-        `<:script:1547433220314894346> **SERVIS ANTRIAN / SERVICE QUEUE:**\n` +
+        `${Queue} **SERVIS ANTRIAN / SERVICE QUEUE:**\n` +
         queueLines.join("\n");
 
     const embed = new EmbedBuilder()
@@ -117,11 +117,11 @@ async function buildJasaPanel() {
 
     components.push(
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setLabel("Set GrowID").setStyle(ButtonStyle.Secondary).setEmoji("<a:SHRules:1269199498320809996>").setCustomId("growid23"),
-            new ButtonBuilder().setLabel("Balance").setStyle(ButtonStyle.Secondary).setEmoji("<a:uang:1269199494063456256>").setCustomId("balance1"),
-            new ButtonBuilder().setLabel("Deposit").setStyle(ButtonStyle.Secondary).setEmoji("<a:planet2:1269199500673683466>").setCustomId("deposit"),
-            new ButtonBuilder().setLabel("Deposit QRIS").setStyle(ButtonStyle.Success).setEmoji("💳").setCustomId("depositqris_btn"),
-            new ButtonBuilder().setLabel("Admin Panel").setStyle(ButtonStyle.Danger).setEmoji("🛠️").setCustomId("jasaAdminPanel")
+            new ButtonBuilder().setLabel("Set GrowID").setStyle(ButtonStyle.Secondary).setEmoji(SetGrowID).setCustomId("growid23"),
+            new ButtonBuilder().setLabel("Balance").setStyle(ButtonStyle.Secondary).setEmoji(BalanceButton).setCustomId("balance1"),
+            new ButtonBuilder().setLabel("Deposit").setStyle(ButtonStyle.Secondary).setEmoji(Deposit).setCustomId("deposit"),
+            new ButtonBuilder().setLabel("Deposit QRIS").setStyle(ButtonStyle.Success).setEmoji(DepositQRIS).setCustomId("depositqris_btn"),
+            new ButtonBuilder().setLabel("Admin Panel").setStyle(ButtonStyle.Danger).setEmoji(AdminPanel).setCustomId("jasaAdminPanel")
         )
     );
 

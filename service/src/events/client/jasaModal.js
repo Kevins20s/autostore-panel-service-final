@@ -7,6 +7,7 @@ let jasaCounter = require("../../Schema/jasaCounter.js");
 let jasaPromo = require("../../Schema/jasaPromo.js");
 let { getJasaType, calcJasaPrice } = require("../../utils/jasaTypes.js");
 let { refreshJasaPanel } = require("../../utils/jasaPanelBuilder.js");
+let { Benar, Salah, Warning, Megaphone } = require("../../config/emoji.js");
 
 module.exports = {
     name: "Jasa Order Modal",
@@ -25,7 +26,7 @@ client.on("interactionCreate", async (interaction) => {
         const amount = Number(rawAmount.replace(/[.,]/g, ""));
 
         if (!Number.isFinite(amount) || amount <= 0) {
-            return interaction.reply({ content: `**${def.amountField.label}** harus berupa angka lebih dari 0!`, ephemeral: true });
+            return interaction.reply({ content: `${Warning} **${def.amountField.label}** harus berupa angka lebih dari 0!`, ephemeral: true });
         }
 
         const details = {};
@@ -44,7 +45,7 @@ client.on("interactionCreate", async (interaction) => {
 
         const cfg = await jasaConfig.findOne({ type }).catch(() => null);
         if (!cfg || cfg.status !== "OPEN") {
-            return interaction.reply({ content: `Jasa **${type}** sedang **CLOSE**, belum bisa di-order sekarang.`, ephemeral: true });
+            return interaction.reply({ content: `${Warning} Jasa **${type}** sedang **CLOSE**, belum bisa di-order sekarang.`, ephemeral: true });
         }
         const unitPrice = cfg.price ?? def.defaultPrice;
 
@@ -52,7 +53,7 @@ client.on("interactionCreate", async (interaction) => {
         if (promoCode) {
             const promo = await jasaPromo.findOne({ code: promoCode.toUpperCase() }).catch(() => null);
             if (!promo) {
-                return interaction.reply({ content: `Kode promo **${promoCode}** tidak valid/tidak ditemukan.`, ephemeral: true });
+                return interaction.reply({ content: `${Warning} Kode promo **${promoCode}** tidak valid/tidak ditemukan.`, ephemeral: true });
             }
             discount = promo.discount;
         }
@@ -65,7 +66,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         if ((getBal.Balance || 0) < totalPrice) {
             return interaction.reply({
-                content: `Balance kamu tidak cukup! Butuh **${totalPrice} WL**, balance kamu **${getBal.Balance || 0} WL**.`,
+                content: `${Warning} Balance kamu tidak cukup! Butuh **${totalPrice} WL**, balance kamu **${getBal.Balance || 0} WL**.`,
                 ephemeral: true,
             });
         }
@@ -79,7 +80,7 @@ client.on("interactionCreate", async (interaction) => {
         ).catch(() => null);
 
         if (!deducted) {
-            return interaction.reply({ content: "Balance kamu berubah/tidak cukup, coba order ulang.", ephemeral: true });
+            return interaction.reply({ content: `${Warning} Balance kamu berubah/tidak cukup, coba order ulang.`, ephemeral: true });
         }
 
         const counter = await jasaCounter.findOneAndUpdate({}, { $inc: { count: 1 } }, { upsert: true, new: true });
@@ -101,7 +102,7 @@ client.on("interactionCreate", async (interaction) => {
         // internet dan bisa lebih dari 3 detik, kalau reply nunggu itu dulu Discord
         // bakal keburu timeout ("The application did not respond").
         await interaction.reply({
-            content: `✅ Order **${type}** (#${orderNumber}) berhasil dibuat! **${totalPrice} WL** sudah dipotong dari balance kamu. Silakan tunggu antrian.`,
+            content: `${Benar} Order **${type}** (#${orderNumber}) berhasil dibuat! **${totalPrice} WL** sudah dipotong dari balance kamu. Silakan tunggu antrian.`,
             ephemeral: true,
         });
 
@@ -110,7 +111,7 @@ client.on("interactionCreate", async (interaction) => {
         // Kabari Owner ada order baru masuk (kontrol jasa cuma buat Owner)
         client.users
             .fetch(Owner)
-            .then((u) => u.send(`🔔 Order baru **${type}** (#${orderNumber}) dari <@${interaction.user.id}> — ${amount} ${def.blockSize ? "Item" : "World"}, ${totalPrice} WL.`).catch(() => {}))
+            .then((u) => u.send(`${Megaphone} Order baru **${type}** (#${orderNumber}) dari <@${interaction.user.id}> — ${amount} ${def.blockSize ? "Item" : "World"}, ${totalPrice} WL.`).catch(() => {}))
             .catch(() => {});
     } catch (err) {
         console.error(err);

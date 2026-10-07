@@ -10,7 +10,7 @@ let {
 } = require("discord.js");
 let client = require("../../index");
 let { Owner } = require("../../config/runtime.js");
-let { COLOR } = require("../../config/configemoji.json");
+let { COLOR, Benar, Salah, Warning } = require("../../config/emoji.js");
 let Bal = require("../../Schema/balance.js");
 let jasaOrder = require("../../Schema/jasaOrder.js");
 let jasaConfig = require("../../Schema/jasaConfig.js");
@@ -34,7 +34,7 @@ client.on("interactionCreate", async (interaction) => {
         if (interaction.isStringSelectMenu() && interaction.customId === "jasaSelect") {
             const type = interaction.values[0];
             const def = getJasaType(type);
-            if (!def) return interaction.reply({ content: "Jenis jasa tidak dikenali.", ephemeral: true });
+            if (!def) return interaction.reply({ content: `${Warning} Jenis jasa tidak dikenali.`, ephemeral: true });
 
             const getBal = await Bal.findOne({ DiscordID: interaction.user.id }).catch(() => null);
             if (!getBal) {
@@ -88,7 +88,7 @@ client.on("interactionCreate", async (interaction) => {
                 .catch(() => []);
 
             if (queue.length < 1) {
-                return interaction.reply({ content: "Tidak ada antrian jasa yang aktif saat ini.", ephemeral: true });
+                return interaction.reply({ content: `${Warning} Tidak ada antrian jasa yang aktif saat ini.`, ephemeral: true });
             }
 
             const options = queue.map((o) => ({
@@ -106,7 +106,7 @@ client.on("interactionCreate", async (interaction) => {
 
         // ── Admin pilih 1 order dari dropdown -> tampilkan tombol aksi ──
         if (interaction.isStringSelectMenu() && interaction.customId === "jasaAdminSelect") {
-            if (!isStaff(interaction.user.id)) return interaction.reply({ content: "Khusus Owner.", ephemeral: true });
+            if (!isStaff(interaction.user.id)) return interaction.reply({ content: `${Warning} Khusus Owner.`, ephemeral: true });
 
             const orderNumber = Number(interaction.values[0]);
             const order = await jasaOrder.findOne({ orderNumber }).catch(() => null);
@@ -138,7 +138,7 @@ client.on("interactionCreate", async (interaction) => {
 
         // ── Tombol aksi admin: Take / Complete / Cancel ──
         if (interaction.isButton() && /^jasa(Take|Complete|Cancel)::/.test(interaction.customId)) {
-            if (!isStaff(interaction.user.id)) return interaction.reply({ content: "Khusus Owner.", ephemeral: true });
+            if (!isStaff(interaction.user.id)) return interaction.reply({ content: `${Warning} Khusus Owner.`, ephemeral: true });
 
             const [action, orderNumberStr] = interaction.customId.split("::");
             const orderNumber = Number(orderNumberStr);
@@ -153,7 +153,7 @@ client.on("interactionCreate", async (interaction) => {
                 order.assignedTo = interaction.user.id;
                 await order.save();
 
-                await interaction.update({ content: `✅ Order #${orderNumber} kamu ambil, statusnya sekarang **In Progress**.`, embeds: [], components: [] });
+                await interaction.update({ content: `${Benar} Order #${orderNumber} kamu ambil, statusnya sekarang **In Progress**.`, embeds: [], components: [] });
                 refreshJasaPanel(client).catch(console.error);
                 return;
             }
@@ -166,12 +166,12 @@ client.on("interactionCreate", async (interaction) => {
                 );
                 await jasaOrder.deleteOne({ orderNumber });
 
-                await interaction.update({ content: `✅ Order #${orderNumber} ditandai **selesai**.`, embeds: [], components: [] });
+                await interaction.update({ content: `${Benar} Order #${orderNumber} ditandai **selesai**.`, embeds: [], components: [] });
                 refreshJasaPanel(client).catch(console.error);
 
                 interaction.client.users
                     .fetch(order.buyerId)
-                    .then((u) => u.send(`✅ Order **${order.type}** (#${orderNumber}) kamu sudah **selesai** dikerjakan!`).catch(() => {}))
+                    .then((u) => u.send(`${Benar} Order **${order.type}** (#${orderNumber}) kamu sudah **selesai** dikerjakan!`).catch(() => {}))
                     .catch(() => {});
                 return;
             }
@@ -180,12 +180,12 @@ client.on("interactionCreate", async (interaction) => {
                 await Bal.findOneAndUpdate({ DiscordID: order.buyerId }, { $inc: { Balance: order.price } }).catch(() => {});
                 await jasaOrder.deleteOne({ orderNumber });
 
-                await interaction.update({ content: `❌ Order #${orderNumber} dibatalkan, ${order.price} WL sudah di-refund ke buyer.`, embeds: [], components: [] });
+                await interaction.update({ content: `${Salah} Order #${orderNumber} dibatalkan, ${order.price} WL sudah di-refund ke buyer.`, embeds: [], components: [] });
                 refreshJasaPanel(client).catch(console.error);
 
                 interaction.client.users
                     .fetch(order.buyerId)
-                    .then((u) => u.send(`❌ Order **${order.type}** (#${orderNumber}) kamu **dibatalkan** staff, ${order.price} WL sudah dikembalikan ke balance kamu.`).catch(() => {}))
+                    .then((u) => u.send(`${Salah} Order **${order.type}** (#${orderNumber}) kamu **dibatalkan** staff, ${order.price} WL sudah dikembalikan ke balance kamu.`).catch(() => {}))
                     .catch(() => {});
                 return;
             }

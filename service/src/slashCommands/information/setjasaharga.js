@@ -2,6 +2,7 @@ const { ApplicationCommandOptionType } = require("discord.js");
 const jasaConfig = require("../../Schema/jasaConfig.js");
 const { getJasaTypeKeys, JASA_TYPES } = require("../../utils/jasaTypes.js");
 const { refreshJasaPanel } = require("../../utils/jasaPanelBuilder.js");
+const { Benar, Warning } = require("../../config/emoji.js");
 
 module.exports = {
     name: "setjasaharga",
@@ -41,7 +42,7 @@ module.exports = {
             const harga = interaction.options.getNumber("harga");
 
             if (!status && harga === null) {
-                return interaction.editReply({ content: "Isi minimal salah satu dari `status` atau `harga`." });
+                return interaction.editReply({ content: `${Warning} Isi minimal salah satu dari \`status\` atau \`harga\`.` });
             }
 
             const update = {};
@@ -63,13 +64,13 @@ module.exports = {
             );
 
             await interaction.editReply({
-                content: `✅ Jasa **${jenis}** diperbarui.${status ? ` Status: **${status}**.` : ""}${harga !== null ? ` Harga: **${harga} WL**.` : ""}`,
+                content: `${Benar} Jasa **${jenis}** diperbarui.${status ? ` Status: **${status}**.` : ""}${harga !== null ? ` Harga: **${harga} WL**.` : ""}`,
             });
 
             refreshJasaPanel(client).catch(console.error);
         } catch (err) {
             console.error("[setjasaharga] error:", err);
-            await interaction.editReply({ content: `⚠️ Gagal update: \`${err.message}\`` }).catch(() => {});
+            await interaction.editReply({ content: `${Warning} Gagal update: \`${err.message}\`` }).catch(() => {});
         }
     },
 };

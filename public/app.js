@@ -339,118 +339,64 @@ const SERVICE_EMOJI_FIELDS = [
     ["Deposit", "Deposit", "Tombol deposit"], ["DepositQRIS", "Deposit QRIS", "Pembayaran QRIS"], ["AdminPanel", "Admin Panel", "Panel admin"],
     ["Queue", "Queue", "Antrian"], ["Waiting", "Waiting", "Status menunggu"], ["COLOR", "Embed Color", "Warna #RRGGBB"]
 ];
-
-function discordEmojiUrl(v, animatedOverride = null) {
-    const text = String(v || "").trim();
-    const m = text.match(/^<a?:[A-Za-z0-9_~]+:(\d{17,20})>$/);
+const EMOJI_PALETTE = ["😀","😎","🔥","✨","💎","💰","🪙","👑","🌎","🌱","🌾","🚚","📦","🛒","💳","💵","📢","🔔","⚡","✅","❌","⚠️","⏳","🔄","🎯","🛠️","📋","🎮","🟢","🔴"];
+function discordEmojiUrl(v) {
+    const m = String(v || "").trim().match(/^<a?:[A-Za-z0-9_~]+:(\d{17,20})>$/);
     if (!m) return null;
-    const animated = animatedOverride === null ? /^<a:/.test(text) : animatedOverride;
-    const ext = animated ? "gif" : "png";
-    return [
-        `https://cdn.discordapp.com/emojis/${m[1]}.${ext}?size=96&quality=lossless`,
-        `https://media.discordapp.net/emojis/${m[1]}.${ext}?size=96&quality=lossless`,
-        `https://cdn.discordapp.com/emojis/${m[1]}.${ext}`
-    ];
+    const animated = /^<a:/.test(v.trim());
+    return `https://cdn.discordapp.com/emojis/${m[1]}.${animated ? "gif" : "png"}?size=64&quality=lossless`;
 }
-
 function emojiVisual(v) {
     const text = String(v || "").trim();
-    const urls = discordEmojiUrl(text);
-    if (urls) {
-        const img = h("img", {
-            class: "emoji-live",
-            src: urls[0],
-            alt: text,
-            title: text,
-            referrerPolicy: "no-referrer",
-            onerror: (e) => {
-                const i = Number(e.currentTarget.dataset.fallback || "0");
-                if (i + 1 < urls.length) {
-                    e.currentTarget.dataset.fallback = String(i + 1);
-                    e.currentTarget.src = urls[i + 1];
-                } else {
-                    e.currentTarget.replaceWith(document.createTextNode("⚠️"));
-                }
-            }
-        });
-        return img;
-    }
+    const url = discordEmojiUrl(text);
+    if (url) return h("img", { class: "emoji-live", src: url, alt: text, title: text, onerror: (e) => { e.currentTarget.replaceWith(document.createTextNode("?")); } });
     return h("span", { class: "emoji-live-text" }, text || "—");
 }
-
+function emojiPicker(input, preview) {
+    const pop = h("div", { class: "emoji-picker" }, ...EMOJI_PALETTE.map(e => h("button", { type: "button", class: "emoji-pick", title: e, onclick: () => { input.value = e; input.dispatchEvent(new Event("input")); pop.classList.remove("show"); } }, e)));
+    const wrap = h("div", { class: "emoji-picker-wrap" }, h("button", { type: "button", class: "emoji-pick-btn", onclick: () => pop.classList.toggle("show"), title: "Pilih emoji" }, "😊"), pop);
+    return wrap;
+}
 async function serviceEmojis() {
     const r = await api("GET", "/api/service/emojis");
     const inputs = {};
-    const selected = h("select", { class: "emoji-active-select" },
-        ...SERVICE_EMOJI_FIELDS.map(([key, label]) => h("option", { value: key }, label))
-    );
-    const activeInput = h("input", { autocomplete: "off", spellcheck: "false" });
-    const activePreview = h("div", { class: "emoji-active-preview", style: "width:88px;height:88px;min-width:88px;border:1px solid var(--border,#2b3240);border-radius:18px;background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;font-size:42px" }, emojiVisual(""));
-    const activeName = h("b", {}, "World Lock");
-    const activeHelp = h("span", { class: "mut" }, "Mata uang WL");
+    const grid = h("div", { class: "emoji-settings-grid" });
+    for (const [key, label, help] of SERVICE_EMOJI_FIELDS) {
+        const input = h("input", { value: r.emojis[key] || "", autocomplete: "off", spellcheck: "false" });
+        const live = h("div", { class: "emoji-live-box" }, emojiVisual(input.value));
+        input.oninput = () => live.replaceChildren(emojiVisual(input.value));
+        inputs[key] = input;
+        const picker = emojiPicker(input, live);
+        grid.append(h("div", { class: "emoji-setting-card" },
+            h("div", { class: "emoji-setting-top" }, h("div", {}, h("b", {}, label), h("small", { class: "mut" }, help)), live),
+            h("div", { class: "emoji-input-row" }, input, picker),
+            h("small", { class: "mut" }, key === "COLOR" ? "Contoh: #00FFFF" : "Unicode atau custom Discord: <:nama:id> / <a:nama:id>")));
+    }
     const msg = h("div", { class: "mut mt" });
-
-    for (const [key] of SERVICE_EMOJI_FIELDS) {
-        inputs[key] = h("input", { value: r.emojis[key] || "", autocomplete: "off", spellcheck: "false" });
-    }
-
-    function syncActive() {
-        const key = selected.value;
-        const def = SERVICE_EMOJI_FIELDS.find(x => x[0] === key) || [key, key, ""];
-        activeName.textContent = def[1];
-        activeHelp.textContent = def[2];
-        activeInput.value = inputs[key].value;
-        activePreview.replaceChildren(emojiVisual(activeInput.value));
-    }
-
-    selected.onchange = syncActive;
-    activeInput.oninput = () => {
-        inputs[selected.value].value = activeInput.value;
-        activePreview.replaceChildren(emojiVisual(activeInput.value));
+    const preview = h("div", { class: "card mt emoji-preview-card" },
+        h("div", { class: "row sp" }, h("div", {}, h("h2", {}, "Preview tampilan"), h("p", { class: "mut" }, "Ini contoh bagaimana emoji akan terlihat di panel/bot.")), h("span", { class: "emoji-preview-title" }, emojiVisual(r.emojis.CROWN))),
+        h("div", { class: "emoji-preview-demo" }));
+    const drawPreview = () => {
+        const box = preview.querySelector(".emoji-preview-demo");
+        box.replaceChildren(
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.CROWN.value), h("b", {}, " AutoStore Service")),
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.Benar.value), " OPEN  •  ", emojiVisual(inputs.WL.value), " 30 WL"),
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.Queue.value), " Queue  •  ", emojiVisual(inputs.Waiting.value), " Waiting in Queue"),
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.Buy.value), " Completed  •  ", emojiVisual(inputs.BALANCE.value), " Balance")
+        );
     };
-
-    const cardBox = card(
-        h("div", { class: "row sp" },
-            h("div", {},
-                h("h2", {}, "🎨 Emoji yang sedang digunakan"),
-                h("p", { class: "mut" }, "Hanya satu preview ditampilkan. Pilih jenis emoji di bawah untuk melihat atau mengubahnya.")),
-            h("span", { class: "badge" }, "Per key")
-        ),
-        h("div", { class: "emoji-active-layout", style: "display:grid;grid-template-columns:110px 1fr;gap:18px;align-items:center;padding:18px;border:1px solid var(--border,#2b3240);border-radius:16px;background:rgba(255,255,255,.02)" },
-            h("div", { class: "emoji-active-box", style: "display:flex;justify-content:center" }, activePreview),
-            h("div", { class: "emoji-active-info", style: "display:grid;gap:8px" },
-                activeName,
-                h("small", { class: "mut" }, activeHelp),
-                h("label", { class: "emoji-active-label", style: "display:grid;gap:6px" }, "Emoji", selected),
-                h("div", { class: "emoji-active-input" }, activeInput),
-                h("small", { class: "mut" }, "Unicode atau custom Discord: <:nama:id> / <a:nama:id>")
-            )
-        ),
-        h("div", { class: "row gap mt" },
-            h("button", { class: "pri", onclick: guard(async () => {
-                const emojis = {};
-                for (const [key] of SERVICE_EMOJI_FIELDS) {
-                    if (!validServiceEmoji(inputs[key].value, key)) throw new Error(`Format ${key} tidak valid.`);
-                    emojis[key] = inputs[key].value.trim();
-                }
-                const saved = await api("PUT", "/api/service/emojis", { emojis });
-                msg.textContent = saved.restarted ? "Tersimpan. Bot Service sedang restart dengan emoji baru." : "Tersimpan.";
-                toast("Custom emoji tersimpan.");
-            }) }, "💾 Simpan Emoji"),
-            h("button", { onclick: guard(async () => {
-                if (!confirm("Kembalikan semua emoji ke default?")) return;
-                const reset = await api("POST", "/api/service/emojis/reset");
-                for (const [key] of SERVICE_EMOJI_FIELDS) inputs[key].value = reset.emojis[key] || "";
-                syncActive();
-                msg.textContent = reset.restarted ? "Default dipulihkan. Bot sedang restart." : "Default dipulihkan.";
-                toast("Emoji default dipulihkan.");
-            }) }, "Reset Default"),
-            msg
-        )
-    );
-
-    syncActive();
-    return h("div", {}, head("Custom Emoji", "Kelola emoji Service dengan satu preview yang sedang aktif."), cardBox);
+    Object.values(inputs).forEach(x => x.addEventListener("input", drawPreview));
+    drawPreview();
+    return h("div", {}, head("Custom Emoji", "Pilih emoji secara visual atau tempel custom emoji Discord. Setiap key Service punya branding sendiri."),
+        card(h("div", { class: "row sp" }, h("div", {}, h("h2", {}, "🎨 Emoji Service"), h("p", { class: "mut" }, "Klik kotak emoji untuk melihat preview. Untuk custom emoji Discord, cukup paste format <:nama:id> atau <a:nama:id>.")), h("span", { class: "badge" }, "Per key")),
+            grid,
+            h("div", { class: "row gap mt" },
+                h("button", { class: "pri", onclick: guard(async () => {
+                    const emojis = {};
+                    for (const [key] of SERVICE_EMOJI_FIELDS) { if (!validServiceEmoji(inputs[key].value, key)) throw new Error(`Format ${key} tidak valid.`); emojis[key] = inputs[key].value.trim(); }
+                    const r = await api("PUT", "/api/service/emojis", { emojis }); msg.textContent = r.restarted ? "Tersimpan. Bot Service sedang restart dengan emoji baru." : "Tersimpan."; toast("Custom emoji tersimpan.");
+                }) }, "💾 Simpan Emoji"),
+                h("button", { onclick: guard(async () => { if (!confirm("Kembalikan semua emoji ke default?")) return; const r = await api("POST", "/api/service/emojis/reset"); for (const [key] of SERVICE_EMOJI_FIELDS) inputs[key].value = r.emojis[key] || ""; Object.values(inputs).forEach(x => x.dispatchEvent(new Event("input"))); msg.textContent = r.restarted ? "Default dipulihkan. Bot sedang restart." : "Default dipulihkan."; toast("Emoji default dipulihkan."); }) }, "Reset Default")), msg), preview);
 }
 
 // ---------- AutoStore Service: Orders ----------

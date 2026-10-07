@@ -328,47 +328,120 @@ async function serviceSettings() {
 }
 
 
-// ---------- AutoStore Service: Custom Emoji ----------
+// ---------- Custom Emoji: AutoStore + AutoStore Service ----------
 const SERVICE_EMOJI_FIELDS = [
-    ["WL", "World Lock", "Emoji currency WL"], ["DL", "Diamond Lock", "Emoji currency DL"], ["BGL", "BGL", "Emoji currency BGL"],
-    ["CROWN", "Crown", "Emoji judul panel"], ["ARROW", "Arrow", "Emoji informasi"], ["Benar", "Berhasil / OPEN", "Emoji sukses"],
-    ["Salah", "Error / CLOSE", "Emoji gagal"], ["Warning", "Peringatan", "Emoji warning"], ["Loading", "Loading", "Emoji proses"],
-    ["Buy", "Completed / Buy", "Emoji pembelian"], ["Megaphone", "Notifikasi Order", "Emoji notifikasi"], ["BALANCE", "Balance", "Emoji saldo"],
-    ["BOT", "Bot", "Emoji bot"], ["EARTH", "World", "Emoji world"], ["Dolar", "Dollar", "Emoji dollar"],
-    ["SetGrowID", "Tombol Set GrowID", "Emoji tombol GrowID"], ["BalanceButton", "Tombol Balance", "Emoji tombol balance"],
-    ["Deposit", "Tombol Deposit", "Emoji tombol deposit"], ["DepositQRIS", "Tombol Deposit QRIS", "Emoji tombol QRIS"],
-    ["AdminPanel", "Tombol Admin Panel", "Emoji tombol admin"], ["Queue", "Service Queue", "Emoji antrian"],
-    ["Waiting", "Status Waiting", "Emoji menunggu"], ["COLOR", "Warna Embed", "Format #RRGGBB"],
+    ["WL", "World Lock", "Mata uang WL"], ["DL", "Diamond Lock", "Mata uang DL"], ["BGL", "Blue Gem Lock", "Mata uang BGL"],
+    ["CROWN", "Crown", "Judul panel"], ["ARROW", "Arrow", "Info / pemisah"], ["Benar", "Berhasil / OPEN", "Status sukses"],
+    ["Salah", "Error / CLOSE", "Status gagal"], ["Warning", "Warning", "Peringatan"], ["Loading", "Loading", "Proses"],
+    ["Buy", "Buy / Completed", "Pembelian / selesai"], ["Megaphone", "Order Notification", "Notifikasi order"], ["BALANCE", "Balance", "Saldo"],
+    ["BOT", "Bot", "Bot / service"], ["EARTH", "World", "World"], ["Dolar", "Dollar", "Harga"],
+    ["SetGrowID", "Set GrowID", "Tombol GrowID"], ["BalanceButton", "Balance Button", "Tombol saldo"],
+    ["Deposit", "Deposit", "Tombol deposit"], ["DepositQRIS", "Deposit QRIS", "Pembayaran QRIS"], ["AdminPanel", "Admin Panel", "Panel admin"],
+    ["Queue", "Queue", "Antrian"], ["Waiting", "Waiting", "Status menunggu"], ["COLOR", "Embed Color", "Warna #RRGGBB"]
 ];
-function validServiceEmoji(v, key) {
-    v = String(v || "").trim();
+const EMOJI_PALETTE = ["😀","😎","🔥","✨","💎","💰","🪙","👑","🌎","🌱","🌾","🚚","📦","🛒","💳","💵","📢","🔔","⚡","✅","❌","⚠️","⏳","🔄","🎯","🛠️","📋","🎮","🟢","🔴"];
+function discordEmojiUrl(v) {
+    const m = String(v || "").trim().match(/^<a?:[A-Za-z0-9_~]+:(\d{17,20})>$/);
+    if (!m) return null;
+    const animated = /^<a:/.test(v.trim());
+    return `https://cdn.discordapp.com/emojis/${m[1]}.${animated ? "gif" : "png"}?size=64&quality=lossless`;
+}
+function emojiVisual(v) {
+    const text = String(v || "").trim();
+    const url = discordEmojiUrl(text);
+    if (url) return h("img", { class: "emoji-live", src: url, alt: text, title: text, onerror: (e) => { e.currentTarget.replaceWith(document.createTextNode("?")); } });
+    return h("span", { class: "emoji-live-text" }, text || "—");
+}
+function emojiPicker(input, preview) {
+    const pop = h("div", { class: "emoji-picker" }, ...EMOJI_PALETTE.map(e => h("button", { type: "button", class: "emoji-pick", title: e, onclick: () => { input.value = e; input.dispatchEvent(new Event("input")); pop.classList.remove("show"); } }, e)));
+    const wrap = h("div", { class: "emoji-picker-wrap" }, h("button", { type: "button", class: "emoji-pick-btn", onclick: () => pop.classList.toggle("show"), title: "Pilih emoji" }, "😊"), pop);
+    return wrap;
+}
+function validEmojiValue(v, key) {
     if (!v) return false;
     if (key === "COLOR") return /^#[0-9a-fA-F]{6}$/.test(v);
     if (/^<a?:[A-Za-z0-9_~]+:\d{17,20}>$/.test(v)) return true;
     return [...v].length <= 16;
 }
-async function serviceEmojis() {
-    const r = await api("GET", "/api/service/emojis");
+async function emojiSettings() {
+    const r = await api("GET", "/api/emojis");
     const inputs = {};
-    const grid = h("div", { class: "grid" });
-    for (const [key, label, help] of SERVICE_EMOJI_FIELDS) {
+    const grid = h("div", { class: "emoji-settings-grid" });
+    for (const [key, label, help] of SERVICE_EMOJI_FIELDS.filter(([key]) => Object.prototype.hasOwnProperty.call(r.emojis, key))) {
         const input = h("input", { value: r.emojis[key] || "", autocomplete: "off", spellcheck: "false" });
+        const live = h("div", { class: "emoji-live-box" }, emojiVisual(input.value));
+        input.oninput = () => live.replaceChildren(emojiVisual(input.value));
         inputs[key] = input;
-        grid.append(field(label, input, `${key} — ${help}`));
+        const picker = emojiPicker(input, live);
+        grid.append(h("div", { class: "emoji-setting-card" },
+            h("div", { class: "emoji-setting-top" }, h("div", {}, h("b", {}, label), h("small", { class: "mut" }, help)), live),
+            h("div", { class: "emoji-input-row" }, input, picker),
+            h("small", { class: "mut" }, key === "COLOR" ? "Contoh: #00FFFF" : "Unicode atau custom Discord: <:nama:id> / <a:nama:id>")));
     }
     const msg = h("div", { class: "mut mt" });
-    const preview = h("div", { class: "card mt" }, h("h2", {}, "Preview"), h("p", { class: "mut" }, "Perubahan diterapkan ke bot Service setelah restart."), h("div", { class: "preview-emoji" }));
-    const drawPreview = () => { const box = preview.querySelector(".preview-emoji"); box.replaceChildren(...SERVICE_EMOJI_FIELDS.slice(0, 22).map(([key, label]) => h("div", { class: "row sp mt" }, h("span", {}, label), h("b", {}, inputs[key].value || "-")))); };
-    Object.values(inputs).forEach(x => x.oninput = drawPreview); drawPreview();
-    return h("div", {}, head("Custom Emoji", "Atur branding emoji Discord Service khusus untuk key ini."),
-        card(h("h2", {}, "🎨 Emoji Service"), h("p", { class: "mut" }, "Bisa memakai emoji Unicode atau custom emoji Discord. Format custom: <:namaemoji:ID> atau <a:namaemoji:ID>."), grid,
+    const preview = h("div", { class: "card mt emoji-preview-card" },
+        h("div", { class: "row sp" }, h("div", {}, h("h2", {}, "Preview tampilan"), h("p", { class: "mut" }, "Ini contoh bagaimana emoji akan terlihat di panel/bot.")), h("span", { class: "emoji-preview-title" }, emojiVisual(r.emojis.CROWN))),
+        h("div", { class: "emoji-preview-demo" }));
+    const drawPreview = () => {
+        const box = preview.querySelector(".emoji-preview-demo");
+        box.replaceChildren(
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.CROWN.value), h("b", {}, r.type === "service" ? " AutoStore Service" : " AutoStore")),
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.Benar.value), " OPEN  •  ", emojiVisual(inputs.WL.value), " 30 WL"),
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.Queue.value), " Queue  •  ", emojiVisual(inputs.Waiting.value), " Waiting in Queue"),
+            h("div", { class: "emoji-demo-line" }, emojiVisual(inputs.Buy.value), " Completed  •  ", emojiVisual(inputs.BALANCE.value), " Balance")
+        );
+    };
+    Object.values(inputs).forEach(x => x.addEventListener("input", drawPreview));
+    drawPreview();
+    return h("div", {}, head("Custom Emoji", `Pilih emoji untuk ${r.type === "service" ? "AutoStore Service" : "AutoStore"}. Pengaturan tersimpan per key.`),
+        card(h("div", { class: "row sp" }, h("div", {}, h("h2", {}, r.type === "service" ? "🎨 Emoji AutoStore Service" : "🎨 Emoji AutoStore"), h("p", { class: "mut" }, "Klik kotak emoji untuk preview. Custom Discord: <:nama:id> atau <a:nama:id>.")), h("span", { class: "badge" }, "Per key")),
+            grid,
             h("div", { class: "row gap mt" },
                 h("button", { class: "pri", onclick: guard(async () => {
                     const emojis = {};
-                    for (const [key] of SERVICE_EMOJI_FIELDS) { if (!validServiceEmoji(inputs[key].value, key)) throw new Error(`Format ${key} tidak valid.`); emojis[key] = inputs[key].value.trim(); }
-                    const r = await api("PUT", "/api/service/emojis", { emojis }); msg.textContent = r.restarted ? "Tersimpan. Bot Service sedang restart dengan emoji baru." : "Tersimpan."; toast("Custom emoji tersimpan.");
-                }) }, "Simpan Emoji"),
-                h("button", { onclick: guard(async () => { if (!confirm("Kembalikan semua emoji ke default?")) return; const r = await api("POST", "/api/service/emojis/reset"); for (const [key] of SERVICE_EMOJI_FIELDS) inputs[key].value = r.emojis[key] || ""; drawPreview(); msg.textContent = r.restarted ? "Default dipulihkan. Bot sedang restart." : "Default dipulihkan."; toast("Emoji default dipulihkan."); }) }, "Reset Default")), msg), preview);
+                    for (const [key] of SERVICE_EMOJI_FIELDS) { if (!validEmojiValue(inputs[key].value, key)) throw new Error(`Format ${key} tidak valid.`); emojis[key] = inputs[key].value.trim(); }
+                    const r = await api("PUT", "/api/emojis", { emojis }); msg.textContent = r.restarted ? `Tersimpan. Bot ${r.type === "service" ? "Service" : "AutoStore"} sedang restart dengan emoji baru.` : "Tersimpan."; toast("Custom emoji tersimpan.");
+                }) }, "💾 Simpan Emoji"),
+                h("button", { onclick: guard(async () => { if (!confirm("Kembalikan semua emoji ke default?")) return; const r = await api("POST", "/api/emojis/reset"); for (const [key] of SERVICE_EMOJI_FIELDS) inputs[key].value = r.emojis[key] || ""; Object.values(inputs).forEach(x => x.dispatchEvent(new Event("input"))); msg.textContent = r.restarted ? "Default dipulihkan. Bot sedang restart." : "Default dipulihkan."; toast("Emoji default dipulihkan."); }) }, "Reset Default")), msg), preview);
+}
+
+// ---------- AutoStore Service: Orders ----------
+const ORDER_STATUS = {
+    all: ["Semua", ""], waiting: ["Menunggu", "waiting"], in_progress: ["Diproses", "in_progress"], done: ["Selesai", "done"]
+};
+function orderStatusBadge(status) {
+    const map = { waiting: ["Waiting", "svc-status"], in_progress: ["Diproses", "svc-status open"], done: ["Selesai", "svc-status open"] };
+    const x = map[status] || [status || "-", "svc-status"];
+    return h("span", { class: x[1] }, x[0]);
+}
+async function serviceOrders() {
+    const active = { value: "all" };
+    const body = h("div", {});
+    const render = async () => {
+        body.replaceChildren(h("p", { class: "mut" }, "Memuat order…"));
+        const r = await api("GET", `/api/service/orders?status=${encodeURIComponent(active.value)}&limit=100`);
+        const c = r.counts || {};
+        const cards = h("div", { class: "grid" },
+            h("div", { class: "stat" }, h("span", { class: "mut" }, "Total Orders"), h("b", {}, fmt(c.total || 0))),
+            h("div", { class: "stat" }, h("span", { class: "mut" }, "Menunggu"), h("b", {}, fmt(c.waiting || 0))),
+            h("div", { class: "stat" }, h("span", { class: "mut" }, "Diproses"), h("b", {}, fmt(c.in_progress || 0))),
+            h("div", { class: "stat" }, h("span", { class: "mut" }, "Selesai"), h("b", {}, fmt(c.done || 0)))
+        );
+        const filter = h("select", { value: active.value, onchange: guard(async e => { active.value = e.target.value; await render(); }) }, ...Object.entries(ORDER_STATUS).map(([k,v]) => h("option", { value:k }, v[0])));
+        const rows = (r.orders || []).map(o => h("tr", {},
+            h("td", {}, `#${o.orderNumber ?? "-"}`),
+            h("td", {}, h("b", {}, o.type || "-"), h("div", { class: "mut" }, `${fmt(o.amount || 0)} ${o.unit || ""}`)),
+            h("td", {}, `${fmt(o.price || 0)} WL`),
+            h("td", {}, orderStatusBadge(o.status)),
+            h("td", {}, o.assignedTo ? `<@${o.assignedTo}>` : "Belum diambil"),
+            h("td", {}, o.createdAt ? new Date(o.createdAt).toLocaleString("id-ID") : "-")
+        ));
+        const table = card(h("div", { class: "row sp" }, h("div", {}, h("h2", {}, "Order Terbaru"), h("p", { class: "mut" }, "Data langsung dari collection jasaorders pada MongoDB Service.")), filter),
+            h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Order"), h("th", {}, "Jasa"), h("th", {}, "Harga"), h("th", {}, "Status"), h("th", {}, "Staff"), h("th", {}, "Dibuat"))), h("tbody", {}, ...(rows.length ? rows : [h("tr", {}, h("td", { colspan:"6", class:"mut" }, "Belum ada order."))])))));
+        body.replaceChildren(cards, table);
+    };
+    await render();
+    return h("div", {}, head("Orders", "Kelola dan pantau order Service dari panel web tanpa harus membuka Discord."), body);
 }
 
 // ---------- Tutorial & Subscription ----------
@@ -405,18 +478,18 @@ async function subscription() {
 }
 
 // ---------- router ----------
-const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
-const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["service-emojis", "🎨 Custom Emoji"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis };
+const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["emojis", "🎨 Custom Emoji"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
+const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["emojis", "🎨 Custom Emoji"], ["orders", "🛒 Orders"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
+const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, emojis: emojiSettings, service: serviceDashboard, "service-settings": serviceSettings, orders: serviceOrders };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
-    $("nav").replaceChildren(...nav.map(([k, l]) => h("a", { class: k === cur ? "on" : "", onclick: () => (location.hash = "#/" + k) }, l)), h("a", { class: "off", title: "Segera hadir" }, "Orders (segera)"));
+    $("nav").replaceChildren(...nav.map(([k, l]) => h("a", { class: k === cur ? "on" : "", onclick: () => (location.hash = "#/" + k) }, l)), );
 }
 async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";
     let name = VIEWS[location.hash.slice(2)] ? location.hash.slice(2) : defaultView;
-    if (me?.type === "service" && !["service", "service-settings", "service-emojis", "bot", "subscription"].includes(name)) name = "service";
+    if (me?.type === "service" && !["service", "service-settings", "emojis", "orders", "bot", "subscription"].includes(name)) name = "service";
     drawNav(name);
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");

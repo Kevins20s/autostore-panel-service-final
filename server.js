@@ -44,11 +44,12 @@ const valid = (l) => !l.revoked && l.expiresAt > Date.now();
 const FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRET = new Set(["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"]);
 const isId = (v) => /^\d{17,20}$/.test(v);
-const SERVICE_EMOJI_KEYS = ["WL","DL","BGL","CROWN","ARROW","EARTH","BOT","Dolar","BALANCE","Warning","Benar","Salah","Megaphone","Loading","Buy","SetGrowID","BalanceButton","Deposit","DepositQRIS","AdminPanel","Queue","Waiting","imageUrl","imageUrl2","COLOR"];
+const EMOJI_KEYS = ["WL","DL","BGL","CROWN","ARROW","EARTH","BOT","Dolar","BALANCE","Warning","Benar","Salah","Megaphone","Loading","Buy","SetGrowID","BalanceButton","Deposit","DepositQRIS","AdminPanel","Queue","Waiting","imageUrl","imageUrl2","COLOR"];
+const AUTOSTORE_EMOJI_DEFAULTS = require("./bot/src/config/configemoji.json");
 const SERVICE_EMOJI_DEFAULTS = require("./service/src/config/emoji.js").defaults;
-const sanitizeServiceEmojis = (input) => {
+const sanitizeEmojis = (input) => {
     const out = {};
-    for (const k of SERVICE_EMOJI_KEYS) {
+    for (const k of EMOJI_KEYS) {
         if (typeof input?.[k] === "string" && input[k].trim()) out[k] = input[k].trim().slice(0, 500);
     }
     return out;
@@ -173,6 +174,7 @@ app.get("/api/me", buyer, (req, res) => {
             clientId: c.clientId || "", ownerId: c.ownerId || "", adminIds: c.adminIds || "",
             guildId: c.guildId || "", paymentUrl: c.paymentUrl || "",
             has: { botToken: !!c.botToken, mongoUrl: !!c.mongoUrl, paymentApiKey: !!c.paymentApiKey, paymentSecret: !!c.paymentSecret },
+            emojis: l.type === "service" ? { ...SERVICE_EMOJI_DEFAULTS, ...(c.serviceEmojis || {}) } : { ...AUTOSTORE_EMOJI_DEFAULTS, ...(c.emojis || {}) },
             serviceEmojis: l.type === "service" ? { ...SERVICE_EMOJI_DEFAULTS, ...(c.serviceEmojis || {}) } : {},
         },
     });
@@ -260,32 +262,59 @@ app.put("/api/service/settings", buyer, wrap(async (req, res) => {
     res.json({ ok: true });
 }));
 
-// ---------- Service Custom Emoji ----------
-app.get("/api/service/emojis", buyer, (req, res) => {
-    if (req.lic.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
-    const c = req.lic.config ? decrypt(req.lic.config) : {};
-    res.json({ emojis: { ...SERVICE_EMOJI_DEFAULTS, ...(c.serviceEmojis || {}) }, keys: SERVICE_EMOJI_KEYS });
-});
-app.put("/api/service/emojis", buyer, wrap(async (req, res) => {
+// ---------- Service Orders Web ----------
+app.get("/api/service/orders", buyer, wrap(async (req, res) => {
+    const status = String(req.query?.status || "all").toLowerCase();
+    const limit = Math.min(100, Math.max(1, Number(req.query?.limit) || 50));
+    const allowed = ["waiting", "in_progress", "done"];
+    const query = allowed.includes(status) ? { status } : {};
+    const result = await withServiceDb(req.lic, async (db) => {
+        const col = db.collection("jasaorders");
+        const [orders, waiting, inProgress, done, total] = await Promise.all([
+            col.find(query).sort({ createdAt: -1, orderNumber: -1 }).limit(limit).toArray(),
+            col.countDocuments({ status: "waiting" }),
+            col.countDocuments({ status: "in_progress" }),
+            col.countDocuments({ status: "done" }),
+            col.countDocuments({}),
+        ]);
+        return { orders, counts: { total, waiting, in_progress: inProgress, done } };
+    });
+    res.json(result);
+}));
+
+// ---------- Custom Emoji (AutoStore + AutoStore Service) ----------
+app.get("/api/emojis", buyer, (req, res) => {
     const l = req.lic;
-    if (l.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
+    const isService = l.type === "service";
+    const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
     const cur = l.config ? decrypt(l.config) : {};
-    const merged = { ...SERVICE_EMOJI_DEFAULTS, ...(cur.serviceEmojis || {}), ...sanitizeServiceEmojis(req.body?.emojis || {}) };
-    l.config = encrypt({ ...cur, serviceEmojis: merged });
+    const fieldName = isService ? "serviceEmojis" : "emojis";
+    res.json({ emojis: { ...defaults, ...(cur[fieldName] || {}) }, keys: EMOJI_KEYS, type: isService ? "service" : "autostore" });
+});
+app.put("/api/emojis", buyer, wrap(async (req, res) => {
+    const l = req.lic;
+    const cur = l.config ? decrypt(l.config) : {};
+    const isService = l.type === "service";
+    const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
+    const fieldName = isService ? "serviceEmojis" : "emojis";
+    const merged = { ...defaults, ...(cur[fieldName] || {}), ...sanitizeEmojis(req.body?.emojis || {}) };
+    l.config = encrypt({ ...cur, [fieldName]: merged });
     store.save();
     const wasRunning = runner.status(l.id) !== "stopped";
     if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
     res.json({ ok: true, restarted: wasRunning, emojis: merged });
 }));
-app.post("/api/service/emojis/reset", buyer, wrap(async (req, res) => {
+app.post("/api/emojis/reset", buyer, wrap(async (req, res) => {
     const l = req.lic;
-    if (l.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
     const cur = l.config ? decrypt(l.config) : {};
-    l.config = encrypt({ ...cur, serviceEmojis: { ...SERVICE_EMOJI_DEFAULTS } });
+    const isService = l.type === "service";
+    const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
+    const fieldName = isService ? "serviceEmojis" : "emojis";
+    l.config = encrypt({ ...cur, [fieldName]: { ...defaults } });
     store.save();
-    const wasRunning = runner.status(l.id) !== "stopped";
+    const wasRunning = runner.status(l.id) !== "stopped"; 
     if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
-    res.json({ ok: true, restarted: wasRunning, emojis: { ...SERVICE_EMOJI_DEFAULTS } });
+    res.json({ ok: true, restarted: wasRunning, emojis: { ...defaults } });
 }));
 
 // ---------- admin (kamu) ----------

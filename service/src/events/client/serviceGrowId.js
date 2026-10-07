@@ -1,6 +1,7 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
 const client = require("../../index");
 const Bal = require("../../Schema/balance.js");
+const { Benar, Salah, Warning } = require("../../config/emoji.js");
 
 module.exports = { name: "Service GrowID" };
 
@@ -23,7 +24,7 @@ client.on("interactionCreate", async (interaction) => {
             const confirm = interaction.fields.getTextInputValue("confirm").trim();
 
             if (id.toLowerCase() !== confirm.toLowerCase())
-                return interaction.reply({ content: "Konfirmasi GrowID tidak cocok.", ephemeral: true });
+                return interaction.reply({ content: `${Warning} Konfirmasi GrowID tidak cocok.`, ephemeral: true });
 
             const normalized = id.toLowerCase();
             const used = await Bal.findOne({ GrowID: normalized }).catch(() => null);
@@ -39,11 +40,11 @@ client.on("interactionCreate", async (interaction) => {
                 { upsert: true, new: true }
             );
 
-            return interaction.reply({ content: `✅ GrowID **${id}** berhasil disimpan.`, ephemeral: true });
+            return interaction.reply({ content: `${Benar} GrowID **${id}** berhasil disimpan.`, ephemeral: true });
         }
     } catch (err) {
         console.error("[SERVICE GROWID]", err);
         if (!interaction.replied && !interaction.deferred)
-            interaction.reply({ content: "Gagal menyimpan GrowID.", ephemeral: true }).catch(() => {});
+            interaction.reply({ content: `${Salah} Gagal menyimpan GrowID.`, ephemeral: true }).catch(() => {});
     }
 });

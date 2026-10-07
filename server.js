@@ -19,8 +19,7 @@ const { checkDiscord, checkMongo } = require("./src/validate");
 const { Runner } = require("./src/runner");
 const createShopRouter = require("./src/shopapi");
 const { closeConn } = require("./src/shopdb");
-const { getServiceDb, closeServiceDb, closeAllServiceDb } = require("./src/servicedb");
-const { JASA_TYPES, getJasaTypeKeys } = require("./service/src/utils/jasaTypes.js");
+const { MongoClient } = require("mongodb");
 
 const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080); // Railway mengisi PORT otomatis
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -191,7 +190,6 @@ app.put("/api/config", buyer, wrap(async (req, res) => {
     } catch (e) { return err(e.message); }
     l.config = encrypt(next);
     closeConn(l.id);
-    await closeServiceDb(l.id);
     store.save();
     res.json({ ok: true, restartNeeded: runner.status(l.id) !== "stopped" });
 }));
@@ -213,67 +211,43 @@ app.post("/api/bot/stop", buyer, botAction("stop"));
 app.post("/api/bot/restart", buyer, botAction("restart"));
 app.get("/api/logs", buyer, (req, res) => res.json({ lines: runner.logs(req.lic.id).slice(-100) }));
 
-// ---------- AutoStore Service management (web) ----------
-function serviceOnly(req, res, next) {
-    if (req.lic.type !== "service") return res.status(403).json({ error: "Fitur ini hanya untuk key Service." });
-    next();
+// ---------- Service web settings ----------
+const SERVICE_DEFS = {
+    "PLANT": { label: "PLANT", unit: "World", defaultPrice: 30 },
+    "HARVEST": { label: "HARVEST", unit: "World", defaultPrice: 30 },
+    "HARVEST MOVE": { label: "HARVEST MOVE", unit: "World", defaultPrice: 40 },
+    "MOVE": { label: "MOVE", unit: "Item / 200", defaultPrice: 1 },
+    "PROVIDER": { label: "PROVIDER", unit: "World", defaultPrice: 40 },
+    "SPLICE": { label: "SPLICE", unit: "World", defaultPrice: 45 },
+};
+async function withServiceDb(l, fn) {
+    if (l.type !== "service") throw Object.assign(new Error("Fitur ini hanya tersedia untuk key Service."), { status: 403 });
+    if (!l.config) throw Object.assign(new Error("Isi konfigurasi bot Service terlebih dahulu."), { status: 400 });
+    const c = decrypt(l.config);
+    if (!c.mongoUrl) throw Object.assign(new Error("MongoDB URL Service belum diisi."), { status: 400 });
+    const client = new MongoClient(c.mongoUrl, { serverSelectionTimeoutMS: 8000 });
+    try { await client.connect(); return await fn(client.db()); } finally { await client.close().catch(() => {}); }
 }
-
-function serviceMongo(l) {
-    if (!l.config) throw new Error("Isi konfigurasi bot Service terlebih dahulu.");
-    const cfg = decrypt(l.config);
-    if (!cfg.mongoUrl) throw new Error("MongoDB URL belum diatur.");
-    return getServiceDb(l.id, cfg.mongoUrl);
-}
-
-app.get("/api/service/settings", buyer, serviceOnly, wrap(async (req, res) => {
-    const db = await serviceMongo(req.lic);
-    const configs = await db.collection("jasaconfigs").find({}).toArray();
-    const byType = Object.fromEntries(configs.map((x) => [x.type, x]));
-    res.json({
-        services: getJasaTypeKeys().map((type) => {
-            const def = JASA_TYPES[type];
-            const cfg = byType[type] || {};
-            return {
-                type,
-                label: def.label,
-                unit: def.unit,
-                blockSize: def.blockSize || null,
-                defaultPrice: def.defaultPrice,
-                status: cfg.status === "OPEN" ? "OPEN" : "CLOSE",
-                price: Number.isFinite(cfg.price) ? cfg.price : def.defaultPrice,
-                completed: Number(cfg.completed || 0),
-            };
-        }),
-    });
+app.get("/api/service/settings", buyer, wrap(async (req, res) => {
+    const services = await withServiceDb(req.lic, async (db) => db.collection("jasaconfigs").find({}).toArray());
+    const byType = new Map(services.map(x => [x.type, x]));
+    const out = Object.entries(SERVICE_DEFS).map(([type, d]) => { const x = byType.get(type) || {}; return { type, label: d.label, unit: d.unit, price: Number(x.price ?? d.defaultPrice), status: String(x.status || "OPEN").toUpperCase() === "CLOSED" ? "CLOSED" : "OPEN", completed: Number(x.completed || 0) }; });
+    res.json({ services: out });
 }));
-
-app.put("/api/service/settings", buyer, serviceOnly, wrap(async (req, res) => {
-    const db = await serviceMongo(req.lic);
-    const updates = Array.isArray(req.body?.services) ? req.body.services : [];
-    if (!updates.length) return res.status(400).json({ error: "Tidak ada perubahan jasa." });
-
-    const allowed = new Set(getJasaTypeKeys());
-    const ops = [];
-    for (const item of updates) {
-        const type = String(item?.type || "").trim();
-        if (!allowed.has(type)) continue;
-        const def = JASA_TYPES[type];
-        const status = item?.status === "OPEN" ? "OPEN" : item?.status === "CLOSE" ? "CLOSE" : null;
-        const price = Number(String(item?.price ?? "").replace(",", "."));
-        if (status === null) return res.status(400).json({ error: `Status ${type} tidak valid.` });
-        if (!Number.isFinite(price) || price < 0 || price > 1000000000) return res.status(400).json({ error: `Harga ${type} tidak valid.` });
-        ops.push({
-            updateOne: {
-                filter: { type },
-                update: { $set: { type, status, price }, $setOnInsert: { completed: 0, ...(def.defaultPrice != null ? {} : {}) } },
-                upsert: true,
-            },
-        });
+app.put("/api/service/settings", buyer, wrap(async (req, res) => {
+    const incoming = Array.isArray(req.body?.services) ? req.body.services : [];
+    if (!incoming.length) return res.status(400).json({ error: "Data jasa tidak ditemukan." });
+    const clean = incoming.map(x => ({ type: String(x.type || "").trim(), price: Number(x.price), status: String(x.status || "").toUpperCase() }));
+    for (const x of clean) {
+        if (!SERVICE_DEFS[x.type]) return res.status(400).json({ error: `Jenis jasa tidak dikenal: ${x.type}` });
+        if (!Number.isFinite(x.price) || x.price < 0) return res.status(400).json({ error: `Harga ${x.type} tidak valid.` });
+        if (!["OPEN", "CLOSED"].includes(x.status)) return res.status(400).json({ error: `Status ${x.type} tidak valid.` });
     }
-    if (!ops.length) return res.status(400).json({ error: "Tidak ada jasa yang valid." });
-    await db.collection("jasaconfigs").bulkWrite(ops, { ordered: true });
-    res.json({ ok: true, message: "Pengaturan jasa tersimpan." });
+    await withServiceDb(req.lic, async (db) => {
+        const col = db.collection("jasaconfigs");
+        for (const x of clean) await col.updateOne({ type: x.type }, { $set: { price: x.price, status: x.status }, $setOnInsert: { completed: 0 } }, { upsert: true });
+    });
+    res.json({ ok: true });
 }));
 
 // ---------- admin (kamu) ----------
@@ -327,7 +301,6 @@ app.delete("/api/admin/licenses/:id", admin, wrap(async (req, res) => {
     const l = find(req, res); if (!l) return;
     await runner.stop(l.id);
     closeConn(l.id);
-    await closeServiceDb(l.id);
     store.data.licenses = licenses().filter((x) => x !== l);
     store.save(); res.json({ ok: true });
 }));
@@ -366,7 +339,7 @@ async function shutdown() {
     closing = true;
     setTimeout(() => process.exit(1), 10000).unref(); // jangan menggantung kalau ada yang macet
     server.close();
-    try { await Promise.all(licenses().map((l) => runner.stop(l.id))); await closeAllServiceDb(); } catch (e) { console.error(e); }
+    try { await Promise.all(licenses().map((l) => runner.stop(l.id))); } catch (e) { console.error(e); }
     process.exit(0);
 }
 process.on("SIGINT", shutdown);

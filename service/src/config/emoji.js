@@ -34,5 +34,17 @@ try {
 }
 
 const emoji = { ...defaults, ...custom };
+
+console.log("[SERVICE EMOJI] Loaded:", {
+  WL: emoji.WL,
+  DL: emoji.DL,
+  BGL: emoji.BGL,
+  CROWN: emoji.CROWN,
+  ARROW: emoji.ARROW,
+  Buy: emoji.Buy,
+  SetGrowID: emoji.SetGrowID,
+  BalanceButton: emoji.BalanceButton,
+  Deposit: emoji.Deposit
+});
 module.exports = emoji;
 module.exports.defaults = defaults;

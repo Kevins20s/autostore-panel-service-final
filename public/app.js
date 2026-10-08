@@ -350,64 +350,31 @@ function validServiceEmoji(value, key) {
 
 function discordEmojiUrl(v) {
     const text = String(v || '').trim();
-    const m = text.match(/^<([a]?):[A-Za-z0-9_~]+:(\d{17,20})>$/);
+    const m = text.match(/^<([a]):[A-Za-z0-9_~]+:(\d{17,20})>$|^<:([A-Za-z0-9_~]+):(\d{17,20})>$/);
     if (!m) return null;
-
     const animated = m[1] === 'a';
-    const id = m[2];
-
+    const id = animated ? m[2] : m[4];
+    const ext = animated ? 'gif' : 'png';
     return [
-        `https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`,
-        `https://media.discordapp.net/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`
+        `https://cdn.discordapp.com/emojis/${id}.${ext}?size=128`,
+        `https://cdn.discordapp.com/emojis/${id}.webp?size=128`,
+        `https://media.discordapp.net/emojis/${id}.${ext}?size=128`,
+        `https://media.discordapp.net/emojis/${id}.webp?size=128`
     ];
 }
 
 function emojiVisual(v, size = 52) {
     const text = String(v || '').trim();
     const urls = discordEmojiUrl(text);
-
-    if (!text) {
-        return h('span', {
-            style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1`
-        }, '—');
-    }
-
+    if (!text) return h('span', { style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1` }, '—');
     if (urls) {
-        const img = h('img', {
-            alt: '',
-            title: text,
-            width: size,
-            height: size,
-            style: `width:${size}px;height:${size}px;object-fit:contain;display:block`
-        });
-
-        img.dataset.emojiUrls = JSON.stringify(urls);
-        img.dataset.emojiAttempt = '0';
-
-        img.onerror = () => {
-            const list = JSON.parse(img.dataset.emojiUrls || '[]');
-            const next = Number(img.dataset.emojiAttempt || '0') + 1;
-            img.dataset.emojiAttempt = String(next);
-
-            if (next < list.length) {
-                img.src = list[next];
-            } else {
-                // Keep the actual Discord emoji code visible instead of crashing
-                // the page when Discord's CDN rejects the image.
-                img.replaceWith(h('span', {
-                    title: text,
-                    style: `font-size:12px;line-height:1.2;max-width:${size}px;text-align:center;word-break:break-all`
-                }, text));
-            }
-        };
-
-        img.src = urls[0];
-        return img;
+        const box = h('div', { style: `width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center` });
+        const img = h('img', { alt: text, title: text, width:size, height:size, style:`width:${size}px;height:${size}px;object-fit:contain;display:block;border:0`, referrerpolicy:'no-referrer' });
+        let attempt=0;
+        img.onerror=()=>{ attempt++; if(attempt<urls.length){img.src=urls[attempt];return;} box.replaceChildren(h('span',{title:text,style:`font-size:11px;line-height:1.2;max-width:${size}px;text-align:center;word-break:break-all;opacity:.8`},text)); };
+        img.src=urls[0]; box.append(img); return box;
     }
-
-    return h('span', {
-        style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1;display:block;white-space:nowrap`
-    }, text);
+    return h('span', { style:`font-size:${Math.max(18, Math.round(size*.55))}px;line-height:1;display:block;white-space:nowrap` }, text);
 }
 
 async function serviceEmojis() {

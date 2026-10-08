@@ -8,6 +8,14 @@ client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.slash.get(interaction.commandName);
+
+    console.log(
+        "[SERVICE INTERACTION]",
+        interaction.commandName,
+        "FOUND:",
+        !!command
+    );
+
     if (!command) return;
 
     try {

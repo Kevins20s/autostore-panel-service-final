@@ -80,7 +80,7 @@ app.disable("x-powered-by");
 app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net");
     next();
 });
 
@@ -283,7 +283,7 @@ app.get("/api/service/orders", buyer, wrap(async (req, res) => {
 }));
 
 // ---------- Custom Emoji (AutoStore + AutoStore Service) ----------
-app.get(["/api/emojis", "/api/service/emojis"], buyer, (req, res) => {
+app.get("/api/emojis", buyer, (req, res) => {
     const l = req.lic;
     const isService = l.type === "service";
     const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
@@ -291,7 +291,7 @@ app.get(["/api/emojis", "/api/service/emojis"], buyer, (req, res) => {
     const fieldName = isService ? "serviceEmojis" : "emojis";
     res.json({ emojis: { ...defaults, ...(cur[fieldName] || {}) }, keys: EMOJI_KEYS, type: isService ? "service" : "autostore" });
 });
-app.put(["/api/emojis", "/api/service/emojis"], buyer, wrap(async (req, res) => {
+app.put("/api/emojis", buyer, wrap(async (req, res) => {
     const l = req.lic;
     const cur = l.config ? decrypt(l.config) : {};
     const isService = l.type === "service";
@@ -304,7 +304,7 @@ app.put(["/api/emojis", "/api/service/emojis"], buyer, wrap(async (req, res) => 
     if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
     res.json({ ok: true, restarted: wasRunning, emojis: merged });
 }));
-app.post(["/api/emojis/reset", "/api/service/emojis/reset"], buyer, wrap(async (req, res) => {
+app.post("/api/emojis/reset", buyer, wrap(async (req, res) => {
     const l = req.lic;
     const cur = l.config ? decrypt(l.config) : {};
     const isService = l.type === "service";

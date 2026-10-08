@@ -21,13 +21,13 @@ const createShopRouter = require("./src/shopapi");
 const { closeConn } = require("./src/shopdb");
 const { MongoClient } = require("mongodb");
 
-const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080); // Railway mengisi PORT otomatis
+const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-const SKIP_VALIDATE = process.env.SKIP_VALIDATE === "1"; // hanya untuk tes
+const SKIP_VALIDATE = process.env.SKIP_VALIDATE === "1";
 const DAY = 86400000;
 
 if (ADMIN_PASSWORD.length < 8) { console.error("ADMIN_PASSWORD wajib diisi (minimal 8 karakter)."); process.exit(1); }
-require("./src/crypto").encrypt({}); // gagal cepat kalau MASTER_KEY salah
+require("./src/crypto").encrypt({});
 
 const fs = require("fs");
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data.json");
@@ -39,7 +39,6 @@ const runner = new Runner(
 );
 const licenses = () => store.data.licenses;
 
-// ---------- helpers ----------
 const valid = (l) => !l.revoked && l.expiresAt > Date.now();
 const FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRET = new Set(["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"]);
@@ -62,7 +61,6 @@ function newKey(type = "autostore") {
     return `${prefix}-${g()}-${g()}-${g()}-${g()}`;
 }
 
-// Jalankan/hentikan bot sesuai kondisi lisensi (dipanggil berkala & setelah perubahan)
 function reconcile(l) {
     const shouldRun = l.desired === "running" && valid(l) && !!l.config;
     const st = runner.status(l.id);
@@ -70,21 +68,19 @@ function reconcile(l) {
     else if (!shouldRun && st !== "stopped") runner.stop(l.id);
 }
 
-// Express 4 tidak menangkap error dari handler async; bungkus supaya masuk ke error handler, bukan bikin panel mati
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// ---------- app ----------
 const app = express();
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'");
+    // Izinkan preview custom Discord emoji.
+    res.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net");
     next();
 });
 
-// Webhook payment pembeli -> diteruskan ke bot miliknya (port bot tidak perlu dibuka ke internet)
 app.post("/hook/:id", express.raw({ type: "*/*", limit: "100kb" }), async (req, res) => {
     const l = licenses().find((x) => x.id === req.params.id);
     if (!l || runner.status(l.id) !== "running") return res.sendStatus(404);
@@ -112,7 +108,6 @@ const buyer = (req, res, next) => {
 const admin = (req, res, next) =>
     auth.session(req)?.t === "admin" ? next() : res.status(401).json({ error: "Belum login admin." });
 
-// ---------- backup & restore (admin). Dipasang sebelum parser JSON global karena file bisa besar ----------
 app.get("/api/admin/backup", admin, (req, res) => {
     if (!fs.existsSync(DATA_FILE)) return res.status(404).json({ error: "data.json belum ada." });
     res.setHeader("Content-Type", "application/json");
@@ -130,19 +125,17 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
     if (!d || !Array.isArray(d.licenses) || !Number.isFinite(d.nextPort) || d.licenses.some((l) => !l || !l.id || !l.buyer))
         return res.status(400).json({ error: "Isi file bukan backup data.json panel ini." });
     licenses().forEach((l) => runner.stop(l.id));
-    if (fs.existsSync(DATA_FILE)) fs.copyFileSync(DATA_FILE, DATA_FILE + ".bak"); // jaga-jaga kalau salah file
+    if (fs.existsSync(DATA_FILE)) fs.copyFileSync(DATA_FILE, DATA_FILE + ".bak");
     Object.keys(store.data).forEach((k) => delete store.data[k]);
     Object.assign(store.data, d);
     store.save();
-    licenses().forEach(reconcile); // bot yang seharusnya hidup akan dinyalakan lagi (sisanya oleh pemeriksa berkala)
+    licenses().forEach(reconcile);
     res.json({ ok: true, count: licenses().length });
 }));
 
-// API toko: login dulu, baru body (maks 2MB) diproses, supaya upload stok besar tidak bisa dipakai orang luar
 app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
 
-// ---------- pembeli ----------
 app.post("/api/login", (req, res) => {
     if (auth.tooMany(req.ip)) return res.status(429).json({ error: "Terlalu banyak percobaan. Coba lagi 10 menit lagi." });
     const key = String(req.body?.key || "").trim().toUpperCase();
@@ -160,15 +153,9 @@ app.get("/api/me", buyer, (req, res) => {
     const c = l.config ? decrypt(l.config) : {};
     const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
     res.json({
-        buyer: l.buyer,
-        type: l.type || "autostore",
-        keyPrefix: l.keyPrefix,
-        expiresAt: l.expiresAt,
-        daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
-        revoked: l.revoked,
-        valid: valid(l),
-        bot: runner.status(l.id),
-        desired: l.desired,
+        buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix,
+        expiresAt: l.expiresAt, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
+        revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
         webhookUrl: `${base}/hook/${l.id}`,
         config: {
             clientId: c.clientId || "", ownerId: c.ownerId || "", adminIds: c.adminIds || "",
@@ -187,7 +174,7 @@ app.put("/api/config", buyer, wrap(async (req, res) => {
     for (const k of FIELDS) {
         if (typeof req.body?.[k] !== "string") continue;
         const v = req.body[k].trim();
-        if (SECRET.has(k)) { if (v) next[k] = v; } else next[k] = v; // secret: kosong = tidak diubah
+        if (SECRET.has(k)) { if (v) next[k] = v; } else next[k] = v;
     }
     const err = (m) => res.status(400).json({ error: m });
     for (const [k, label] of [["botToken", "Bot token"], ["clientId", "Client ID"], ["mongoUrl", "MongoDB URL"], ["ownerId", "Owner ID"]])
@@ -223,7 +210,6 @@ app.post("/api/bot/stop", buyer, botAction("stop"));
 app.post("/api/bot/restart", buyer, botAction("restart"));
 app.get("/api/logs", buyer, (req, res) => res.json({ lines: runner.logs(req.lic.id).slice(-100) }));
 
-// ---------- Service web settings ----------
 const SERVICE_DEFS = {
     "PLANT": { label: "PLANT", unit: "World", defaultPrice: 30 },
     "HARVEST": { label: "HARVEST", unit: "World", defaultPrice: 30 },
@@ -243,7 +229,10 @@ async function withServiceDb(l, fn) {
 app.get("/api/service/settings", buyer, wrap(async (req, res) => {
     const services = await withServiceDb(req.lic, async (db) => db.collection("jasaconfigs").find({}).toArray());
     const byType = new Map(services.map(x => [x.type, x]));
-    const out = Object.entries(SERVICE_DEFS).map(([type, d]) => { const x = byType.get(type) || {}; return { type, label: d.label, unit: d.unit, price: Number(x.price ?? d.defaultPrice), status: String(x.status || "OPEN").toUpperCase() === "CLOSED" ? "CLOSED" : "OPEN", completed: Number(x.completed || 0) }; });
+    const out = Object.entries(SERVICE_DEFS).map(([type, d]) => {
+        const x = byType.get(type) || {};
+        return { type, label: d.label, unit: d.unit, price: Number(x.price ?? d.defaultPrice), status: String(x.status || "OPEN").toUpperCase() === "CLOSED" ? "CLOSED" : "OPEN", completed: Number(x.completed || 0) };
+    });
     res.json({ services: out });
 }));
 app.put("/api/service/settings", buyer, wrap(async (req, res) => {
@@ -262,7 +251,6 @@ app.put("/api/service/settings", buyer, wrap(async (req, res) => {
     res.json({ ok: true });
 }));
 
-// ---------- Service Orders Web ----------
 app.get("/api/service/orders", buyer, wrap(async (req, res) => {
     const status = String(req.query?.status || "all").toLowerCase();
     const limit = Math.min(100, Math.max(1, Number(req.query?.limit) || 50));
@@ -283,41 +271,66 @@ app.get("/api/service/orders", buyer, wrap(async (req, res) => {
 }));
 
 // ---------- Custom Emoji (AutoStore + AutoStore Service) ----------
-app.get("/api/emojis", buyer, (req, res) => {
-    const l = req.lic;
-    const isService = l.type === "service";
-    const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
-    const cur = l.config ? decrypt(l.config) : {};
-    const fieldName = isService ? "serviceEmojis" : "emojis";
-    res.json({ emojis: { ...defaults, ...(cur[fieldName] || {}) }, keys: EMOJI_KEYS, type: isService ? "service" : "autostore" });
-});
-app.put("/api/emojis", buyer, wrap(async (req, res) => {
-    const l = req.lic;
-    const cur = l.config ? decrypt(l.config) : {};
+// Kedua nama endpoint didukung agar frontend lama maupun Service sama-sama kompatibel.
+function emojiConfig(l) {
     const isService = l.type === "service";
     const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
     const fieldName = isService ? "serviceEmojis" : "emojis";
-    const merged = { ...defaults, ...(cur[fieldName] || {}), ...sanitizeEmojis(req.body?.emojis || {}) };
-    l.config = encrypt({ ...cur, [fieldName]: merged });
-    store.save();
-    const wasRunning = runner.status(l.id) !== "stopped";
-    if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
-    res.json({ ok: true, restarted: wasRunning, emojis: merged });
-}));
-app.post("/api/emojis/reset", buyer, wrap(async (req, res) => {
-    const l = req.lic;
     const cur = l.config ? decrypt(l.config) : {};
-    const isService = l.type === "service";
-    const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
-    const fieldName = isService ? "serviceEmojis" : "emojis";
-    l.config = encrypt({ ...cur, [fieldName]: { ...defaults } });
-    store.save();
-    const wasRunning = runner.status(l.id) !== "stopped"; 
-    if (wasRunning) { l.desired = "running"; await runner.stop(l.id); reconcile(l); }
-    res.json({ ok: true, restarted: wasRunning, emojis: { ...defaults } });
-}));
+    return { isService, defaults, fieldName, cur, emojis: { ...defaults, ...(cur[fieldName] || {}) } };
+}
 
-// ---------- admin (kamu) ----------
+const getEmojis = (req, res) => {
+    const l = req.lic;
+    const cfg = emojiConfig(l);
+    res.json({
+        emojis: cfg.emojis,
+        keys: EMOJI_KEYS,
+        type: cfg.isService ? "service" : "autostore"
+    });
+};
+app.get("/api/emojis", buyer, getEmojis);
+app.get("/api/service/emojis", buyer, getEmojis);
+
+const putEmojis = wrap(async (req, res) => {
+    const l = req.lic;
+    const cfg = emojiConfig(l);
+    const merged = {
+        ...cfg.emojis,
+        ...sanitizeEmojis(req.body?.emojis || {})
+    };
+    l.config = encrypt({ ...cfg.cur, [cfg.fieldName]: merged });
+    store.save();
+
+    const wasRunning = runner.status(l.id) !== "stopped";
+    if (wasRunning) {
+        l.desired = "running";
+        await runner.stop(l.id);
+        reconcile(l);
+    }
+    res.json({ ok: true, restarted: wasRunning, emojis: merged });
+});
+app.put("/api/emojis", buyer, putEmojis);
+app.put("/api/service/emojis", buyer, putEmojis);
+
+const resetEmojis = wrap(async (req, res) => {
+    const l = req.lic;
+    const cfg = emojiConfig(l);
+    const defaults = { ...cfg.defaults };
+    l.config = encrypt({ ...cfg.cur, [cfg.fieldName]: defaults });
+    store.save();
+
+    const wasRunning = runner.status(l.id) !== "stopped";
+    if (wasRunning) {
+        l.desired = "running";
+        await runner.stop(l.id);
+        reconcile(l);
+    }
+    res.json({ ok: true, restarted: wasRunning, emojis: defaults });
+});
+app.post("/api/emojis/reset", buyer, resetEmojis);
+app.post("/api/service/emojis/reset", buyer, resetEmojis);
+
 app.post("/api/admin/login", (req, res) => {
     if (auth.tooMany(req.ip)) return res.status(429).json({ error: "Terlalu banyak percobaan." });
     const a = Buffer.from(sha256(String(req.body?.password || ""))), b = Buffer.from(sha256(ADMIN_PASSWORD));
@@ -345,7 +358,7 @@ app.post("/api/admin/licenses", admin, (req, res) => {
         port: store.data.nextPort++, config: null, desired: "stopped",
     });
     store.save();
-    res.json({ key }); // key asli hanya ditampilkan SEKALI ini
+    res.json({ key });
 });
 
 const find = (req, res) => {
@@ -356,7 +369,7 @@ const find = (req, res) => {
 app.post("/api/admin/licenses/:id/extend", admin, (req, res) => {
     const l = find(req, res); if (!l) return;
     const days = Math.min(3650, Math.max(1, Math.floor(Number(req.body?.days) || 30)));
-    l.expiresAt = Math.max(l.expiresAt, Date.now()) + days * DAY; // kalau sudah habis, hitung dari sekarang
+    l.expiresAt = Math.max(l.expiresAt, Date.now()) + days * DAY;
     store.save(); reconcile(l); res.json({ ok: true });
 });
 app.post("/api/admin/licenses/:id/revoke", admin, (req, res) => {
@@ -372,7 +385,6 @@ app.delete("/api/admin/licenses/:id", admin, wrap(async (req, res) => {
     store.save(); res.json({ ok: true });
 }));
 
-// error handler terakhir: balas JSON rapi, jangan bocorkan detail internal
 app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     const status = err.status >= 400 && err.status < 500 ? err.status : 500;
@@ -380,15 +392,12 @@ app.use((err, req, res, next) => {
     res.status(status).json({ error: status === 500 ? "Terjadi kesalahan di server." : err.message });
 });
 
-// ---------- start ----------
 const WATCH_MS = Number(process.env.WATCH_MS || 60000);
 setInterval(() => licenses().forEach(reconcile), WATCH_MS).unref();
 if (backup.enabled()) backup.schedule(process.env.BACKUP_EVERY_HOURS);
 if (backup.enabled()) setTimeout(() => backup.send("server start").catch((e) => console.error("[BACKUP]", e.message)), 15000).unref();
-licenses().forEach(reconcile); // hidupkan lagi bot yang seharusnya jalan setelah server restart
+licenses().forEach(reconcile);
 
-// Di belakang proxy/tunnel, hanya terima koneksi dari server sendiri: port 8080 tidak bisa diakses langsung
-// lewat IP (kalau bisa, orang bisa memalsukan header X-Forwarded-For untuk menghindari pembatas login).
 const HOST = process.env.PANEL_HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : "0.0.0.0");
 const server = app.listen(PORT, HOST, () => console.log(`[PANEL] jalan di ${HOST}:${PORT}`));
 server.on("error", (e) => {
@@ -396,7 +405,6 @@ server.on("error", (e) => {
     process.exit(1);
 });
 
-// Satu error tak terduga jangan sampai mematikan panel dan semua bot pembeli
 process.on("unhandledRejection", (e) => console.error("[PANEL] unhandledRejection:", e));
 process.on("uncaughtException", (e) => console.error("[PANEL] uncaughtException:", e));
 
@@ -404,7 +412,7 @@ let closing = false;
 async function shutdown() {
     if (closing) return;
     closing = true;
-    setTimeout(() => process.exit(1), 10000).unref(); // jangan menggantung kalau ada yang macet
+    setTimeout(() => process.exit(1), 10000).unref();
     server.close();
     try { await Promise.all(licenses().map((l) => runner.stop(l.id))); } catch (e) { console.error(e); }
     process.exit(0);

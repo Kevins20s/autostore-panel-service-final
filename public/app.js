@@ -350,35 +350,78 @@ function validServiceEmoji(value, key) {
 
 function discordEmojiUrl(v) {
     const text = String(v || '').trim();
-    const m = text.match(/^<([a]):[A-Za-z0-9_~]+:(\d{17,20})>$|^<:([A-Za-z0-9_~]+):(\d{17,20})>$/);
+    const m = text.match(/^<([a]?):[A-Za-z0-9_~]+:(\d{17,20})>$/);
     if (!m) return null;
+
     const animated = m[1] === 'a';
-    const id = animated ? m[2] : m[4];
-    const ext = animated ? 'gif' : 'png';
+    const id = m[2];
+
     return [
-        `https://cdn.discordapp.com/emojis/${id}.${ext}?size=128`,
-        `https://cdn.discordapp.com/emojis/${id}.webp?size=128`,
-        `https://media.discordapp.net/emojis/${id}.${ext}?size=128`,
-        `https://media.discordapp.net/emojis/${id}.webp?size=128`
+        `https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`,
+        `https://media.discordapp.net/emojis/${id}.${animated ? 'gif' : 'png'}?size=128&quality=lossless`
     ];
 }
 
 function emojiVisual(v, size = 52) {
     const text = String(v || '').trim();
     const urls = discordEmojiUrl(text);
-    if (!text) return h('span', { style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1` }, '—');
-    if (urls) {
-        const box = h('div', { style: `width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center` });
-        const img = h('img', { alt: text, title: text, width:size, height:size, style:`width:${size}px;height:${size}px;object-fit:contain;display:block;border:0`, referrerpolicy:'no-referrer' });
-        let attempt=0;
-        img.onerror=()=>{ attempt++; if(attempt<urls.length){img.src=urls[attempt];return;} box.replaceChildren(h('span',{title:text,style:`font-size:11px;line-height:1.2;max-width:${size}px;text-align:center;word-break:break-all;opacity:.8`},text)); };
-        img.src=urls[0]; box.append(img); return box;
+
+    if (!text) {
+        return h('span', {
+            style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1`
+        }, '—');
     }
-    return h('span', { style:`font-size:${Math.max(18, Math.round(size*.55))}px;line-height:1;display:block;white-space:nowrap` }, text);
+
+    if (urls) {
+        const img = h('img', {
+            alt: '',
+            title: text,
+            width: size,
+            height: size,
+            style: `width:${size}px;height:${size}px;object-fit:contain;display:block`
+        });
+
+        img.dataset.emojiUrls = JSON.stringify(urls);
+        img.dataset.emojiAttempt = '0';
+
+        img.onerror = () => {
+            const list = JSON.parse(img.dataset.emojiUrls || '[]');
+            const next = Number(img.dataset.emojiAttempt || '0') + 1;
+            img.dataset.emojiAttempt = String(next);
+
+            if (next < list.length) {
+                img.src = list[next];
+            } else {
+                // Keep the actual Discord emoji code visible instead of crashing
+                // the page when Discord's CDN rejects the image.
+                img.replaceWith(h('span', {
+                    title: text,
+                    style: `font-size:12px;line-height:1.2;max-width:${size}px;text-align:center;word-break:break-all`
+                }, text));
+            }
+        };
+
+        img.src = urls[0];
+        return img;
+    }
+
+    return h('span', {
+        style: `font-size:${Math.max(18, Math.round(size * .55))}px;line-height:1;display:block;white-space:nowrap`
+    }, text);
+}
+
+async function serviceEmojiApi(method, action, body) {
+    const endpoints = action === 'get' ? ['/api/service/emojis', '/api/emojis'] : action === 'save' ? ['/api/service/emojis', '/api/emojis'] : ['/api/service/emojis/reset', '/api/emojis/reset'];
+    let lastError = null;
+    for (const url of endpoints) {
+        try { return await api(method, url, body); }
+        catch (e) { lastError = e; if (e.status !== 404) throw e; }
+    }
+    throw lastError || new Error('Endpoint Custom Emoji tidak tersedia.');
 }
 
 async function serviceEmojis() {
-    const r = await api('GET', '/api/service/emojis');
+    const r = await serviceEmojiApi('GET', 'get');
     const values = { ...(r.emojis || {}) };
     const selected = { value: SERVICE_EMOJI_FIELDS[0][0] };
 
@@ -418,7 +461,7 @@ async function serviceEmojis() {
         for (const [key] of SERVICE_EMOJI_FIELDS) {
             if (!validServiceEmoji(current[key], key)) throw new Error(`Format ${key} tidak valid.`);
         }
-        const out = await api('PUT', '/api/service/emojis', { emojis: current });
+        const out = await serviceEmojiApi('PUT', 'save', { emojis: current });
         Object.assign(values, current);
         msg.textContent = out.restarted ? 'Tersimpan. Bot Service sedang restart dengan emoji baru.' : 'Tersimpan.';
         toast('Custom emoji tersimpan.');
@@ -427,7 +470,7 @@ async function serviceEmojis() {
 
     const reset = h('button', { onclick: guard(async () => {
         if (!confirm('Kembalikan semua emoji ke default?')) return;
-        const out = await api('POST', '/api/service/emojis/reset');
+        const out = await serviceEmojiApi('POST', 'reset');
         Object.assign(values, out.emojis || {});
         msg.textContent = out.restarted ? 'Default dipulihkan. Bot sedang restart.' : 'Default dipulihkan.';
         toast('Emoji default dipulihkan.');

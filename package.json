@@ -9,7 +9,8 @@
     "test": "node test/smoke.js",
     "test:shop": "node test/shop.js",
     "test:ui": "node test/ui.js",
-    "test:all": "node test/smoke.js && node test/shop.js && node test/ui.js"
+    "test:all": "node test/smoke.js && node test/shop.js && node test/ui.js",
+    "test:shared": "node test/shared-tenants.js && node test/shared-tenant-db.js"
   },
   "dependencies": {
     "express": "^4.19.2",

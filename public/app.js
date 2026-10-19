@@ -738,46 +738,13 @@ async function subscription() {
 }
 
 // ---------- router ----------
-const STORE_NAV = [
-    ["dashboard", "Dashboard", "dashboard"], ["products", "Products", "package"],
-    ["users", "Users", "users"], ["settings", "Settings", "settings"],
-    ["emojis", "Custom Emoji", "palette"], ["banner", "Custom Banner", "image"],
-    ["bot", "Bot & Server", "server"], ["tutorial", "Tutorial Setup", "book"],
-    ["subscription", "Subscription", "credit-card"]
-];
-const SERVICE_NAV = [
-    ["service", "Dashboard", "dashboard"], ["service-settings", "Harga & Status", "sliders"],
-    ["service-emojis", "Custom Emoji", "palette"], ["orders", "Orders", "shopping-bag"],
-    ["bot", "Bot & Server", "server"], ["subscription", "Subscription", "credit-card"]
-];
-const NAV_ICON_PATHS = {
-    dashboard: ['M3 3h7v7H3z','M14 3h7v4h-7z','M14 10h7v11h-7z','M3 14h7v7H3z'],
-    package: ['m12 3 9 5-9 5-9-5 9-5Z','m3 8 9 5 9-5','M12 13v8','M7.5 5.5 16.5 10.5'],
-    users: ['M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2','M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M20 21v-2a4 4 0 0 0-3-3.87','M16 3.13a4 4 0 0 1 0 7.75'],
-    settings: ['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z','M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 2.94-.08-.02a1.7 1.7 0 0 0-1.74.68l-.04.07h-3.4l-.04-.07a1.7 1.7 0 0 0-1.74-.68l-.08.02-1.7-2.94.06-.06A1.7 1.7 0 0 0 9.7 15l-.08-.03v-3.4l.08-.03a1.7 1.7 0 0 0-.34-1.88L9.3 9.6 11 6.66l.08.02a1.7 1.7 0 0 0 1.74-.68l.04-.07h3.4l.04.07a1.7 1.7 0 0 0 1.74.68l.08-.02 1.7 2.94-.06.06A1.7 1.7 0 0 0 19.4 11.5l.08.03v3.4z'],
-    palette: ['M12 3a9 9 0 1 0 0 18h1.1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.8H18a3 3 0 0 0 3-3c0-4.9-4-8.9-9-8.9Z','M7.5 10h.01','M10 6.5h.01','M15 7.5h.01','M17 11h.01'],
-    image: ['M4 4h16v16H4z','m4 15 4-4 4 4 3-3 5 5','M9 8h.01'],
-    server: ['M4 4h16v6H4z','M4 14h16v6H4z','M8 7h.01','M8 17h.01','M12 7h4','M12 17h4'],
-    book: ['M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22z','M4 4.5v15A2.5 2.5 0 0 1 6.5 17H20','M8 6h8'],
-    'credit-card': ['M3 5h18v14H3z','M3 10h18','M7 15h4'],
-    sliders: ['M4 21v-7','M4 10V3','M12 21v-9','M12 8V3','M20 21v-5','M20 12V3','M2 14h4','M10 8h4','M18 16h4'],
-    'shopping-bag': ['M5 8h14l1 13H4L5 8Z','M9 8V6a3 3 0 0 1 6 0v2']
-};
-function navIcon(name) {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false");
-    (NAV_ICON_PATHS[name] || NAV_ICON_PATHS.dashboard).forEach(d => {
-        const node = document.createElementNS(ns, d.includes(".") && d.startsWith("M") ? "path" : "path");
-        node.setAttribute("d", d); svg.append(node);
-    });
-    return h("span", { class: "nav-icon nav-icon-" + name }, svg);
-}
+const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["emojis", "🎨 Custom Emoji"], ["banner", "🖼️ Custom Banner"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
+const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["service-emojis", "🎨 Custom Emoji"], ["orders", "🛒 Orders"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
 const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
-    $("nav").replaceChildren(...nav.map(([k, label, icon]) => h("a", { class: k === cur ? "on" : "", onclick: () => (location.hash = "#/" + k), "aria-label": label }, navIcon(icon), h("span", { class: "nav-label" }, label))));
+    $("nav").replaceChildren(...nav.map(([k, l]) => h("a", { class: k === cur ? "on" : "", onclick: () => (location.hash = "#/" + k) }, l)), );
 }
 async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";

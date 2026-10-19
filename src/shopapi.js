@@ -158,8 +158,13 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         const prod = await c(req, "list").findOne({ code });
         if (!prod) return fail(res, "Produk tidak ditemukan.", 404);
         const text = String(req.body?.text ?? "");
-        // Sama seperti bot: tipe script = satu isi utuh, tipe lain = dipisah per spasi/baris
-        const items = String(prod.type).includes("script") ? [text.trim()].filter(Boolean) : text.split(/\s+/).filter(Boolean);
+        // Script selalu satu stok utuh. Impor file bisa memilih mode per baris;
+        // input manual tetap mendukung pemisahan whitespace seperti versi sebelumnya.
+        const items = String(prod.type).includes("script")
+            ? [text.trim()].filter(Boolean)
+            : req.body?.lineMode === true
+                ? text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+                : text.split(/\s+/).filter(Boolean);
         if (!items.length) return fail(res, "Tidak ada isi stok.");
         if (items.length > 5000) return fail(res, "Maksimal 5000 item sekali tambah.");
         await c(req, "shop").insertMany(items.map((data) => ({ code, data, __v: 0 })), { ordered: false });

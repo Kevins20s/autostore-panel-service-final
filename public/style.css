@@ -471,58 +471,33 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 @media(max-width:760px){.side nav a{min-height:39px;padding:9px 11px}.stock-upload-card{padding:13px}.stock-toolbar{align-items:stretch}.stock-add-actions .pri{width:100%}}
 
 
-/* AUTOSTORE PAGE-LEVEL PREMIUM POLISH */
-:root{--as-violet:#8b7cff;--as-blue:#5b9dff;--as-border:rgba(156,173,211,.15)}
-#view{animation:asViewIn .24s ease both}@keyframes asViewIn{from{opacity:.45;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-.head{position:relative;gap:18px;padding-bottom:17px;border-bottom:1px solid rgba(156,173,211,.11)}
-.head h1{background:linear-gradient(105deg,#f5f4ff 10%,#b9b2ff 60%,#91c2ff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
-.head p{max-width:700px;color:#9ba9c0}
-.card{position:relative;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
-.card:hover{border-color:rgba(139,124,255,.24)}
-.card h2{display:flex;align-items:center;gap:9px;letter-spacing:-.02em}
-.card h2:before{content:"";display:inline-block;width:4px;height:17px;border-radius:8px;background:linear-gradient(180deg,var(--as-violet),var(--as-blue));flex:none}
-#view>.card+.card{margin-top:16px}
-#view input,#view select,#view textarea{min-height:42px}
-#view textarea{min-height:100px;line-height:1.6;resize:vertical}
-#view button.pri{background:linear-gradient(115deg,#756bfa,#537ff5);border:1px solid rgba(173,165,255,.3);color:#fff}
-#view button:not(.pri):not(.bad):hover{border-color:rgba(139,124,255,.38);background:rgba(139,124,255,.08)}
-#view a{color:#a9b8ff;text-decoration:none}#view a:hover{color:#d2d8ff;text-decoration:underline}
-#view .grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr))}
-#view .stat{overflow:hidden;isolation:isolate}#view .stat b{font-variant-numeric:tabular-nums}
-.tbl,.table-wrap{overflow-x:auto}.tbl table,.table-wrap table{min-width:560px}td .row{flex-wrap:wrap}.pill{white-space:nowrap}
-.msg{border-radius:12px;padding:12px 14px}
-.steps{counter-reset:as-step;list-style:none;padding-left:0;display:grid;gap:10px}
-.steps li{position:relative;padding:13px 14px 13px 45px;background:rgba(139,124,255,.045);border:1px solid rgba(156,173,211,.11);border-radius:13px;line-height:1.65}
-.steps li:before{counter-increment:as-step;content:counter(as-step);position:absolute;left:13px;top:12px;display:grid;place-items:center;width:22px;height:22px;border-radius:7px;color:#dcd7ff;background:rgba(139,124,255,.18);font-size:11px;font-weight:800}
-.modal{max-height:min(88vh,900px);overflow-y:auto}.modal h2{background:linear-gradient(100deg,#f4f3ff,#a9a0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.overlay{z-index:100}#toast{z-index:200}
-.stock-upload-card{background:linear-gradient(135deg,rgba(139,124,255,.10),rgba(91,157,255,.055));border:1px dashed rgba(139,124,255,.42);border-radius:17px}
-.stock-file-picker{border-radius:12px}.stock-file-picker:hover{border-color:rgba(139,124,255,.7);background:rgba(139,124,255,.09)}.stock-file-count{color:#b9b1ff}
-.svc-page{gap:18px}.svc-hero{background:radial-gradient(ellipse at 85% 0%,rgba(91,157,255,.16),transparent 45%),linear-gradient(135deg,rgba(139,124,255,.12),rgba(16,24,39,.98) 60%);padding:clamp(22px,3vw,34px)}
-.svc-kicker{letter-spacing:.14em;text-transform:uppercase}.svc-service-card,.svc-setting-card{box-shadow:0 12px 28px rgba(0,0,0,.12)}
-.svc-action{background:linear-gradient(135deg,rgba(139,124,255,.11),rgba(91,157,255,.055))}.svc-action.primary{background:linear-gradient(120deg,#756bfa,#537ff5);box-shadow:0 10px 26px rgba(91,98,255,.18)}
-.emoji-setting-card{box-shadow:0 12px 30px rgba(0,0,0,.13)}.emoji-preview-demo{background:linear-gradient(135deg,rgba(139,124,255,.07),rgba(91,157,255,.035))}
-@media(max-width:700px){.head{align-items:flex-start;padding-bottom:14px}#view>.grid{grid-template-columns:1fr}.tbl table,.table-wrap table{min-width:520px}.steps li{padding-left:42px}}
-@media(prefers-reduced-motion:reduce){#view{animation:none}}
-
-
-/* Premium key-entry screen */
-#login.login{position:relative;isolation:isolate;min-height:100svh;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 18px;overflow:hidden;background:radial-gradient(ellipse at 18% 18%,rgba(105,91,255,.20),transparent 36%),radial-gradient(ellipse at 84% 78%,rgba(57,132,255,.15),transparent 34%),#080d19;color:#f5f6ff}
-#login.login:before,#login.login:after{content:"";position:absolute;z-index:-1;border-radius:50%;filter:blur(1px);pointer-events:none}
-#login.login:before{width:280px;height:280px;top:8%;right:8%;border:1px solid rgba(151,139,255,.14);box-shadow:0 0 90px rgba(104,92,255,.08)}
-#login.login:after{width:190px;height:190px;bottom:9%;left:9%;border:1px solid rgba(94,164,255,.13)}
-#login.login h1{margin:0 0 9px;text-align:center;font-size:clamp(30px,5vw,43px);font-weight:850;letter-spacing:-1.5px;background:linear-gradient(110deg,#fff 15%,#c6c0ff 55%,#8ebaff);-webkit-background-clip:text;background-clip:text;color:transparent}
-#login.login>p.mut{max-width:420px;margin:0 0 26px;text-align:center;color:#9aa8c2;font-size:14px;line-height:1.7}
-#login.login .card{width:min(100%,440px);padding:clamp(22px,5vw,34px);border:1px solid rgba(159,169,220,.17);border-radius:24px;background:linear-gradient(145deg,rgba(21,29,50,.96),rgba(12,18,33,.97));box-shadow:0 28px 90px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.035);backdrop-filter:blur(18px)}
-#login.login .card:before{content:"AKSES PANEL";display:block;margin-bottom:17px;color:#a9a0ff;font-size:10px;font-weight:850;letter-spacing:.2em}
-#login.login #key{box-sizing:border-box;width:100%;min-height:54px;padding:15px 16px;border:1px solid rgba(151,166,205,.22);border-radius:14px;outline:none;background:rgba(5,10,22,.72);color:#f7f7ff;font-size:14px;transition:border-color .2s,box-shadow .2s,background .2s}
-#login.login #key::placeholder{color:#687794;font-size:12px}
-#login.login #key:focus{border-color:#8c82ff;background:rgba(8,13,28,.96);box-shadow:0 0 0 4px rgba(124,108,255,.13)}
-#login.login .row{display:block!important}
-#login.login #btnLogin{width:100%;min-height:51px;border:0;border-radius:14px;background:linear-gradient(110deg,#7868ff,#4e91ff);color:white;font-weight:800;letter-spacing:.01em;box-shadow:0 10px 28px rgba(90,104,255,.24);transition:transform .18s,filter .18s,box-shadow .18s}
-#login.login #btnLogin:hover{filter:brightness(1.09);transform:translateY(-1px);box-shadow:0 14px 32px rgba(90,104,255,.32)}
-#login.login #btnLogin:active{transform:translateY(0)}
-#login.login #loginMsg{margin-top:12px;color:#ffaaaa;font-size:13px;line-height:1.5}
-#login.login .card:after{content:"🔒  Akses aman • Gunakan key resmi dari penjual";display:block;margin-top:20px;padding-top:16px;border-top:1px solid rgba(151,166,205,.12);color:#7e8da9;text-align:center;font-size:11px;line-height:1.6}
-@media(max-width:480px){#login.login{padding:22px 15px}#login.login .card{border-radius:20px}#login.login h1{letter-spacing:-1px}}
-@media(prefers-reduced-motion:reduce){#login.login *{transition:none!important}}
+/* AutoStore shared brand mark + refined login entry */
+.login:before{
+  content:"AS";
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:68px;
+  height:68px;
+  margin:0 auto 18px;
+  border-radius:22px;
+  color:#fff;
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:-.08em;
+  background:linear-gradient(135deg,#6577ff 0%,#8b5cf6 52%,#35c8ff 100%);
+  border:1px solid rgba(255,255,255,.24);
+  box-shadow:0 16px 42px rgba(109,124,255,.34),inset 0 1px 0 rgba(255,255,255,.24);
+  animation:asLogoFloat 5s ease-in-out infinite;
+}
+.login{animation:asLoginEnter .55s cubic-bezier(.2,.75,.25,1) both}
+.login .card{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.login #key{min-height:48px;letter-spacing:.015em}
+.login #btnLogin{min-height:46px;width:100%;font-weight:750}
+.login .row{display:block}
+.side .brand{display:flex;align-items:center;gap:10px;font-weight:850;letter-spacing:-.04em}
+.side .brand:before{content:"AS";display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;border-radius:11px;color:#fff;font-size:12px;font-weight:900;letter-spacing:-.06em;background:linear-gradient(135deg,#6577ff,#8b5cf6 55%,#35c8ff);box-shadow:0 7px 18px rgba(109,124,255,.24)}
+@keyframes asLoginEnter{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes asLogoFloat{0%,100%{transform:translateY(0);box-shadow:0 16px 42px rgba(109,124,255,.34),inset 0 1px 0 rgba(255,255,255,.24)}50%{transform:translateY(-3px);box-shadow:0 20px 48px rgba(109,124,255,.42),inset 0 1px 0 rgba(255,255,255,.24)}}
+@media(prefers-reduced-motion:reduce){.login,.login:before{animation:none!important;transition:none!important}}
+@media(max-width:600px){.login{margin:7vh auto 0}.login .card{padding:18px}.login>h1{font-size:25px}}

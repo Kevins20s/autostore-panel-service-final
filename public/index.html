@@ -2,12 +2,13 @@
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AutoStore Panel</title><link rel="stylesheet" href="/style.css"></head>
 <body>
-<section id="login" class="login hide">
-  <h1>AutoStore Panel</h1><p class="mut">Masuk dengan key yang kamu terima dari penjual.</p>
+<section id="login" class="login hide" aria-labelledby="loginTitle">
+  <h1 id="loginTitle">AutoStore Panel</h1><p class="mut">Masuk dengan key yang kamu terima dari penjual.</p>
   <div class="card">
-    <input id="key" placeholder="AS-XXXX-XXXX-XXXX-XXXX atau SV-XXXX-XXXX-XXXX-XXXX" autocomplete="off">
+    <label for="key">Key akses</label>
+    <input id="key" placeholder="AS-XXXX-XXXX-XXXX-XXXX atau SV-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
     <div class="row" style="margin-top:12px"><button class="pri" id="btnLogin">Masuk</button></div>
-    <div id="loginMsg" class="msg"></div>
+    <div id="loginMsg" class="msg" role="status" aria-live="polite"></div>
   </div>
 </section>
 <div id="app" class="app hide">
@@ -18,6 +19,6 @@
   </aside>
   <div class="content"><div id="view"></div></div>
 </div>
-<div id="toast"></div>
+<div id="toast" aria-live="polite"></div>
 <script src="/app.js"></script>
 </body></html>

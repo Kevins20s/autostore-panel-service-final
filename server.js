@@ -285,6 +285,7 @@ const getEmojis = (req, res) => {
     const cfg = emojiConfig(l);
     res.json({
         emojis: cfg.emojis,
+        defaults: cfg.defaults,
         keys: EMOJI_KEYS,
         type: cfg.isService ? "service" : "autostore"
     });

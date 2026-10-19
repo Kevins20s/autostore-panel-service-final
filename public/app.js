@@ -549,6 +549,122 @@ async function serviceEmojis() {
     );
 }
 
+// ---------- AutoStore: Custom Emoji ----------
+const STORE_EMOJI_FIELDS = [
+    ["WL", "World Lock"], ["DL", "Diamond Lock"], ["BGL", "Blue Gem Lock"],
+    ["CROWN", "Crown"], ["ARROW", "Arrow"], ["EARTH", "Earth"], ["BOT", "Bot"],
+    ["Dolar", "Dollar"], ["BALANCE", "Balance"], ["Warning", "Warning"], ["Benar", "Berhasil"],
+    ["Salah", "Gagal"], ["Megaphone", "Order Notification"], ["Loading", "Loading"], ["Buy", "Buy"],
+    ["SetGrowID", "Set GrowID"], ["BalanceButton", "Balance Button"], ["Deposit", "Deposit"],
+    ["DepositQRIS", "Deposit QRIS"], ["AdminPanel", "Admin Panel"], ["Queue", "Queue"], ["Waiting", "Waiting"],
+    ["COLOR", "Warna Embed"]
+];
+function storeCustomEmojis() {
+    return customEmojiEditor({
+        title: "Custom Emoji AutoStore",
+        subtitle: "Atur emoji yang digunakan bot AutoStore untuk produk, pembelian, saldo, dan notifikasi.",
+        fields: STORE_EMOJI_FIELDS,
+        endpoint: "/api/emojis",
+        resetEndpoint: "/api/emojis/reset",
+        includeBanner: false
+    });
+}
+
+// ---------- AutoStore: Custom Banner ----------
+function storeCustomBanner() {
+    return customEmojiEditor({
+        title: "Custom Banner",
+        subtitle: "Atur gambar banner yang tampil pada embed toko AutoStore. Gunakan URL gambar HTTPS yang bisa diakses publik.",
+        fields: [["imageUrl", "Banner utama"], ["imageUrl2", "Banner realtime"]],
+        endpoint: "/api/emojis",
+        resetEndpoint: "/api/emojis/reset",
+        includeBanner: true
+    });
+}
+
+async function customEmojiEditor({ title, subtitle, fields, endpoint, resetEndpoint, includeBanner }) {
+    const r = await api("GET", endpoint);
+    const values = { ...(r.emojis || {}) };
+    const defaults = { ...(r.defaults || {}) };
+    const selected = { value: fields[0][0] };
+    const select = h("select", { style: "width:100%;max-width:520px" });
+    fields.forEach(([key, label]) => select.append(h("option", { value: key }, `${label} — ${key}`)));
+    const input = h("input", { autocomplete: "off", spellcheck: "false", style: "width:100%", placeholder: includeBanner ? "https://.../banner.png" : "Emoji Unicode atau <:nama:id>" });
+    const previewBox = h("div", { style: "width:110px;height:110px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none" });
+    const previewName = h("b", {});
+    const previewValue = h("div", { class: "mut", style: "font-family:monospace;font-size:12px;word-break:break-all;margin-top:6px" });
+    const msg = h("div", { class: "mut", style: "margin-top:10px" });
+    const help = h("p", { class: "mut", style: "margin:6px 0 0" }, includeBanner ? "Tempel URL gambar PNG, JPG, GIF, atau WEBP. Link harus dapat dibuka tanpa login." : "Masukkan emoji Unicode atau format custom Discord seperti <:nama:id> / <a:nama:id>.");
+
+    function draw() {
+        const key = selected.value;
+        const meta = fields.find(x => x[0] === key);
+        input.value = values[key] || "";
+        previewBox.replaceChildren();
+        if (includeBanner && input.value) {
+            const img = h("img", { alt: "Preview banner", style: "width:100%;height:100%;object-fit:contain" });
+            img.onerror = () => { previewBox.replaceChildren(h("span", { class: "mut", style: "padding:8px;text-align:center" }, "Gambar tidak dapat dimuat")); };
+            img.src = input.value;
+            previewBox.append(img);
+        } else if (includeBanner) {
+            previewBox.append(h("span", { class: "mut" }, "Preview"));
+        } else {
+            previewBox.append(emojiVisual(input.value, 62));
+        }
+        previewName.textContent = meta ? `${meta[1]} (${key})` : key;
+        previewValue.textContent = input.value || "—";
+    }
+    select.onchange = () => { selected.value = select.value; draw(); };
+    input.oninput = () => { values[selected.value] = input.value; draw(); };
+
+    const save = h("button", { class: "pri", onclick: guard(async () => {
+        const current = { ...values, [selected.value]: input.value.trim() };
+        for (const [key] of fields) {
+            const value = String(current[key] || "").trim();
+            if (!value) throw new Error(`${key} tidak boleh kosong.`);
+            if (includeBanner) {
+                let u; try { u = new URL(value); } catch { throw new Error(`${key} harus berupa URL yang valid.`); }
+                if (u.protocol !== "https:") throw new Error(`${key} harus menggunakan HTTPS.`);
+            } else if (key === "COLOR") {
+                if (!/^#[0-9a-fA-F]{6}$/.test(value)) throw new Error("Warna harus menggunakan format #RRGGBB.");
+            } else if (!/^<a?:[A-Za-z0-9_~]+:\d{17,20}>$/.test(value) && Array.from(value).length > 12) {
+                throw new Error(`Format ${key} terlalu panjang. Gunakan emoji Unicode atau format <:nama:id>.`);
+            }
+        }
+        const out = await api("PUT", endpoint, { emojis: current });
+        Object.assign(values, current);
+        msg.textContent = out.restarted ? "Tersimpan. Bot sedang restart dengan pengaturan baru." : "Tersimpan. Tekan Restart di menu Bot & Server agar perubahan diterapkan.";
+        toast(includeBanner ? "Custom banner tersimpan." : "Custom emoji tersimpan.");
+        draw();
+    }) }, includeBanner ? "💾 Simpan Banner" : "💾 Simpan Emoji");
+    const reset = h("button", { onclick: guard(async () => {
+        if (!confirm(includeBanner ? "Kembalikan URL banner ke default? Emoji lain tidak akan diubah." : "Kembalikan semua emoji ke default?")) return;
+        let out;
+        if (includeBanner) {
+            const restored = { ...values };
+            for (const [key] of fields) restored[key] = defaults[key] || "";
+            out = await api("PUT", endpoint, { emojis: restored });
+            Object.assign(values, restored);
+        } else {
+            out = await api("POST", resetEndpoint);
+            Object.assign(values, out.emojis || {});
+        }
+        msg.textContent = out.restarted ? "Default dipulihkan. Bot sedang restart." : "Default dipulihkan.";
+        toast("Pengaturan default dipulihkan.");
+        draw();
+    }) }, "Reset Default");
+    draw();
+    return h("div", {},
+        head(title, subtitle),
+        card(h("div", { style: "display:flex;gap:24px;align-items:center;flex-wrap:wrap" },
+            h("div", { style: "flex:1;min-width:260px" }, h("h2", { style: "margin:0" }, includeBanner ? "Gambar yang sedang digunakan" : "Emoji yang sedang digunakan"), help,
+                h("div", { style: "margin-top:18px" }, select), h("div", { style: "margin-top:12px" }, input)),
+            h("div", { style: "width:150px;text-align:center" }, previewBox, h("div", { style: "margin-top:10px" }, previewName), previewValue)),
+            h("div", { class: "row gap", style: "margin-top:18px" }, save, reset), msg),
+        includeBanner ? h("p", { class: "mut" }, "Catatan: reset banner juga mengembalikan konfigurasi emoji ke default karena keduanya disimpan bersama dalam konfigurasi AutoStore.") : null
+    );
+}
+
 // ---------- AutoStore Service: Orders ----------
 const ORDER_STATUS = {
     all: ["Semua", ""], waiting: ["Menunggu", "waiting"], in_progress: ["Diproses", "in_progress"], done: ["Selesai", "done"]
@@ -622,18 +738,52 @@ async function subscription() {
 }
 
 // ---------- router ----------
-const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
-const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["service-emojis", "🎨 Custom Emoji"], ["orders", "🛒 Orders"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, emojis: serviceEmojis, orders: serviceOrders };
+const STORE_NAV = [
+    ["dashboard", "Dashboard", "dashboard"], ["products", "Products", "package"],
+    ["users", "Users", "users"], ["settings", "Settings", "settings"],
+    ["emojis", "Custom Emoji", "palette"], ["banner", "Custom Banner", "image"],
+    ["bot", "Bot & Server", "server"], ["tutorial", "Tutorial Setup", "book"],
+    ["subscription", "Subscription", "credit-card"]
+];
+const SERVICE_NAV = [
+    ["service", "Dashboard", "dashboard"], ["service-settings", "Harga & Status", "sliders"],
+    ["service-emojis", "Custom Emoji", "palette"], ["orders", "Orders", "shopping-bag"],
+    ["bot", "Bot & Server", "server"], ["subscription", "Subscription", "credit-card"]
+];
+const NAV_ICON_PATHS = {
+    dashboard: ['M3 3h7v7H3z','M14 3h7v4h-7z','M14 10h7v11h-7z','M3 14h7v7H3z'],
+    package: ['m12 3 9 5-9 5-9-5 9-5Z','m3 8 9 5 9-5','M12 13v8','M7.5 5.5 16.5 10.5'],
+    users: ['M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2','M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M20 21v-2a4 4 0 0 0-3-3.87','M16 3.13a4 4 0 0 1 0 7.75'],
+    settings: ['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z','M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 2.94-.08-.02a1.7 1.7 0 0 0-1.74.68l-.04.07h-3.4l-.04-.07a1.7 1.7 0 0 0-1.74-.68l-.08.02-1.7-2.94.06-.06A1.7 1.7 0 0 0 9.7 15l-.08-.03v-3.4l.08-.03a1.7 1.7 0 0 0-.34-1.88L9.3 9.6 11 6.66l.08.02a1.7 1.7 0 0 0 1.74-.68l.04-.07h3.4l.04.07a1.7 1.7 0 0 0 1.74.68l.08-.02 1.7 2.94-.06.06A1.7 1.7 0 0 0 19.4 11.5l.08.03v3.4z'],
+    palette: ['M12 3a9 9 0 1 0 0 18h1.1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.8H18a3 3 0 0 0 3-3c0-4.9-4-8.9-9-8.9Z','M7.5 10h.01','M10 6.5h.01','M15 7.5h.01','M17 11h.01'],
+    image: ['M4 4h16v16H4z','m4 15 4-4 4 4 3-3 5 5','M9 8h.01'],
+    server: ['M4 4h16v6H4z','M4 14h16v6H4z','M8 7h.01','M8 17h.01','M12 7h4','M12 17h4'],
+    book: ['M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22z','M4 4.5v15A2.5 2.5 0 0 1 6.5 17H20','M8 6h8'],
+    'credit-card': ['M3 5h18v14H3z','M3 10h18','M7 15h4'],
+    sliders: ['M4 21v-7','M4 10V3','M12 21v-9','M12 8V3','M20 21v-5','M20 12V3','M2 14h4','M10 8h4','M18 16h4'],
+    'shopping-bag': ['M5 8h14l1 13H4L5 8Z','M9 8V6a3 3 0 0 1 6 0v2']
+};
+function navIcon(name) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false");
+    (NAV_ICON_PATHS[name] || NAV_ICON_PATHS.dashboard).forEach(d => {
+        const node = document.createElementNS(ns, d.includes(".") && d.startsWith("M") ? "path" : "path");
+        node.setAttribute("d", d); svg.append(node);
+    });
+    return h("span", { class: "nav-icon nav-icon-" + name }, svg);
+}
+const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
-    $("nav").replaceChildren(...nav.map(([k, l]) => h("a", { class: k === cur ? "on" : "", onclick: () => (location.hash = "#/" + k) }, l)), );
+    $("nav").replaceChildren(...nav.map(([k, label, icon]) => h("a", { class: k === cur ? "on" : "", onclick: () => (location.hash = "#/" + k), "aria-label": label }, navIcon(icon), h("span", { class: "nav-label" }, label))));
 }
 async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";
     let name = VIEWS[location.hash.slice(2)] ? location.hash.slice(2) : defaultView;
     if (me?.type === "service" && !["service", "service-settings", "service-emojis", "orders", "bot", "subscription"].includes(name)) name = "service";
+    if (me?.type !== "service" && ["service", "service-settings", "service-emojis", "orders"].includes(name)) name = "dashboard";
     drawNav(name);
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");

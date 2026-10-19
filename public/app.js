@@ -114,21 +114,54 @@ function productModal(p, reload) {
 }
 
 function stockModal(p, reload) {
-    const listBox = h("div", {}), info = h("div", { class: "mut" });
-    const ta = h("textarea", { placeholder: p.type === "script" ? "Tempel isi script (dihitung 1 stok)" : "Satu item per baris atau dipisah spasi" });
+    const listBox = h("div", {}), info = h("div", { class: "mut stock-summary" });
+    const isScript = String(p.type).includes("script");
+    const ta = h("textarea", { class: "stock-textarea", placeholder: isScript ? "Tempel isi script (dihitung sebagai 1 stok)" : "Tempel stok manual di sini — satu item per baris" , rows: "5" });
+    const fileInput = h("input", { type: "file", accept: ".txt,text/plain,.csv" , class: "stock-file-input" });
+    const fileName = h("div", { class: "stock-file-name" }, "Belum ada file dipilih");
+    const fileCount = h("div", { class: "stock-file-count" }, isScript ? "File script akan dihitung sebagai 1 stok." : "File .txt dibaca per baris; baris kosong akan dilewati.");
     const count = h("input", { type: "number", min: "1", value: "1", class: "w80" });
     const enc = encodeURIComponent(p.code);
+    let fileText = null;
+    fileInput.onchange = async () => {
+        const file = fileInput.files?.[0];
+        fileText = null;
+        if (!file) {
+            fileName.textContent = "Belum ada file dipilih";
+            fileCount.textContent = isScript ? "File script akan dihitung sebagai 1 stok." : "File .txt dibaca per baris; baris kosong akan dilewati.";
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            fileInput.value = "";
+            fileName.textContent = "File terlalu besar (maksimal 10 MB)";
+            fileCount.textContent = "Pilih file teks yang lebih kecil.";
+            return;
+        }
+        try {
+            fileText = await file.text();
+            const lines = fileText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+            fileName.textContent = file.name;
+            fileCount.textContent = isScript
+                ? `Siap diimpor · ${fileText.length.toLocaleString("id-ID")} karakter · dihitung 1 stok`
+                : `Siap diimpor · ${lines.length.toLocaleString("id-ID")} item dari baris file`;
+            ta.value = fileText;
+        } catch {
+            fileText = null;
+            fileName.textContent = "File tidak dapat dibaca";
+            fileCount.textContent = "Coba simpan ulang sebagai file teks UTF-8 (.txt).";
+        }
+    };
     async function load() {
         const s = await api("GET", `/api/shop/products/${enc}/stock`);
-        info.textContent = `Total stok: ${fmt(s.total)}` + (s.total > s.items.length ? ` (menampilkan ${s.items.length} terlama)` : "");
+        info.textContent = `Total stok: ${fmt(s.total)}` + (s.total > s.items.length ? ` (menampilkan ${s.items.length} item terlama)` : "");
         const checks = s.items.map((i) => ({ i, c: h("input", { type: "checkbox", class: "ck" }) }));
-        listBox.replaceChildren(h("div", { class: "row gap mt" },
+        listBox.replaceChildren(h("div", { class: "row gap mt stock-toolbar" },
             h("button", { class: "sm", onclick: guard(async () => {
                 const ids = checks.filter((x) => x.c.checked).map((x) => x.i.id);
                 if (!ids.length) throw new Error("Pilih item dulu.");
                 const r = await api("DELETE", `/api/shop/products/${enc}/stock`, { ids }); toast(`${r.removed} stok dihapus.`); load(); reload();
             }) }, "Hapus terpilih"),
-            h("span", { class: "mut" }, "atau hapus"), count, h("span", { class: "mut" }, "terlama"),
+            h("span", { class: "mut" }, "atau hapus"), count, h("span", { class: "mut" }, "item terlama"),
             h("button", { class: "sm", onclick: guard(async () => {
                 const r = await api("DELETE", `/api/shop/products/${enc}/stock`, { count: Number(count.value) }); toast(`${r.removed} stok dihapus.`); load(); reload();
             }) }, "Hapus"),
@@ -136,13 +169,34 @@ function stockModal(p, reload) {
                 if (!confirm(`Hapus SEMUA stok ${p.code}?`)) return;
                 const r = await api("DELETE", `/api/shop/products/${enc}/stock`, { all: true }); toast(`${r.removed} stok dihapus.`); load(); reload();
             }) }, "Hapus semua")),
-            h("div", { class: "tbl mt" }, h("table", {}, h("tbody", {}, ...checks.map((x) => h("tr", {}, h("td", {}, x.c), h("td", { class: "mono" }, x.i.data + (x.i.len > 120 ? "…" : ""))))))));
+            h("div", { class: "tbl mt stock-list" }, h("table", {}, h("tbody", {}, ...checks.map((x) => h("tr", {}, h("td", {}, x.c), h("td", { class: "mono" }, x.i.data + (x.i.len > 120 ? "…" : ""))))))));
     }
-    modal(`Stok ${p.code} — ${p.name}`, info,
-        field("Tambah stok", ta),
-        h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => {
-            const r = await api("POST", `/api/shop/products/${enc}/stock`, { text: ta.value }); ta.value = ""; toast(`${r.added} stok ditambahkan.`); load(); reload();
-        }) }, "Tambah")), listBox);
+    const addFromText = async () => {
+        const useFile = Boolean(fileText !== null);
+        const text = useFile ? fileText : ta.value;
+        if (!String(text || "").trim()) throw new Error("Pilih file atau isi stok terlebih dahulu.");
+        const payload = { text };
+        if (useFile && !isScript) payload.lineMode = true;
+        const r = await api("POST", `/api/shop/products/${enc}/stock`, payload);
+        ta.value = ""; fileInput.value = ""; fileText = null;
+        fileName.textContent = "Belum ada file dipilih";
+        fileCount.textContent = isScript ? "File script akan dihitung sebagai 1 stok." : "File .txt dibaca per baris; baris kosong akan dilewati.";
+        toast(`${r.added} stok berhasil ditambahkan.`); await load(); reload();
+    };
+    const fileCard = h("div", { class: "stock-upload-card" },
+        h("div", { class: "stock-upload-title" }, h("span", { class: "stock-upload-icon" }, "↑"), h("div", {}, h("strong", {}, "Tambah stok dari file"), h("div", { class: "mut" }, isScript ? "Impor satu file sebagai satu stok script." : "Setiap baris non-kosong menjadi satu item stok."))),
+        fileInput,
+        h("label", { class: "stock-file-picker", onclick: () => fileInput.click() }, h("span", {}, "Pilih file .txt")),
+        fileName, fileCount);
+    modal(`Stok ${p.code} — ${p.name}`,
+        h("div", { class: "stock-modal-intro" }, h("span", { class: "stock-modal-icon" }, "▦"), h("div", {}, h("strong", {}, "Kelola inventori"), h("p", { class: "mut" }, "Tambahkan stok manual atau impor banyak item sekaligus. File tidak diunggah ke server terpisah; isinya dibaca di browser lalu dikirim ke API stok."))),
+        info,
+        fileCard,
+        field("Atau tambah manual", ta, isScript ? "Tipe script disimpan sebagai satu stok utuh." : "Mode manual tetap mengikuti pemisahan stok lama; gunakan file untuk membaca satu item per baris."),
+        h("div", { class: "row mt stock-add-actions" }, h("button", { class: "pri", onclick: guard(addFromText) }, "Tambah stok")),
+        h("h3", { class: "stock-existing-heading" }, "Stok tersedia"), listBox);
+    // Hide the standalone input; the visible label opens the same file chooser.
+    fileInput.classList.add("stock-file-hidden");
     load().catch((e) => toast(e.message, false));
 }
 
@@ -495,122 +549,6 @@ async function serviceEmojis() {
     );
 }
 
-// ---------- AutoStore: Custom Emoji ----------
-const STORE_EMOJI_FIELDS = [
-    ["WL", "World Lock"], ["DL", "Diamond Lock"], ["BGL", "Blue Gem Lock"],
-    ["CROWN", "Crown"], ["ARROW", "Arrow"], ["EARTH", "Earth"], ["BOT", "Bot"],
-    ["Dolar", "Dollar"], ["BALANCE", "Balance"], ["Warning", "Warning"], ["Benar", "Berhasil"],
-    ["Salah", "Gagal"], ["Megaphone", "Order Notification"], ["Loading", "Loading"], ["Buy", "Buy"],
-    ["SetGrowID", "Set GrowID"], ["BalanceButton", "Balance Button"], ["Deposit", "Deposit"],
-    ["DepositQRIS", "Deposit QRIS"], ["AdminPanel", "Admin Panel"], ["Queue", "Queue"], ["Waiting", "Waiting"],
-    ["COLOR", "Warna Embed"]
-];
-function storeCustomEmojis() {
-    return customEmojiEditor({
-        title: "Custom Emoji AutoStore",
-        subtitle: "Atur emoji yang digunakan bot AutoStore untuk produk, pembelian, saldo, dan notifikasi.",
-        fields: STORE_EMOJI_FIELDS,
-        endpoint: "/api/emojis",
-        resetEndpoint: "/api/emojis/reset",
-        includeBanner: false
-    });
-}
-
-// ---------- AutoStore: Custom Banner ----------
-function storeCustomBanner() {
-    return customEmojiEditor({
-        title: "Custom Banner",
-        subtitle: "Atur gambar banner yang tampil pada embed toko AutoStore. Gunakan URL gambar HTTPS yang bisa diakses publik.",
-        fields: [["imageUrl", "Banner utama"], ["imageUrl2", "Banner realtime"]],
-        endpoint: "/api/emojis",
-        resetEndpoint: "/api/emojis/reset",
-        includeBanner: true
-    });
-}
-
-async function customEmojiEditor({ title, subtitle, fields, endpoint, resetEndpoint, includeBanner }) {
-    const r = await api("GET", endpoint);
-    const values = { ...(r.emojis || {}) };
-    const defaults = { ...(r.defaults || {}) };
-    const selected = { value: fields[0][0] };
-    const select = h("select", { style: "width:100%;max-width:520px" });
-    fields.forEach(([key, label]) => select.append(h("option", { value: key }, `${label} — ${key}`)));
-    const input = h("input", { autocomplete: "off", spellcheck: "false", style: "width:100%", placeholder: includeBanner ? "https://.../banner.png" : "Emoji Unicode atau <:nama:id>" });
-    const previewBox = h("div", { style: "width:110px;height:110px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none" });
-    const previewName = h("b", {});
-    const previewValue = h("div", { class: "mut", style: "font-family:monospace;font-size:12px;word-break:break-all;margin-top:6px" });
-    const msg = h("div", { class: "mut", style: "margin-top:10px" });
-    const help = h("p", { class: "mut", style: "margin:6px 0 0" }, includeBanner ? "Tempel URL gambar PNG, JPG, GIF, atau WEBP. Link harus dapat dibuka tanpa login." : "Masukkan emoji Unicode atau format custom Discord seperti <:nama:id> / <a:nama:id>.");
-
-    function draw() {
-        const key = selected.value;
-        const meta = fields.find(x => x[0] === key);
-        input.value = values[key] || "";
-        previewBox.replaceChildren();
-        if (includeBanner && input.value) {
-            const img = h("img", { alt: "Preview banner", style: "width:100%;height:100%;object-fit:contain" });
-            img.onerror = () => { previewBox.replaceChildren(h("span", { class: "mut", style: "padding:8px;text-align:center" }, "Gambar tidak dapat dimuat")); };
-            img.src = input.value;
-            previewBox.append(img);
-        } else if (includeBanner) {
-            previewBox.append(h("span", { class: "mut" }, "Preview"));
-        } else {
-            previewBox.append(emojiVisual(input.value, 62));
-        }
-        previewName.textContent = meta ? `${meta[1]} (${key})` : key;
-        previewValue.textContent = input.value || "—";
-    }
-    select.onchange = () => { selected.value = select.value; draw(); };
-    input.oninput = () => { values[selected.value] = input.value; draw(); };
-
-    const save = h("button", { class: "pri", onclick: guard(async () => {
-        const current = { ...values, [selected.value]: input.value.trim() };
-        for (const [key] of fields) {
-            const value = String(current[key] || "").trim();
-            if (!value) throw new Error(`${key} tidak boleh kosong.`);
-            if (includeBanner) {
-                let u; try { u = new URL(value); } catch { throw new Error(`${key} harus berupa URL yang valid.`); }
-                if (u.protocol !== "https:") throw new Error(`${key} harus menggunakan HTTPS.`);
-            } else if (key === "COLOR") {
-                if (!/^#[0-9a-fA-F]{6}$/.test(value)) throw new Error("Warna harus menggunakan format #RRGGBB.");
-            } else if (!/^<a?:[A-Za-z0-9_~]+:\d{17,20}>$/.test(value) && Array.from(value).length > 12) {
-                throw new Error(`Format ${key} terlalu panjang. Gunakan emoji Unicode atau format <:nama:id>.`);
-            }
-        }
-        const out = await api("PUT", endpoint, { emojis: current });
-        Object.assign(values, current);
-        msg.textContent = out.restarted ? "Tersimpan. Bot sedang restart dengan pengaturan baru." : "Tersimpan. Tekan Restart di menu Bot & Server agar perubahan diterapkan.";
-        toast(includeBanner ? "Custom banner tersimpan." : "Custom emoji tersimpan.");
-        draw();
-    }) }, includeBanner ? "💾 Simpan Banner" : "💾 Simpan Emoji");
-    const reset = h("button", { onclick: guard(async () => {
-        if (!confirm(includeBanner ? "Kembalikan URL banner ke default? Emoji lain tidak akan diubah." : "Kembalikan semua emoji ke default?")) return;
-        let out;
-        if (includeBanner) {
-            const restored = { ...values };
-            for (const [key] of fields) restored[key] = defaults[key] || "";
-            out = await api("PUT", endpoint, { emojis: restored });
-            Object.assign(values, restored);
-        } else {
-            out = await api("POST", resetEndpoint);
-            Object.assign(values, out.emojis || {});
-        }
-        msg.textContent = out.restarted ? "Default dipulihkan. Bot sedang restart." : "Default dipulihkan.";
-        toast("Pengaturan default dipulihkan.");
-        draw();
-    }) }, "Reset Default");
-    draw();
-    return h("div", {},
-        head(title, subtitle),
-        card(h("div", { style: "display:flex;gap:24px;align-items:center;flex-wrap:wrap" },
-            h("div", { style: "flex:1;min-width:260px" }, h("h2", { style: "margin:0" }, includeBanner ? "Gambar yang sedang digunakan" : "Emoji yang sedang digunakan"), help,
-                h("div", { style: "margin-top:18px" }, select), h("div", { style: "margin-top:12px" }, input)),
-            h("div", { style: "width:150px;text-align:center" }, previewBox, h("div", { style: "margin-top:10px" }, previewName), previewValue)),
-            h("div", { class: "row gap", style: "margin-top:18px" }, save, reset), msg),
-        includeBanner ? h("p", { class: "mut" }, "Catatan: reset banner juga mengembalikan konfigurasi emoji ke default karena keduanya disimpan bersama dalam konfigurasi AutoStore.") : null
-    );
-}
-
 // ---------- AutoStore Service: Orders ----------
 const ORDER_STATUS = {
     all: ["Semua", ""], waiting: ["Menunggu", "waiting"], in_progress: ["Diproses", "in_progress"], done: ["Selesai", "done"]
@@ -684,9 +622,9 @@ async function subscription() {
 }
 
 // ---------- router ----------
-const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["emojis", "🎨 Custom Emoji"], ["banner", "🖼️ Custom Banner"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
+const STORE_NAV = [["dashboard", "Dashboard"], ["products", "Products"], ["users", "Users"], ["settings", "Settings"], ["bot", "Bot & Server"], ["tutorial", "Tutorial Setup"], ["subscription", "Subscription"]];
 const SERVICE_NAV = [["service", "⌂ Dashboard"], ["service-settings", "₩ Harga & Status"], ["service-emojis", "🎨 Custom Emoji"], ["orders", "🛒 Orders"], ["bot", "⚙ Bot & Server"], ["subscription", "◇ Subscription"]];
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
+const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, emojis: serviceEmojis, orders: serviceOrders };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
@@ -696,7 +634,6 @@ async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";
     let name = VIEWS[location.hash.slice(2)] ? location.hash.slice(2) : defaultView;
     if (me?.type === "service" && !["service", "service-settings", "service-emojis", "orders", "bot", "subscription"].includes(name)) name = "service";
-    if (me?.type !== "service" && ["service", "service-settings", "service-emojis", "orders"].includes(name)) name = "dashboard";
     drawNav(name);
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");

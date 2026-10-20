@@ -549,3 +549,28 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 .side nav a.on .nav-icon{color:#b5a2ff;opacity:1;filter:drop-shadow(0 0 5px rgba(147,133,255,.22))}
 .side nav a.on{gap:12px}
 @media(max-width:760px){.side nav a{gap:8px}.side nav a .nav-icon{width:18px;height:18px;flex-basis:18px}.side nav a .nav-icon svg{width:17px;height:17px}}
+
+/* ===== Kolom key + tombol mata ===== */
+#login.login .key-wrap{position:relative}
+#login.login .key-wrap #key{padding-right:50px}
+#login.login .key-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:40px;height:40px;padding:0;display:grid;place-items:center;border:0;border-radius:11px;background:transparent;color:#8794ff;cursor:pointer;transition:background .18s,color .18s}
+#login.login .key-eye:hover{background:rgba(135,148,255,.12);color:#b5a2ff}
+#login.login .key-eye svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* ===== Pesan error login jadi kotak jelas ===== */
+#login.login #loginMsg:empty{display:none!important}
+#login.login #loginMsg.err{display:flex!important;align-items:flex-start;gap:9px;padding:11px 13px;border:1px solid rgba(255,120,120,.28);border-radius:12px;background:rgba(255,90,90,.08);color:#ffb4b4}
+#login.login #loginMsg.err:before{content:"!";flex:none;width:18px;height:18px;margin-top:1px;display:grid;place-items:center;border-radius:50%;background:rgba(255,120,120,.9);color:#2a0a0a;font-size:12px;font-weight:900;line-height:1}
+
+/* ===== Logo asli di sidebar ===== */
+.brand:before{background:url(/logo.png) center/cover no-repeat,linear-gradient(135deg,#6f7cff,#9b73ff)!important}
+.brand:after{display:none!important}
+
+/* ===== Animasi masuk halus ===== */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#login.login .login-logo{animation:fadeUp .6s ease both,loginLogoFloat 6s ease-in-out .6s infinite}
+#login.login>h1{animation:fadeUp .6s .08s ease both}
+#login.login>p.mut{animation:fadeUp .6s .14s ease both}
+#login.login .card{animation:fadeUp .6s .2s ease both}
+#view>*{animation:fadeUp .38s ease both}
+@media(prefers-reduced-motion:reduce){#login.login .login-logo,#login.login>h1,#login.login>p.mut,#login.login .card,#view>*{animation:none!important}}

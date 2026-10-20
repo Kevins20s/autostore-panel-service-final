@@ -1,19 +1,19 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AutoStore Panel</title><link rel="stylesheet" href="/style.css"></head>
+<title>GevraStore Panel</title><link rel="icon" type="image/png" href="/logo.png"><link rel="apple-touch-icon" href="/logo.png"><link rel="stylesheet" href="/style.css"></head>
 <body>
 <section id="login" class="login hide">
   <div class="login-logo"><img src="/logo.png" alt="Logo AutoStore" width="132" height="132"></div>
-  <h1>AutoStore Panel</h1><p class="mut">Masuk dengan key yang kamu terima dari penjual.</p>
+  <h1>GevraStore Panel</h1><p class="mut">Masuk dengan key yang kamu terima dari penjual.</p>
   <div class="card">
-    <input id="key" placeholder="AS-XXXX-XXXX-XXXX-XXXX atau SV-XXXX-XXXX-XXXX-XXXX" autocomplete="off">
+    <div class="key-wrap"><input id="key" type="password" placeholder="AS-XXXX-XXXX-XXXX-XXXX atau SV-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"></div>
     <div class="row" style="margin-top:12px"><button class="pri" id="btnLogin">Masuk</button></div>
     <div id="loginMsg" class="msg"></div>
   </div>
 </section>
 <div id="app" class="app hide">
   <aside class="side">
-    <div class="brand">AutoStore</div>
+    <div class="brand">GevraStore</div>
     <nav id="nav"></nav>
     <div class="sidefoot"><span id="botState" class="badge"></span><button id="btnOut">Keluar</button></div>
   </aside>
@@ -21,4 +21,5 @@
 </div>
 <div id="toast"></div>
 <script src="/app.js"></script>
+<script src="/login-extras.js"></script>
 </body></html>

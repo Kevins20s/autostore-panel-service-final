@@ -536,3 +536,5 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 /* Lingkaran dekorasi kembali jadi cincin tipis (sebelumnya bocor jadi lingkaran ungu penuh) + hilangkan celah gelap di atas */
 #login.login{margin:0 auto}
 #login.login:before,#login.login:after{background:none}
+/* Hapus lingkaran besar dekorasi di kanan atas */
+#login.login:before{display:none}

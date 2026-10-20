@@ -526,3 +526,13 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 #login.login .card:after{content:"🔒  Akses aman • Gunakan key resmi dari penjual";display:block;margin-top:20px;padding-top:16px;border-top:1px solid rgba(151,166,205,.12);color:#7e8da9;text-align:center;font-size:11px;line-height:1.6}
 @media(max-width:480px){#login.login{padding:22px 15px}#login.login .card{border-radius:20px}#login.login h1{letter-spacing:-1px}}
 @media(prefers-reduced-motion:reduce){#login.login *{transition:none!important}}
+
+/* ===== Logo lingkaran besar di halaman masuk ===== */
+#login.login .login-logo{position:relative;width:132px;height:132px;margin:0 0 24px;padding:5px;border-radius:50%;background:linear-gradient(135deg,#7868ff,#4e91ff);box-shadow:0 0 0 10px rgba(120,104,255,.10),0 0 0 22px rgba(78,145,255,.05),0 18px 60px rgba(90,104,255,.38);animation:loginLogoFloat 6s ease-in-out infinite}
+#login.login .login-logo img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover;background:#0c1221}
+@keyframes loginLogoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media(max-width:480px){#login.login .login-logo{width:108px;height:108px;margin-bottom:20px}}
+@media(prefers-reduced-motion:reduce){#login.login .login-logo{animation:none}}
+/* Lingkaran dekorasi kembali jadi cincin tipis (sebelumnya bocor jadi lingkaran ungu penuh) + hilangkan celah gelap di atas */
+#login.login{margin:0 auto}
+#login.login:before,#login.login:after{background:none}

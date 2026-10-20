@@ -538,3 +538,14 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 #login.login:before,#login.login:after{background:none}
 /* Hapus lingkaran besar dekorasi di kanan atas */
 #login.login:before{display:none}
+
+/* Consistent premium outline icons across every sidebar item */
+.side nav a{display:flex;align-items:center;gap:12px;padding-left:13px;padding-right:13px}
+.side nav a .nav-icon{width:21px;height:21px;flex:0 0 21px;display:inline-flex;align-items:center;justify-content:center;color:#8794ff;opacity:.88;transition:color .18s ease,transform .18s ease,opacity .18s ease}
+.side nav a .nav-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.side nav a .nav-icon-dashboard svg path:nth-child(1),.side nav a .nav-icon-dashboard svg path:nth-child(2),.side nav a .nav-icon-dashboard svg path:nth-child(3),.side nav a .nav-icon-dashboard svg path:nth-child(4){fill:rgba(135,148,255,.045)}
+.side nav a .nav-label{min-width:0;flex:1}
+.side nav a:hover .nav-icon{color:#b5a2ff;opacity:1;transform:translateY(-1px)}
+.side nav a.on .nav-icon{color:#b5a2ff;opacity:1;filter:drop-shadow(0 0 5px rgba(147,133,255,.22))}
+.side nav a.on{gap:12px}
+@media(max-width:760px){.side nav a{gap:8px}.side nav a .nav-icon{width:18px;height:18px;flex-basis:18px}.side nav a .nav-icon svg{width:17px;height:17px}}

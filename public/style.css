@@ -602,3 +602,37 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 .empty-users{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238794ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.5'/%3E%3Cpath d='M2.5 20a6.5 6.5 0 0 1 13 0'/%3E%3Cpath d='M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.2A6.5 6.5 0 0 1 21.5 20'/%3E%3C/svg%3E")}
 .empty-clipboard{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238794ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='4' width='14' height='17' rx='2.5'/%3E%3Cpath d='M9 4V3h6v1M9 11h6M9 15h4'/%3E%3C/svg%3E")}
 td .empty{border:0;background:none;padding:26px 10px}
+
+/* ===== Bar status bot di dashboard ===== */
+.statusbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:2px 0 16px}
+
+/* ===== Spanduk peringatan langganan ===== */
+.notice{margin:0 0 16px;padding:13px 16px;border-radius:14px;font-size:14px;line-height:1.5;border:1px solid}
+.notice a{color:inherit;font-weight:700;text-decoration:underline}
+.notice.warn{background:var(--warnSoft);border-color:rgba(245,195,91,.35);color:var(--warn)}
+.notice.bad{background:var(--badSoft);border-color:rgba(255,100,124,.35);color:var(--bad)}
+
+/* ===== Tombol salin ===== */
+.copy-btn{margin-left:6px;padding:2px 9px;font-size:11px;font-weight:600;border-radius:8px;border:1px solid var(--line2);background:rgba(135,148,255,.08);color:#a9b4ff;cursor:pointer;vertical-align:middle;transition:background .15s,color .15s}
+.copy-btn:hover{background:rgba(135,148,255,.2);color:#fff}
+
+/* ===== Kerangka loading (skeleton) ===== */
+.skel{border-radius:12px;background:linear-gradient(100deg,rgba(255,255,255,.04) 30%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.04) 70%);background-size:300% 100%;animation:skel 1.3s ease-in-out infinite}
+@keyframes skel{from{background-position:100% 0}to{background-position:0 0}}
+.skel-wrap{display:flex;flex-direction:column;gap:14px}
+.skel-title{height:30px;width:min(260px,60%)}
+.skel-line{height:14px;width:min(420px,80%)}
+.skel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.skel-card{height:92px}
+.skel-block{height:190px}
+@media(prefers-reduced-motion:reduce){.skel{animation:none}}
+
+/* ===== Tombol mode terang/gelap ===== */
+.theme-toggle{position:fixed;top:14px;right:14px;z-index:60;width:40px;height:40px;padding:0;display:grid;place-items:center;border-radius:12px;border:1px solid var(--line2);background:rgba(20,26,40,.82);backdrop-filter:blur(8px);color:#b5a2ff;cursor:pointer;transition:transform .15s,background .15s}
+.theme-toggle:hover{transform:translateY(-1px);background:rgba(30,38,58,.95)}
+.theme-toggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:760px){.theme-toggle{top:auto;bottom:16px;right:14px}}
+
+/* ===== Mode terang (membalik kecerahan seluruh halaman; gambar & ikon logo dikembalikan) ===== */
+html[data-theme="light"]{filter:invert(1) hue-rotate(180deg);background:#f6f7fb}
+html[data-theme="light"] img,html[data-theme="light"] .brand:before,html[data-theme="light"] .empty-ico,html[data-theme="light"] .login-logo{filter:invert(1) hue-rotate(180deg)}

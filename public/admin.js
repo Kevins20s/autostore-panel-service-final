@@ -7,6 +7,17 @@ async function api(method, url, body) {
 }
 function msg(id, t, ok) { const e = $(id); e.textContent = t; e.className = "msg " + (ok ? "ok" : "err"); e.style.display = "block"; }
 function td(text, cls) { const e = document.createElement("td"); e.textContent = text; if (cls) e.className = cls; return e; }
+function pillTd(text, state) { const e = document.createElement("td"); const sp = document.createElement("span"); sp.className = "adm-pill adm-" + state; sp.textContent = text; e.append(sp); return e; }
+const BOT_TXT = { running: "Online", stopped: "Offline", crashed: "Error", starting: "Memulai", restarting: "Restart" };
+const BOT_STATE = { running: "ok", stopped: "off", crashed: "bad", starting: "warn", restarting: "warn" };
+function stats(list) {
+    const now = Date.now(); let active = 0, soon = 0, dead = 0;
+    for (const l of list) {
+        const left = Math.ceil((l.expiresAt - now) / 86400000);
+        if (l.revoked || left <= 0) dead++; else { active++; if (left <= 7) soon++; }
+    }
+    $("stTotal").textContent = list.length; $("stActive").textContent = active; $("stSoon").textContent = soon; $("stDead").textContent = dead;
+}
 function btn(text, fn, cls) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = async () => { try { await fn(); } catch (e) { alert(e.message); } load(); }; return b; }
 
 async function load() {
@@ -14,11 +25,15 @@ async function load() {
     try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("login").classList.remove("hide"); return; }
     $("login").classList.add("hide"); $("dash").classList.remove("hide");
     const body = $("rows"); body.replaceChildren();
-    for (const l of data.licenses) {
+    stats(data.licenses);
+    const qv = ($("q") ? $("q").value : "").trim().toLowerCase();
+    const shown = data.licenses.filter((l) => !qv || (l.buyer + " " + l.keyPrefix).toLowerCase().includes(qv));
+    $("emptyRows").classList.toggle("hide", shown.length > 0);
+    for (const l of shown) {
         const tr = document.createElement("tr");
         const left = Math.ceil((l.expiresAt - Date.now()) / 86400000);
         tr.append(td(l.buyer + (l.configured ? "" : " (belum setup)")), td(l.type === "service" ? "AutoStore Service" : "AutoStore"), td(l.keyPrefix + "…"),
-            td(l.revoked ? "dicabut" : left > 0 ? `${left} hari lagi` : "habis", l.revoked || left <= 0 ? "bad" : ""), td(l.bot, l.bot));
+            l.revoked ? pillTd("Dicabut", "bad") : left <= 0 ? pillTd("Habis", "bad") : pillTd(`${left} hari lagi`, left <= 7 ? "warn" : "ok"), pillTd(BOT_TXT[l.bot] || l.bot, BOT_STATE[l.bot] || "off"));
         const act = document.createElement("td"); act.className = "row";
         act.append(
             btn("+30 hari", () => api("POST", `/api/admin/licenses/${l.id}/extend`, { days: 30 })),
@@ -30,11 +45,19 @@ async function load() {
 $("btnLogin").onclick = async () => { try { await api("POST", "/api/admin/login", { password: $("pw").value }); load(); } catch (e) { msg("loginMsg", e.message); } };
 $("pw").onkeydown = (e) => { if (e.key === "Enter") $("btnLogin").click(); };
 $("btnNew").onclick = async () => {
+    const b = $("btnNew"), old = b.textContent; b.disabled = true; b.textContent = "Memproses...";
     try {
         const r = await api("POST", "/api/admin/licenses", { buyer: $("buyer").value, type: $("licenseType").value, days: Number($("days").value) });
         $("keyText").textContent = r.key; $("newKey").classList.remove("hide"); $("newMsg").style.display = "none"; $("buyer").value = ""; load();
     } catch (e) { msg("newMsg", e.message); }
+    b.disabled = false; b.textContent = old;
 };
+$("btnCopyKey").onclick = async () => {
+    const b = $("btnCopyKey");
+    try { await navigator.clipboard.writeText($("keyText").textContent); b.textContent = "Tersalin ✓"; } catch { b.textContent = "Gagal, salin manual"; }
+    setTimeout(() => { b.textContent = "Salin key"; }, 1600);
+};
+$("q").oninput = () => load();
 $("btnSend").onclick = async () => { try { await api("POST", "/api/admin/backup/send"); msg("bkMsg", "Backup terkirim ke Discord.", true); } catch (e) { msg("bkMsg", e.message); } };
 $("btnRestore").onclick = () => $("fileRestore").click();
 $("fileRestore").onchange = async (ev) => {

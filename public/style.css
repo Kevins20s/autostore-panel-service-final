@@ -574,3 +574,31 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 #login.login .card{animation:fadeUp .6s .2s ease both}
 #view>*{animation:fadeUp .38s ease both}
 @media(prefers-reduced-motion:reduce){#login.login .login-logo,#login.login>h1,#login.login>p.mut,#login.login .card,#view>*{animation:none!important}}
+
+/* ===== Tombol Masuk saat memproses ===== */
+#btnLogin.is-loading{opacity:.75;cursor:progress}
+#btnLogin.is-loading:after{content:"";display:inline-block;width:13px;height:13px;margin-left:9px;vertical-align:-2px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== Bantuan di halaman masuk ===== */
+#login.login .login-help{margin:16px 0 0;text-align:center;font-size:13px;color:var(--mut)}
+#login.login .login-help a{color:#a99bff;text-decoration:none;font-weight:600}
+#login.login .login-help a:hover{text-decoration:underline}
+
+/* ===== Notifikasi (toast) dengan ikon ===== */
+#toast .t{display:flex;align-items:flex-start;gap:10px;line-height:1.45;animation:toastIn .28s ease both}
+#toast .t:before{flex:none;width:18px;height:18px;display:grid;place-items:center;border-radius:50%;font-size:11px;font-weight:900;line-height:1}
+#toast .t.ok:before{content:"\2713";background:rgba(53,211,154,.2);color:var(--ok)}
+#toast .t.err:before{content:"!";background:rgba(255,100,124,.22);color:var(--bad)}
+@keyframes toastIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){#toast .t{animation:none}}
+
+/* ===== Tampilan kosong yang ramah ===== */
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:34px 18px;border:1px dashed rgba(135,148,255,.25);border-radius:16px;background:rgba(135,148,255,.04)}
+.empty strong{font-size:15px}
+.empty p{margin:0;max-width:340px}
+.empty-ico{width:52px;height:52px;margin-bottom:6px;border-radius:16px;background-color:rgba(135,148,255,.12);background-repeat:no-repeat;background-position:center;background-size:26px}
+.empty-box{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238794ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8 12 3 3 8v8l9 5 9-5V8Z'/%3E%3Cpath d='M3 8l9 5 9-5M12 13v8'/%3E%3C/svg%3E")}
+.empty-users{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238794ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.5'/%3E%3Cpath d='M2.5 20a6.5 6.5 0 0 1 13 0'/%3E%3Cpath d='M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.2A6.5 6.5 0 0 1 21.5 20'/%3E%3C/svg%3E")}
+.empty-clipboard{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238794ff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='4' width='14' height='17' rx='2.5'/%3E%3Cpath d='M9 4V3h6v1M9 11h6M9 15h4'/%3E%3C/svg%3E")}
+td .empty{border:0;background:none;padding:26px 10px}

@@ -3,7 +3,7 @@
 
 /* >>> ISI DI SINI: link WhatsApp / Discord penjual. Contoh: "https://wa.me/628123456789"
    Kalau dikosongkan, tulisan "Hubungi penjual." tampil tanpa tautan. */
-var CONTACT_URL = "";
+var CONTACT_URL = "https://discord.gg/ffU9Q6bagA";
 
 (function () {
   var input = document.getElementById("key");

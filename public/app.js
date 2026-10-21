@@ -23,6 +23,7 @@ function toast(text, ok = true) {
     $("toast").append(t); setTimeout(() => t.remove(), 4000);
 }
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, false); } };
+const empty = (kind, title, sub) => h("div", { class: "empty" }, h("div", { class: "empty-ico empty-" + kind }), h("strong", {}, title), h("p", { class: "mut" }, sub));
 
 function modal(title, ...body) {
     const ov = h("div", { class: "overlay" });
@@ -78,7 +79,7 @@ async function products() {
         }
         const table = list.length
             ? h("div", { class: "tbl" }, h("table", {}, h("thead", {}, h("tr", {}, ...["Kode", "Detail produk", "Harga", "Stok / Terjual", "Auto role", "Status", "Aksi"].map((x) => h("th", {}, x)))), body))
-            : h("p", { class: "mut" }, 'Belum ada produk. Klik "Tambah Produk Baru" untuk menambahkan.');
+            : empty("box", "Belum ada produk", 'Klik "Tambah Produk Baru" untuk menambahkan produk pertamamu.');
         wrap.replaceChildren(
             head("Manajemen Produk", "Kelola katalog produk, harga (WL/DL/Rp), stok, dan auto-role Discord.",
                 h("button", { class: "pri", onclick: () => productModal(null, load) }, "+ Tambah Produk Baru")),
@@ -241,7 +242,7 @@ async function users() {
             h("td", {}, h("div", { class: "row gap" },
                 h("button", { class: "sm", onclick: () => balanceModal(u, "add", load) }, "Tambah"),
                 h("button", { class: "sm", onclick: () => balanceModal(u, "remove", load) }, "Kurangi"))))));
-        box.replaceChildren(r.users.length ? h("div", { class: "tbl" }, h("table", {}, h("thead", {}, h("tr", {}, ...["ID Discord", "GrowID", "Saldo", "Total deposit", "Aksi"].map((x) => h("th", {}, x)))), body)) : h("p", { class: "mut" }, "Tidak ada user."),
+        box.replaceChildren(r.users.length ? h("div", { class: "tbl" }, h("table", {}, h("thead", {}, h("tr", {}, ...["ID Discord", "GrowID", "Saldo", "Total deposit", "Aksi"].map((x) => h("th", {}, x)))), body)) : empty("users", "Tidak ada pengguna", "Coba kata kunci lain, atau pengguna belum terdaftar di bot toko."),
             h("div", { class: "row sp mt" }, h("span", { class: "mut" }, `${fmt(r.total)} user`),
                 h("div", { class: "row gap" }, h("button", { class: "sm", disabled: skip === 0, onclick: () => { skip = Math.max(0, skip - 50); load(); } }, "‹"), h("button", { class: "sm", disabled: skip + 50 >= r.total, onclick: () => { skip += 50; load(); } }, "›"))));
     }
@@ -697,7 +698,7 @@ async function serviceOrders() {
             h("td", {}, o.createdAt ? new Date(o.createdAt).toLocaleString("id-ID") : "-")
         ));
         const table = card(h("div", { class: "row sp" }, h("div", {}, h("h2", {}, "Order Terbaru"), h("p", { class: "mut" }, "Data langsung dari collection jasaorders pada MongoDB Service.")), filter),
-            h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Order"), h("th", {}, "Jasa"), h("th", {}, "Harga"), h("th", {}, "Status"), h("th", {}, "Staff"), h("th", {}, "Dibuat"))), h("tbody", {}, ...(rows.length ? rows : [h("tr", {}, h("td", { colspan:"6", class:"mut" }, "Belum ada order."))])))));
+            h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Order"), h("th", {}, "Jasa"), h("th", {}, "Harga"), h("th", {}, "Status"), h("th", {}, "Staff"), h("th", {}, "Dibuat"))), h("tbody", {}, ...(rows.length ? rows : [h("tr", {}, h("td", { colspan: "6" }, empty("clipboard", "Belum ada order", "Order baru dari Discord akan tampil di sini.")))])))));
         body.replaceChildren(cards, table);
     };
     await render();

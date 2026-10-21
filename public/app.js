@@ -24,6 +24,20 @@ function toast(text, ok = true) {
 }
 const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, false); } };
 const empty = (kind, title, sub) => h("div", { class: "empty" }, h("div", { class: "empty-ico empty-" + kind }), h("strong", {}, title), h("p", { class: "mut" }, sub));
+const copyText = async (t) => { try { await navigator.clipboard.writeText(String(t)); toast("Tersalin."); } catch { toast("Gagal menyalin. Salin manual ya.", false); } };
+const copyBtn = (t, label = "Salin") => h("button", { type: "button", class: "copy-btn", title: "Salin ke clipboard", onclick: (e) => { e.stopPropagation(); copyText(t); } }, label);
+const BOT_LABEL = { running: "Online", stopped: "Offline", crashed: "Error", starting: "Memulai", restarting: "Restart" };
+const botPill = () => h("span", { class: "badge " + (me.bot || "stopped") }, "Bot " + (BOT_LABEL[me.bot] || me.bot || "Offline"));
+const skeleton = () => h("div", { class: "skel-wrap", "aria-busy": "true", "aria-label": "Memuat" }, h("div", { class: "skel skel-title" }), h("div", { class: "skel skel-line" }),
+    h("div", { class: "skel-grid" }, h("div", { class: "skel skel-card" }), h("div", { class: "skel skel-card" }), h("div", { class: "skel skel-card" })), h("div", { class: "skel skel-block" }));
+function renewBanner() {
+    if (!me) return null;
+    const contact = (typeof CONTACT_URL === "string" && /^https:\/\//i.test(CONTACT_URL)) ? h("a", { href: CONTACT_URL, target: "_blank", rel: "noopener noreferrer" }, "Hubungi penjual") : "Hubungi penjual";
+    if (me.revoked) return h("div", { class: "notice bad", role: "alert" }, h("b", {}, "Key dinonaktifkan."), " ", contact, " untuk bantuan.");
+    if (!me.valid || me.daysLeft <= 0) return h("div", { class: "notice bad", role: "alert" }, h("b", {}, "Langganan sudah berakhir."), " ", contact, " untuk memperpanjang.");
+    if (me.daysLeft <= 7) return h("div", { class: "notice warn", role: "status" }, h("b", {}, `Langganan berakhir dalam ${me.daysLeft} hari.`), " ", contact, " untuk memperpanjang sebelum bot berhenti.");
+    return null;
+}
 
 function modal(title, ...body) {
     const ov = h("div", { class: "overlay" });
@@ -46,6 +60,7 @@ async function dashboard() {
     const s = await api("GET", "/api/shop/summary");
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
     return h("div", {}, head("Dashboard", "Ringkasan toko kamu"),
+        h("div", { class: "statusbar" }, botPill(), h("span", { class: "mut" }, me.valid ? `Sisa langganan ${me.daysLeft} hari` : "Key tidak aktif")),
         h("div", { class: "grid" }, stat("Produk", fmt(s.products)), stat("Stok tersedia", fmt(s.stock)), stat("Terjual", fmt(s.sold)),
             stat("User", fmt(s.users)), stat("Total saldo user (WL)", fmt(s.balance)), stat("Mode toko", s.maintenance ? "Maintenance" : "Normal")),
         card(h("h2", {}, "Langganan"), h("p", { class: "mut" }, me.valid ? `Key aktif, sisa ${me.daysLeft} hari. Bot: ${me.bot}.` : "Key tidak aktif.")));
@@ -61,7 +76,7 @@ async function products() {
         for (const p of list) {
             const ready = p.price && p.stock > 0;
             body.append(h("tr", {},
-                h("td", {}, h("b", {}, p.code)),
+                h("td", {}, h("b", {}, p.code), " ", copyBtn(p.code)),
                 h("td", {}, h("div", {}, p.name), h("div", { class: "mut" }, `${p.kategori} · tipe ${p.type}`)),
                 h("td", {}, p.price ? h("div", {}, fmt(p.price) + " WL", p.discount ? h("span", { class: "mut" }, ` (-${p.discount}%)`) : null,
                     h("div", { class: "mut" }, `${fmt(p.price / 100)} DL · ${rpText(p.price, manualRate)}`)) : h("span", { class: "pill no" }, "Belum ada harga")),
@@ -160,10 +175,12 @@ function stockModal(p, reload) {
             h("button", { class: "sm", onclick: guard(async () => {
                 const ids = checks.filter((x) => x.c.checked).map((x) => x.i.id);
                 if (!ids.length) throw new Error("Pilih item dulu.");
+                if (!confirm(`Hapus ${ids.length} stok terpilih? Tindakan ini tidak bisa dibatalkan.`)) return;
                 const r = await api("DELETE", `/api/shop/products/${enc}/stock`, { ids }); toast(`${r.removed} stok dihapus.`); load(); reload();
             }) }, "Hapus terpilih"),
             h("span", { class: "mut" }, "atau hapus"), count, h("span", { class: "mut" }, "item terlama"),
             h("button", { class: "sm", onclick: guard(async () => {
+                if (!confirm(`Hapus ${Number(count.value) || 0} stok terlama? Tindakan ini tidak bisa dibatalkan.`)) return;
                 const r = await api("DELETE", `/api/shop/products/${enc}/stock`, { count: Number(count.value) }); toast(`${r.removed} stok dihapus.`); load(); reload();
             }) }, "Hapus"),
             h("button", { class: "sm bad", onclick: guard(async () => {
@@ -238,7 +255,7 @@ async function users() {
     const box = h("div", {});
     async function load() {
         const r = await api("GET", `/api/shop/users?q=${encodeURIComponent(q)}&skip=${skip}`);
-        const body = h("tbody", {}, ...r.users.map((u) => h("tr", {}, h("td", { class: "mono" }, u.discordId), h("td", {}, u.growId), h("td", {}, fmt(u.balance) + " WL"), h("td", {}, fmt(u.deposit) + " WL"),
+        const body = h("tbody", {}, ...r.users.map((u) => h("tr", {}, h("td", { class: "mono" }, u.discordId, " ", copyBtn(u.discordId)), h("td", {}, u.growId), h("td", {}, fmt(u.balance) + " WL"), h("td", {}, fmt(u.deposit) + " WL"),
             h("td", {}, h("div", { class: "row gap" },
                 h("button", { class: "sm", onclick: () => balanceModal(u, "add", load) }, "Tambah"),
                 h("button", { class: "sm", onclick: () => balanceModal(u, "remove", load) }, "Kurangi"))))));
@@ -300,7 +317,7 @@ async function bot() {
     return h("div", {}, head(isService ? "Service Bot & Server" : "Bot & Server", isService ? "Hubungkan bot AutoStore Service dan database kamu." : "Hubungkan bot Discord dan database kamu."),
         card(h("div", { class: "row sp" }, h("div", { class: "row" }, h("b", {}, "Status bot"), state),
             h("div", { class: "row gap" }, h("button", { class: "pri", onclick: act("start") }, "Start"), h("button", { onclick: act("restart") }, "Restart"), h("button", { class: "bad", onclick: act("stop") }, "Stop"))),
-            invite ? h("p", { class: "mut" }, "Belum masuk ke server? ", h("a", { href: invite, target: "_blank", rel: "noopener" }, "Undang bot ke server")) : null),
+            invite ? h("p", { class: "mut" }, "Belum masuk ke server? ", h("a", { href: invite, target: "_blank", rel: "noopener" }, "Undang bot ke server"), " ", copyBtn(invite, "Salin link")) : null),
         card(h("h2", {}, "Pengaturan bot"), h("p", { class: "mut" }, "Kolom rahasia yang sudah tersimpan tidak ditampilkan. Kosongkan jika tidak ingin mengubahnya."),
             field("Bot Token", mk("botToken", "password"), "Developer Portal → Bot → Reset Token. Aktifkan semua Privileged Gateway Intents."),
             field("Client ID (Application ID)", mk("clientId")), field("MongoDB URL", mk("mongoUrl", "password"), "MongoDB Atlas → Connect → Drivers. Izinkan IP server di Network Access."),
@@ -788,8 +805,8 @@ async function render() {
     drawNav(name);
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");
-    view.replaceChildren(h("p", { class: "mut" }, "Memuat…"));
-    try { view.replaceChildren(await VIEWS[name]()); }
+    view.replaceChildren(skeleton());
+    try { view.replaceChildren(await VIEWS[name]()); const nb = renewBanner(); if (nb) view.prepend(nb); }
     catch (e) {
         if (e.status === 401) return showLogin();
         view.replaceChildren(card(h("h2", {}, "Tidak bisa membuka halaman ini"), h("p", {}, e.message),

@@ -636,3 +636,49 @@ td .empty{border:0;background:none;padding:26px 10px}
 /* ===== Mode terang (membalik kecerahan seluruh halaman; gambar & ikon logo dikembalikan) ===== */
 html[data-theme="light"]{filter:invert(1) hue-rotate(180deg);background:#f6f7fb}
 html[data-theme="light"] img,html[data-theme="light"] .brand:before,html[data-theme="light"] .empty-ico,html[data-theme="light"] .login-logo{filter:invert(1) hue-rotate(180deg)}
+
+/* ===================== HALAMAN ADMIN ===================== */
+body.adm{min-height:100vh}
+.adm-main{width:min(1040px,calc(100% - 32px));margin:0 auto;padding:34px 0 60px}
+.adm-head{display:flex;align-items:center;gap:16px;margin:0 0 24px;animation:fadeUp .5s ease both}
+.adm-head h1{margin:0;font-size:26px;letter-spacing:-.03em;background:linear-gradient(90deg,#fff,#a9b4ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.adm-head p{margin:2px 0 0}
+.adm-logo{flex:none;width:52px;height:52px;padding:3px;border-radius:50%;background:linear-gradient(135deg,#7868ff,#4e91ff);box-shadow:0 8px 28px rgba(90,104,255,.35)}
+.adm-logo img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover;background:#0c1221}
+.adm-login{max-width:420px;margin:8vh auto 0;animation:fadeUp .5s ease both}
+.adm-pw input{width:100%}
+.adm-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:16px;animation:fadeUp .5s .05s ease both}
+.adm-stat{padding:16px 18px;border-radius:16px;border:1px solid var(--line2);background:linear-gradient(180deg,rgba(21,28,41,.94),rgba(15,21,31,.94));display:flex;flex-direction:column;gap:6px}
+.adm-stat b{font-size:28px;letter-spacing:-.03em}
+.adm-stat.ok b{color:var(--ok)}.adm-stat.warn b{color:var(--warn)}.adm-stat.bad b{color:var(--bad)}
+.adm-new>*{min-width:0}
+.adm-new select,.adm-new input{height:44px}
+.adm-keyrow{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.adm-keyrow .key{flex:1;min-width:220px;display:flex;align-items:center;padding:12px 14px;border-radius:12px;border:1px dashed rgba(135,148,255,.45);background:rgba(135,148,255,.07);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;word-break:break-all}
+.adm-search{margin:4px 0 14px}
+.adm-search input{width:100%}
+.adm-table{overflow-x:auto;border:1px solid var(--line);border-radius:14px}
+.adm-table table{width:100%;border-collapse:collapse;min-width:640px}
+.adm-table th{position:sticky;top:0;text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:12px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line)}
+.adm-table td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.adm-table tr:last-child td{border-bottom:0}
+.adm-table tbody tr:hover{background:rgba(135,148,255,.05)}
+.adm-table td.row{display:flex;gap:6px;flex-wrap:wrap;border-bottom:0}
+.adm-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+.adm-pill.adm-ok{color:var(--ok);background:var(--okSoft);border-color:rgba(53,211,154,.3)}
+.adm-pill.adm-warn{color:var(--warn);background:var(--warnSoft);border-color:rgba(245,195,91,.3)}
+.adm-pill.adm-bad{color:var(--bad);background:var(--badSoft);border-color:rgba(255,100,124,.3)}
+.adm-pill.adm-off{color:var(--mut);background:rgba(143,155,173,.1);border-color:rgba(143,155,173,.25)}
+.adm .card{margin-bottom:16px;animation:fadeUp .5s ease both}
+@media(max-width:600px){.adm-main{padding-top:22px}.adm-head h1{font-size:22px}.adm-new{flex-direction:column;align-items:stretch}}
+@media(prefers-reduced-motion:reduce){.adm-head,.adm-login,.adm-stats,.adm .card{animation:none}}
+/* perbaikan susunan form & kolom aksi admin */
+.adm-new{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.adm-new #buyer{flex:2 1 220px;width:auto}
+.adm-new #licenseType{flex:1 1 170px;width:auto}
+.adm-new #days{flex:0 0 96px;width:96px}
+.adm-new #btnNew{flex:0 0 auto}
+.adm-table td.row{display:table-cell;white-space:nowrap}
+.adm-table td.row button{margin:2px 6px 2px 0}
+.adm-table table{min-width:760px}
+.adm-table td.row{border-bottom:1px solid var(--line)}.adm-table tr:last-child td.row{border-bottom:0}

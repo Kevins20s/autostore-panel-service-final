@@ -14,9 +14,16 @@
 <section id="dash" class="hide">
   <div class="adm-stats">
     <div class="adm-stat"><span class="mut">Total pembeli</span><b id="stTotal">0</b></div>
+    <div class="adm-stat pend"><span class="mut">Pesanan menunggu</span><b id="stPending">0</b></div>
     <div class="adm-stat ok"><span class="mut">Aktif</span><b id="stActive">0</b></div>
     <div class="adm-stat warn"><span class="mut">Hampir habis (7 hari)</span><b id="stSoon">0</b></div>
     <div class="adm-stat bad"><span class="mut">Habis / dicabut</span><b id="stDead">0</b></div>
+  </div>
+  <div class="card"><h2>Pesanan masuk <span class="adm-count hide" id="ordCount"></span></h2>
+    <p class="mut">Pembeli membayar lewat QRIS di <b>/beli</b>. Cek mutasi DANA, cocokkan nominalnya (termasuk 3 angka terakhir), lalu tekan <b>Konfirmasi</b> untuk membuat key otomatis.</p>
+    <div id="orderKey" class="hide adm-newkey"><p class="mut" id="orderKeyNote">Key dibuat:</p><div class="adm-keyrow"><div class="key" id="orderKeyText"></div><button type="button" class="pri" id="btnCopyOrderKey">Salin key</button></div></div>
+    <div class="adm-table"><table><thead><tr><th>Kode</th><th>Paket</th><th>Nominal</th><th>Pembeli</th><th>Status</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></div>
+    <p id="emptyOrders" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pesanan.</p>
   </div>
   <div class="card"><h2>Buat key baru</h2>
     <div class="row adm-new"><input id="buyer" placeholder="Nama pembeli" style="flex:2"><select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option><option value="service">AutoStore Service</option></select><input id="days" type="number" value="30" min="1" style="flex:1" aria-label="Lama (hari)"><button class="pri" id="btnNew">Buat</button></div>

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beli key - GevraStore</title><meta name="theme-color" content="#080b12"><meta name="description" content="Beli key GevraStore Panel. Bayar lewat QRIS, key dikirim setelah pembayaran dikonfirmasi.">
+<link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css"><script src="/ui-extras.js"></script></head>
+<body class="buy"><main class="buy-main">
+<header class="buy-head">
+  <div class="buy-logo"><img src="/logo.png" alt="" width="84" height="84"></div>
+  <h1>Beli key GevraStore</h1>
+  <p class="mut">Pilih paket, bayar lewat QRIS, lalu key muncul di halaman ini setelah pembayaranmu dikonfirmasi.</p>
+</header>
+
+<section id="stForm" class="card buy-card">
+  <h2>1. Pilih paket</h2>
+  <div id="pkgs" class="buy-pkgs" role="radiogroup" aria-label="Paket"></div>
+  <label class="buy-lbl" for="fName">Nama</label>
+  <input id="fName" maxlength="40" placeholder="Nama kamu" autocomplete="name">
+  <label class="buy-lbl" for="fContact">Kontak (WhatsApp atau Discord)</label>
+  <input id="fContact" maxlength="60" placeholder="0812xxxxxxx atau username#1234" autocomplete="off">
+  <p class="mut buy-note">Kontak dipakai kalau ada kendala dengan pesananmu.</p>
+  <div class="row" style="margin-top:14px"><button class="pri" id="btnOrder" type="button">Lanjut ke pembayaran</button></div>
+  <div id="formMsg" class="msg"></div>
+</section>
+
+<section id="stPay" class="card buy-card hide">
+  <h2>2. Bayar lewat QRIS</h2>
+  <div class="buy-amount"><span class="mut">Bayar tepat sebesar</span><b id="payAmount">Rp0</b><button type="button" class="copy-btn" id="btnCopyAmt">Salin nominal</button></div>
+  <p class="buy-warn">Nominal harus <b>persis sama</b> (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.</p>
+  <div class="buy-qr"><img id="qrImg" src="/qris.png" alt="QRIS GEVRA STORE" width="320"></div>
+  <p class="buy-qr-actions"><a id="qrDl" href="/qris.png" download="QRIS-GevraStore.png">Simpan gambar QRIS</a><span class="mut"> · cocok untuk scan dari galeri</span></p>
+  <ol class="buy-steps">
+    <li>Buka DANA atau e-wallet/m-banking apa pun yang mendukung QRIS, lalu scan kode di atas.</li>
+    <li>Masukkan nominal <b id="payAmount2"></b> dengan tepat, lalu bayar.</li>
+    <li>Kembali ke sini dan tekan tombol di bawah.</li>
+  </ol>
+  <div class="buy-meta mut">Kode pesanan <b id="payCode"></b> · Selesaikan dalam <b id="payTimer">--:--</b></div>
+  <div class="row" style="margin-top:14px"><button class="pri" id="btnPaid" type="button">Saya sudah bayar</button><button id="btnCancel" type="button">Batalkan</button></div>
+  <div id="payMsg" class="msg"></div>
+</section>
+
+<section id="stWait" class="card buy-card hide">
+  <div class="buy-spin" aria-hidden="true"></div>
+  <h2 style="text-align:center">Pembayaranmu sedang diperiksa</h2>
+  <p class="mut" style="text-align:center">Biasanya selesai dalam beberapa menit selama penjual online. Halaman ini otomatis menampilkan key begitu pembayaranmu dikonfirmasi.</p>
+  <div class="buy-meta mut" style="text-align:center">Kode pesanan <b id="waitCode"></b> · Nominal <b id="waitAmount"></b></div>
+  <p class="mut buy-note" style="text-align:center">Kamu boleh menutup halaman ini. Untuk kembali, buka lagi halaman ini di browser yang sama, atau pakai link pesananmu:</p>
+  <div class="row" style="justify-content:center"><button type="button" id="btnCopyLink">Salin link pesanan</button></div>
+</section>
+
+<section id="stDone" class="card buy-card hide">
+  <h2>Pembayaran dikonfirmasi 🎉</h2>
+  <p class="mut">Ini key kamu. Simpan di tempat aman, jangan dibagikan ke orang lain:</p>
+  <div class="adm-keyrow"><div class="key buy-key" id="keyBox"></div><button type="button" class="pri" id="btnCopyKey">Salin key</button></div>
+  <p class="buy-warn" id="keyUntil"></p>
+  <ol class="buy-steps">
+    <li>Buka halaman panel, lalu masukkan key di kolom yang tersedia.</li>
+    <li>Ikuti petunjuk setup di menu <b>Tutorial Setup</b>.</li>
+  </ol>
+  <div class="row"><a href="/"><button class="pri" type="button">Buka panel</button></a></div>
+</section>
+
+<section id="stEnd" class="card buy-card hide">
+  <h2 id="endTitle">Pesanan berakhir</h2>
+  <p class="mut" id="endText"></p>
+  <div class="row"><button class="pri" id="btnNew" type="button">Buat pesanan baru</button></div>
+</section>
+
+<p class="buy-foot"><a href="/">Sudah punya key? Masuk ke panel</a></p>
+</main><script src="/beli.js"></script></body></html>

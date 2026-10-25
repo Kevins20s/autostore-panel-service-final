@@ -20,6 +20,9 @@ const { Runner } = require("./src/runner");
 const createShopRouter = require("./src/shopapi");
 const { closeConn } = require("./src/shopdb");
 const { MongoClient } = require("mongodb");
+const { createOrders } = require("./src/orders");
+const { createNotifier } = require("./src/notify");
+const registerOrderRoutes = require("./src/ordersapi");
 
 const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -59,6 +62,18 @@ function newKey(type = "autostore") {
     const g = () => Array.from(crypto.randomBytes(4), (b) => A[b % A.length]).join("");
     const prefix = type === "service" ? "SV" : "AS";
     return `${prefix}-${g()}-${g()}-${g()}-${g()}`;
+}
+
+// Dipakai pesanan web setelah admin konfirmasi. Isinya sama dengan rute admin "buat key".
+function issueLicense(name, type, days, { save = true } = {}) {
+    const key = newKey(type);
+    licenses().push({
+        id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
+        createdAt: Date.now(), expiresAt: Date.now() + days * DAY, revoked: false,
+        port: store.data.nextPort++, config: null, desired: "stopped",
+    });
+    if (save) store.save();
+    return key;
 }
 
 function reconcile(l) {
@@ -135,6 +150,13 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
 
 app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
+
+// ---- Pesanan key lewat web (QRIS manual) ----
+const notifier = createNotifier();
+const ORDER_TTL_MIN = Number(process.env.ORDER_TTL_MIN) > 0 ? Number(process.env.ORDER_TTL_MIN) : 30;
+const orders = createOrders({ store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "" });
+registerOrderRoutes(app, { admin, orders, ttlMin: ORDER_TTL_MIN });
+console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
 app.post("/api/login", (req, res) => {
     if (auth.tooMany(req.ip)) return res.status(429).json({ error: "Terlalu banyak percobaan. Coba lagi 10 menit lagi." });

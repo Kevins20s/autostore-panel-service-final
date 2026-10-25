@@ -20,10 +20,43 @@ function stats(list) {
 }
 function btn(text, fn, cls) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = async () => { try { await fn(); } catch (e) { alert(e.message); } load(); }; return b; }
 
+const ORD = { pending: ["Menunggu bayar", "off"], claimed: ["Sudah klik bayar", "warn"], done: ["Selesai", "ok"], rejected: ["Ditolak", "bad"], expired: ["Kedaluwarsa", "off"] };
+const rp = (n) => "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+function ago(t) { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "baru saja" : m < 60 ? `${m} menit lalu` : m < 1440 ? `${Math.round(m / 60)} jam lalu` : `${Math.round(m / 1440)} hari lalu`; }
+function showOrderKey(key, note) { $("orderKeyText").textContent = key; $("orderKeyNote").textContent = note; $("orderKey").classList.remove("hide"); }
+async function loadOrders() {
+    let r; try { r = await api("GET", "/api/admin/orders"); } catch { return; }
+    const list = r.orders, body = $("orderRows"); body.replaceChildren();
+    const waiting = list.filter((o) => o.status === "claimed").length;
+    $("stPending").textContent = waiting;
+    $("ordCount").textContent = waiting ? `${waiting} perlu dicek` : ""; $("ordCount").classList.toggle("hide", !waiting);
+    document.title = (waiting ? `(${waiting}) ` : "") + "GevraStore Admin";
+    $("emptyOrders").classList.toggle("hide", list.length > 0);
+    for (const o of list) {
+        const tr = document.createElement("tr");
+        const who = td(""); const b1 = document.createElement("b"); b1.textContent = o.name; const sm = document.createElement("div"); sm.className = "mut"; sm.textContent = o.contact; who.append(b1, sm);
+        const [lbl, st] = ORD[o.status] || [o.status, "off"];
+        const code = td(""); const c1 = document.createElement("b"); c1.textContent = o.code; const t1 = document.createElement("div"); t1.className = "mut"; t1.textContent = ago(o.claimedAt || o.createdAt); code.append(c1, t1);
+        const amt = td(""); const a1 = document.createElement("b"); a1.textContent = rp(o.amount); amt.append(a1);
+        tr.append(code, td(`${o.packageName} · ${o.days} hari`), amt, who, pillTd(lbl, st));
+        const act = document.createElement("td"); act.className = "row";
+        if (o.status !== "done" && o.status !== "rejected") {
+            act.append(
+                btn("Konfirmasi", async () => {
+                    if (!confirm(`Sudah cek mutasi DANA sebesar ${rp(o.amount)} dari ${o.name}?\nKey akan dibuat sekarang.`)) return;
+                    const out = await api("POST", `/api/admin/orders/${o.id}/confirm`);
+                    showOrderKey(out.key, `Key untuk ${o.name} (${o.code}). Key juga muncul otomatis di halaman pembeli selama 24 jam:`);
+                }, "pri"),
+                btn("Tolak", async () => { if (confirm(`Tolak pesanan ${o.code}?`)) await api("POST", `/api/admin/orders/${o.id}/reject`); }, "bad"));
+        }
+        tr.append(act); body.append(tr);
+    }
+}
 async function load() {
     let data;
     try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("login").classList.remove("hide"); return; }
     $("login").classList.add("hide"); $("dash").classList.remove("hide");
+    loadOrders();
     const body = $("rows"); body.replaceChildren();
     stats(data.licenses);
     const qv = ($("q") ? $("q").value : "").trim().toLowerCase();
@@ -58,6 +91,11 @@ $("btnCopyKey").onclick = async () => {
     setTimeout(() => { b.textContent = "Salin key"; }, 1600);
 };
 $("q").oninput = () => load();
+$("btnCopyOrderKey").onclick = async () => {
+    const b = $("btnCopyOrderKey");
+    try { await navigator.clipboard.writeText($("orderKeyText").textContent); b.textContent = "Tersalin ✓"; } catch { b.textContent = "Gagal, salin manual"; }
+    setTimeout(() => { b.textContent = "Salin key"; }, 1600);
+};
 $("btnSend").onclick = async () => { try { await api("POST", "/api/admin/backup/send"); msg("bkMsg", "Backup terkirim ke Discord.", true); } catch (e) { msg("bkMsg", e.message); } };
 $("btnRestore").onclick = () => $("fileRestore").click();
 $("fileRestore").onchange = async (ev) => {

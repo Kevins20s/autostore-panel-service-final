@@ -11,6 +11,11 @@ const MAP = {
     PAYMENT_GATEWAY_URL: "PaymentGatewayUrl",
     PAYMENT_GATEWAY_API_KEY: "PaymentGatewayApiKey",
     PAYMENT_WEBHOOK_SECRET: "PaymentWebhookSecret",
+    // Diisi otomatis oleh panel untuk fitur QRIS otomatis (wallet). Kosong = bot jalan sendiri tanpa panel.
+    PANEL_INTERNAL_URL: "PanelInternalUrl",
+    PANEL_INTERNAL_TOKEN: "PanelInternalToken",
+    PANEL_LICENSE_ID: "PanelLicenseId",
+    PANEL_WEBHOOK_SECRET: "PanelWebhookSecret",
 };
 
 const REQUIRED = ["TOKEN", "MongoURL", "CLIENTID", "Owner"];

@@ -723,3 +723,9 @@ body.buy{min-height:100vh}
 .adm-count{margin-left:8px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:var(--warn);background:var(--warnSoft);border:1px solid rgba(245,195,91,.3);vertical-align:middle}
 .adm-newkey{margin:10px 0 14px}
 .adm-table td.mut,.adm-table td .mut{font-size:12px;color:var(--mut)}
+
+/* Pembayaran / wallet */
+.pay-main{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+.pay-big{display:block;font-size:36px;letter-spacing:-.04em;margin-top:6px}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.stat b.warnc{color:var(--warn)}.stat b.okc{color:var(--ok)}

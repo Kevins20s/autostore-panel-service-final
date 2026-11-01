@@ -4,7 +4,7 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node --env-file=.env server.js",
+    "start": "node server.js",
     "setup": "npm install && npm install --prefix bot && npm install --prefix service",
     "test": "node test/smoke.js",
     "test:shop": "node test/shop.js",

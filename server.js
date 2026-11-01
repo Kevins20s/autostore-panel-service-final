@@ -23,6 +23,10 @@ const { MongoClient } = require("mongodb");
 const { createOrders } = require("./src/orders");
 const { createNotifier } = require("./src/notify");
 const registerOrderRoutes = require("./src/ordersapi");
+const { createWalletDb } = require("./src/walletdb");
+const { createAutoko } = require("./src/autoko");
+const { createWallet } = require("./src/wallet");
+const { registerWalletWebhook, registerWalletRoutes, createBotForwarder, internalToken, botHookSecret } = require("./src/walletapi");
 
 const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -38,11 +42,38 @@ const store = createStore(DATA_FILE);
 const backup = createBackup({ file: DATA_FILE, url: process.env.BACKUP_WEBHOOK_URL });
 const runner = new Runner(
     process.env.BOT_DIR || path.join(__dirname, "bot"),
-    process.env.SERVICE_DIR || path.join(__dirname, "service")
+    process.env.SERVICE_DIR || path.join(__dirname, "service"),
+    {
+        // Bot memanggil panel lewat alamat lokal. Token dan secret diturunkan dari MASTER_KEY per pembeli.
+        extraEnv: (id, type) => type === "service" ? {} : {
+            PANEL_INTERNAL_URL: `http://127.0.0.1:${PORT}`,
+            PANEL_LICENSE_ID: id,
+            PANEL_INTERNAL_TOKEN: internalToken(id),
+            PANEL_WEBHOOK_SECRET: botHookSecret(id),
+        },
+    }
 );
 const licenses = () => store.data.licenses;
 
 const valid = (l) => !l.revoked && l.expiresAt > Date.now();
+
+// ---- Wallet / QRIS otomatis (aktif kalau WALLET_MONGO_URL diisi) ----
+const numEnv = (k, d) => (process.env[k] !== undefined && process.env[k] !== "" && Number.isFinite(Number(process.env[k])) ? Number(process.env[k]) : d);
+const findLicense = (id) => licenses().find((x) => x.id === id);
+const walletDb = createWalletDb();
+const autoko = createAutoko();
+const forwardToBot = createBotForwarder({ findLicense, isRunning: (id) => runner.status(id) === "running" });
+const wallet = walletDb.enabled ? createWallet({
+    getCols: walletDb.getCols, autoko, forwardToBot, notify: createNotifier(), publicUrl: process.env.PUBLIC_URL || "",
+    isFrozen: (id) => !!findLicense(id)?.walletFrozen,
+    holdMs: numEnv("WALLET_HOLD_HOURS", 3) * 3600e3,
+    feePercent: numEnv("WALLET_FEE_PERCENT", 0), feeFlat: numEnv("WALLET_FEE_FLAT", 0),
+    minDeposit: numEnv("WALLET_MIN_DEPOSIT", 1000), maxDeposit: numEnv("WALLET_MAX_DEPOSIT", 5000000),
+    depositTtlMs: numEnv("WALLET_DEPOSIT_TTL_MIN", 15) * 60e3,
+    minWithdraw: numEnv("WALLET_MIN_WITHDRAW", 10000), withdrawFee: numEnv("WALLET_WITHDRAW_FEE", 0),
+    bankCooldownMs: numEnv("WALLET_BANK_COOLDOWN_HOURS", 24) * 3600e3,
+}) : null;
+console.log("[PANEL] Wallet:", wallet ? `aktif (Autoko: ${autoko.mode})` : "nonaktif (isi WALLET_MONGO_URL untuk mengaktifkan)");
 const FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRET = new Set(["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"]);
 const isId = (v) => /^\d{17,20}$/.test(v);
@@ -111,6 +142,8 @@ app.post("/hook/:id", express.raw({ type: "*/*", limit: "100kb" }), async (req, 
     } catch { res.sendStatus(502); }
 });
 
+registerWalletWebhook(app, { wallet, autoko });
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const buyer = (req, res, next) => {
@@ -156,6 +189,7 @@ const notifier = createNotifier();
 const ORDER_TTL_MIN = Number(process.env.ORDER_TTL_MIN) > 0 ? Number(process.env.ORDER_TTL_MIN) : 30;
 const orders = createOrders({ store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "" });
 registerOrderRoutes(app, { admin, orders, ttlMin: ORDER_TTL_MIN });
+registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
 app.post("/api/login", (req, res) => {
@@ -179,6 +213,7 @@ app.get("/api/me", buyer, (req, res) => {
         expiresAt: l.expiresAt, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
         revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
         webhookUrl: `${base}/hook/${l.id}`,
+        walletEnabled: !!wallet, autoAvailable: autoko.enabled, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
         config: {
             clientId: c.clientId || "", ownerId: c.ownerId || "", adminIds: c.adminIds || "",
             guildId: c.guildId || "", paymentUrl: c.paymentUrl || "",
@@ -365,7 +400,7 @@ app.post("/api/admin/login", (req, res) => {
 
 const row = (l) => ({
     id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked,
-    configured: !!l.config, bot: runner.status(l.id),
+    configured: !!l.config, bot: runner.status(l.id), walletFrozen: !!l.walletFrozen, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
 });
 app.get("/api/admin/licenses", admin, (req, res) => res.json({ licenses: licenses().map(row) }));
 
@@ -402,6 +437,12 @@ app.post("/api/admin/licenses/:id/revoke", admin, (req, res) => {
 });
 app.delete("/api/admin/licenses/:id", admin, wrap(async (req, res) => {
     const l = find(req, res); if (!l) return;
+    if (wallet) {
+        // Gagal-aman: kalau saldo tidak bisa dicek, jangan hapus.
+        let owed;
+        try { owed = await wallet.balanceOf(l.id); } catch { return res.status(503).json({ error: "Saldo wallet tidak bisa dicek sekarang, coba lagi." }); }
+        if (owed > 0) return res.status(409).json({ error: `Pembeli ini masih punya saldo wallet Rp${owed.toLocaleString("id-ID")}. Selesaikan penarikannya dulu.` });
+    }
     await runner.stop(l.id);
     closeConn(l.id);
     store.data.licenses = licenses().filter((x) => x !== l);
@@ -417,6 +458,11 @@ app.use((err, req, res, next) => {
 
 const WATCH_MS = Number(process.env.WATCH_MS || 60000);
 setInterval(() => licenses().forEach(reconcile), WATCH_MS).unref();
+if (wallet) {
+    // Saat start: hitung ulang saldo dari ledger (menyembuhkan sisa proses yang terputus), lalu rutin tiap menit.
+    setTimeout(() => wallet.reconcile(null, { fix: true }).then((d) => d.length && console.warn("[WALLET] saldo dikoreksi dari ledger:", JSON.stringify(d))).catch((e) => console.error("[WALLET] reconcile:", e.message)), 5000).unref();
+    setInterval(() => wallet.sweep().catch((e) => console.error("[WALLET] sweep:", e.message)), numEnv("WALLET_SWEEP_MS", 60000)).unref();
+}
 if (backup.enabled()) backup.schedule(process.env.BACKUP_EVERY_HOURS);
 if (backup.enabled()) setTimeout(() => backup.send("server start").catch((e) => console.error("[BACKUP]", e.message)), 15000).unref();
 licenses().forEach(reconcile);
@@ -438,6 +484,7 @@ async function shutdown() {
     setTimeout(() => process.exit(1), 10000).unref();
     server.close();
     try { await Promise.all(licenses().map((l) => runner.stop(l.id))); } catch (e) { console.error(e); }
+    await walletDb.close();
     process.exit(0);
 }
 process.on("SIGINT", shutdown);

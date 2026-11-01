@@ -28,9 +28,10 @@ function cfgToEnv(cfg, port, type) {
 }
 
 class Runner {
-    constructor(botDir, serviceDir) {
+    constructor(botDir, serviceDir, opts = {}) {
         this.botDir = botDir;
         this.serviceDir = serviceDir;
+        this.extraEnv = opts.extraEnv || null; // (licenseId, type) => env tambahan untuk bot itu
         this.items = new Map(); // licenseId -> state
     }
 
@@ -68,7 +69,7 @@ class Runner {
         }
         entry.startedAt = Date.now();
         entry.status = "running";
-        const child = spawn(process.execPath, [entryFile], { cwd: dir, env: cfgToEnv(entry.cfg, entry.port, entry.type) });
+        const child = spawn(process.execPath, [entryFile], { cwd: dir, env: { ...cfgToEnv(entry.cfg, entry.port, entry.type), ...(this.extraEnv ? this.extraEnv(id, entry.type) : {}) } });
         entry.child = child;
         const pipe = (stream) => {
             let buf = "";

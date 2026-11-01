@@ -16,7 +16,7 @@ function buildLogEmbed(trx, statusKey) {
     const rate = trx.wlAmount ? Math.round(trx.grossAmount / trx.wlAmount) : null;
 
     const embed = new EmbedBuilder()
-        .setTitle("📥 QRIS Deposit (Manual)")
+        .setTitle(trx.mode === "auto" ? "📥 QRIS Deposit (Otomatis)" : "📥 QRIS Deposit (Manual)")
         .setColor(style.color)
         .addFields(
             { name: "Status", value: style.label },
@@ -27,7 +27,7 @@ function buildLogEmbed(trx, statusKey) {
             { name: "WL", value: `${trx.wlAmount} ${WL}`, inline: true },
             { name: "Rate", value: rate ? `1 ${WL} = Rp${rate.toLocaleString("id-ID")}` : "-", inline: true }
         )
-        .setFooter({ text: "Auto-Store QRIS Deposit • Konfirmasi Manual" })
+        .setFooter({ text: trx.mode === "auto" ? "Auto-Store QRIS Deposit • Otomatis" : "Auto-Store QRIS Deposit • Konfirmasi Manual" })
         .setTimestamp();
 
     if (statusKey !== "PENDING" && trx.processedBy) {
@@ -151,13 +151,13 @@ async function editMessageSafely(message, embed) {
         return;
     }
     try {
-        await message.edit({ embeds: [embed], components: [] });
+        await message.edit({ embeds: [embed], components: [], attachments: [] });
     } catch (err) {
         console.error("Gagal update pesan deposit, coba fallback fetch ulang:", err.message);
         try {
             const channel = await client.channels.fetch(message.channelId);
             const freshMessage = await channel.messages.fetch(message.id);
-            await freshMessage.edit({ embeds: [embed], components: [] });
+            await freshMessage.edit({ embeds: [embed], components: [], attachments: [] });
             console.log("[DEBUG QRIS] editMessageSafely: berhasil edit pesan DM lewat fallback fetch.");
         } catch (err2) {
             console.error("Gagal update pesan deposit (fallback juga gagal):", err2.message);
@@ -193,7 +193,7 @@ async function creditDeposit(trx, message, processedBy) {
     const embed = new EmbedBuilder()
         .setTitle("Deposit Berhasil")
         .setDescription(
-            `${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil dikonfirmasi oleh admin!\n\n` +
+            `${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil ${processedBy ? "dikonfirmasi oleh admin" : "diverifikasi otomatis"}!\n\n` +
             `> Order ID: \`${trx.orderId}\`\n` +
             `> Balance Diterima: **${trx.wlAmount} ${WL}**`
         )

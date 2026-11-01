@@ -52,11 +52,40 @@ async function loadOrders() {
         tr.append(act); body.append(tr);
     }
 }
+const copyBtn = (text, label) => btn(label, async () => { await navigator.clipboard.writeText(text); });
+async function loadWallet() {
+    let ov; try { ov = await api("GET", "/api/admin/wallet/overview"); } catch { return; }
+    $("walletCard").classList.toggle("hide", !ov.enabled); $("stWdBox").classList.toggle("hide", !ov.enabled);
+    if (!ov.enabled) return;
+    $("walletInfo").textContent = `Kewajiban ke pembeli: ${rp(ov.owed)} (tersedia ${rp(ov.available)}, ditahan ${rp(ov.pending)}, sedang ditarik ${rp(ov.locked)}). Saldo di Autoko harus minimal sebesar ini. Autoko: ${ov.autoko === "mock" ? "MODE UJI COBA (QRIS palsu)" : ov.autokoReady ? "aktif" : "belum aktif"}.`;
+    $("mockBox").classList.toggle("hide", ov.autoko !== "mock");
+    $("stWd").textContent = ov.openWithdrawals;
+    $("wdCount").textContent = ov.openWithdrawals ? `${ov.openWithdrawals} perlu diproses` : ""; $("wdCount").classList.toggle("hide", !ov.openWithdrawals);
+    let list; try { list = (await api("GET", "/api/admin/withdrawals?status=pending")).withdrawals; } catch { return; }
+    const body = $("wdRows"); body.replaceChildren(); $("emptyWd").classList.toggle("hide", list.length > 0);
+    for (const w of list) {
+        const tr = document.createElement("tr");
+        const who = td(""); const b1 = document.createElement("b"); b1.textContent = w.buyer; const s1 = document.createElement("div"); s1.className = "mut"; s1.textContent = `diminta ${rp(w.amount)}` + (w.fee ? `, biaya ${rp(w.fee)}` : ""); who.append(b1, s1);
+        const pay = td(""); const p1 = document.createElement("b"); p1.textContent = rp(w.payout); pay.append(p1);
+        const bk = td(""); const k1 = document.createElement("b"); k1.textContent = `${w.bankFull.bankName} ${w.bankFull.accountNo}`; const k2 = document.createElement("div"); k2.className = "mut"; k2.textContent = "a.n. " + w.bankFull.accountName; bk.append(k1, k2);
+        tr.append(who, pay, bk, td(ago(w.createdAt)));
+        const act = document.createElement("td"); act.className = "row";
+        act.append(
+            copyBtn(w.bankFull.accountNo, "Salin no."), copyBtn(String(w.payout), "Salin nominal"),
+            btn("Sudah ditransfer", async () => {
+                const ref = prompt(`Transfer ${rp(w.payout)} ke ${w.bankFull.bankName} ${w.bankFull.accountNo} a.n. ${w.bankFull.accountName} sudah dilakukan?\nCatatan/ref transfer (opsional):`);
+                if (ref === null) return;
+                await api("POST", `/api/admin/withdrawals/${w.id}/paid`, { reference: ref });
+            }, "pri"),
+            btn("Tolak", async () => { const why = prompt(`Tolak penarikan ${rp(w.amount)} dari ${w.buyer}? Saldo dikembalikan.\nAlasan (opsional):`); if (why === null) return; await api("POST", `/api/admin/withdrawals/${w.id}/reject`, { reason: why }); }, "bad"));
+        tr.append(act); body.append(tr);
+    }
+}
 async function load() {
     let data;
     try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("login").classList.remove("hide"); return; }
     $("login").classList.add("hide"); $("dash").classList.remove("hide");
-    loadOrders();
+    loadOrders(); loadWallet();
     const body = $("rows"); body.replaceChildren();
     stats(data.licenses);
     const qv = ($("q") ? $("q").value : "").trim().toLowerCase();
@@ -70,6 +99,7 @@ async function load() {
         const act = document.createElement("td"); act.className = "row";
         act.append(
             btn("+30 hari", () => api("POST", `/api/admin/licenses/${l.id}/extend`, { days: 30 })),
+            ...(l.type === "service" ? [] : [btn(l.walletFrozen ? "Buka wallet" : "Bekukan wallet", () => api("POST", `/api/admin/licenses/${l.id}/wallet-freeze`, { frozen: !l.walletFrozen }))]),
             btn(l.revoked ? "Aktifkan" : "Cabut", () => api("POST", `/api/admin/licenses/${l.id}/revoke`, { revoked: !l.revoked })),
             btn("Hapus", async () => { if (confirm(`Hapus ${l.buyer}? Bot akan dimatikan.`)) await api("DELETE", `/api/admin/licenses/${l.id}`); }, "bad"));
         tr.append(act); body.append(tr);
@@ -91,6 +121,14 @@ $("btnCopyKey").onclick = async () => {
     setTimeout(() => { b.textContent = "Salin key"; }, 1600);
 };
 $("q").oninput = () => load();
+$("btnReconcile").onclick = async () => {
+    try {
+        const r = await api("POST", "/api/admin/wallet/reconcile", { fix: false });
+        if (!r.diffs.length) return msg("wdMsg", "Semua saldo cocok dengan ledger.", true);
+        if (confirm(`Ada ${r.diffs.length} saldo yang tidak cocok dengan ledger.\nPerbaiki sekarang berdasarkan ledger?`)) { await api("POST", "/api/admin/wallet/reconcile", { fix: true }); msg("wdMsg", "Saldo diperbaiki dari ledger.", true); load(); }
+    } catch (e) { msg("wdMsg", e.message); }
+};
+$("btnMockPay").onclick = async () => { try { await api("POST", "/api/admin/wallet/mock-pay", { orderId: $("mockOrder").value.trim() }); msg("wdMsg", "Disimulasikan sudah dibayar.", true); load(); } catch (e) { msg("wdMsg", e.message); } };
 $("btnCopyOrderKey").onclick = async () => {
     const b = $("btnCopyOrderKey");
     try { await navigator.clipboard.writeText($("orderKeyText").textContent); b.textContent = "Tersalin ✓"; } catch { b.textContent = "Gagal, salin manual"; }

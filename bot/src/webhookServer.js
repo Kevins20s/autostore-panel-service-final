@@ -5,16 +5,17 @@ const Qris = require("./Schema/qris.js");
 const { creditDeposit } = require("./utils/depositWatcher.js");
 
 function verifySignature(rawBody, signature) {
-    if (!signature || !config.PaymentWebhookSecret) return false;
-    const expected = crypto
-        .createHmac("sha256", config.PaymentWebhookSecret)
-        .update(rawBody)
-        .digest("hex");
-    try {
-        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-    } catch {
-        return false;
-    }
+    // Dua sumber yang sah: gateway milik pembeli sendiri (PaymentWebhookSecret) dan panel (PanelWebhookSecret, QRIS otomatis).
+    const secrets = [config.PaymentWebhookSecret, config.PanelWebhookSecret].filter(Boolean);
+    if (!signature || !secrets.length) return false;
+    return secrets.some((secret) => {
+        const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+        try {
+            return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+        } catch {
+            return false;
+        }
+    });
 }
 
 /**
@@ -51,7 +52,7 @@ function startWebhookServer(client) {
         res.sendStatus(200);
 
         try {
-            const { status, externalId } = req.body;
+            const { status, externalId, amount } = req.body;
             if (status !== "completed" || !externalId) return;
 
             const trx = await Qris.findOne({ orderId: externalId });
@@ -60,6 +61,10 @@ function startWebhookServer(client) {
                 return;
             }
             if (trx.status !== "pending") return; // sudah diproses lewat jalur lain (watcher/tombol manual)
+            if (amount != null && Number(amount) !== trx.grossAmount) {
+                console.warn(`[WEBHOOK] Nominal order ${externalId} tidak cocok (webhook ${amount}, tercatat ${trx.grossAmount}), diabaikan.`);
+                return;
+            }
 
             const message = await fetchDmMessage(client, trx);
             await creditDeposit(trx, message);

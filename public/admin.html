@@ -15,6 +15,7 @@
   <div class="adm-stats">
     <div class="adm-stat"><span class="mut">Total pembeli</span><b id="stTotal">0</b></div>
     <div class="adm-stat pend"><span class="mut">Pesanan menunggu</span><b id="stPending">0</b></div>
+    <div class="adm-stat pend hide" id="stWdBox"><span class="mut">Penarikan menunggu</span><b id="stWd">0</b></div>
     <div class="adm-stat ok"><span class="mut">Aktif</span><b id="stActive">0</b></div>
     <div class="adm-stat warn"><span class="mut">Hampir habis (7 hari)</span><b id="stSoon">0</b></div>
     <div class="adm-stat bad"><span class="mut">Habis / dicabut</span><b id="stDead">0</b></div>
@@ -24,6 +25,14 @@
     <div id="orderKey" class="hide adm-newkey"><p class="mut" id="orderKeyNote">Key dibuat:</p><div class="adm-keyrow"><div class="key" id="orderKeyText"></div><button type="button" class="pri" id="btnCopyOrderKey">Salin key</button></div></div>
     <div class="adm-table"><table><thead><tr><th>Kode</th><th>Paket</th><th>Nominal</th><th>Pembeli</th><th>Status</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></div>
     <p id="emptyOrders" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pesanan.</p>
+  </div>
+  <div class="card hide" id="walletCard"><h2>Penarikan saldo pembeli <span class="adm-count hide" id="wdCount"></span></h2>
+    <p class="mut" id="walletInfo"></p>
+    <div class="adm-table"><table><thead><tr><th>Pembeli</th><th>Dikirim</th><th>Ke rekening</th><th>Diajukan</th><th></th></tr></thead><tbody id="wdRows"></tbody></table></div>
+    <p id="emptyWd" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada permintaan penarikan.</p>
+    <div class="row" style="margin-top:12px"><button type="button" id="btnReconcile">Cek konsistensi saldo</button></div>
+    <div id="mockBox" class="row hide" style="margin-top:12px"><input id="mockOrder" placeholder="Order ID (DP-…) untuk simulasi bayar" style="flex:2"><button type="button" id="btnMockPay">Simulasi bayar (uji coba)</button></div>
+    <div id="wdMsg" class="msg"></div>
   </div>
   <div class="card"><h2>Buat key baru</h2>
     <div class="row adm-new"><input id="buyer" placeholder="Nama pembeli" style="flex:2"><select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option><option value="service">AutoStore Service</option></select><input id="days" type="number" value="30" min="1" style="flex:1" aria-label="Lama (hari)"><button class="pri" id="btnNew">Buat</button></div>

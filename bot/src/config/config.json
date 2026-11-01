@@ -7,5 +7,9 @@
     "serverId": "",
     "PaymentGatewayUrl": "",
     "PaymentGatewayApiKey": "",
-    "PaymentWebhookSecret": ""
+    "PaymentWebhookSecret": "",
+    "PanelInternalUrl": "",
+    "PanelInternalToken": "",
+    "PanelLicenseId": "",
+    "PanelWebhookSecret": ""
 }

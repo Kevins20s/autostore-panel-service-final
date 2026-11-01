@@ -755,10 +755,79 @@ async function subscription() {
         h("p", { class: "mut" }, "Untuk perpanjang, hubungi penjual."));
 }
 
+// ---------- Pembayaran: QRIS otomatis, saldo, rekening, penarikan ----------
+const TX_STATUS = { pending: ["Menunggu bayar", "no"], paid: ["Berhasil", "ok"], expired: ["Kedaluwarsa", "no"], mismatch: ["Perlu dicek", "no"] };
+const WD_STATUS = { pending: ["Diproses", "no"], paid: ["Selesai", "ok"], rejected: ["Ditolak", "no"] };
+const rpf = (n) => "Rp " + fmt(n || 0);
+const when = (t) => (t ? new Date(t).toLocaleString("id-ID") : "-");
+const pillOf = (map, k) => { const [label, cls] = map[k] || [k, "no"]; return h("span", { class: "pill " + cls }, label); };
+
+async function payments() {
+    const s = await api("GET", "/api/wallet/summary");
+    if (!s.enabled) return h("div", {}, head("Pembayaran", "QRIS otomatis dan saldo toko kamu."),
+        card(empty("box", "Belum diaktifkan", "Penjual belum mengaktifkan QRIS otomatis. Toko kamu tetap memakai QRIS manual lewat /setqris.")));
+    const [tx, wd] = await Promise.all([api("GET", "/api/wallet/transactions?limit=50"), api("GET", "/api/wallet/withdrawals")]);
+    const again = () => render();
+    const stat = (l, v, cls) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", { class: cls || "" }, v));
+
+    const setMode = (mode) => guard(async () => { await api("PUT", "/api/wallet/mode", { mode }); toast(mode === "auto" ? "QRIS otomatis aktif." : "Kembali ke QRIS manual."); again(); });
+    const modeCard = card(h("div", { class: "row sp" }, h("div", {}, h("h2", { class: "m0" }, "Metode deposit"),
+        h("p", { class: "mut" }, "Pilih bagaimana user tokomu membayar saat menekan Deposit QRIS di Discord.")),
+        h("span", { class: "pill " + (s.mode === "auto" ? "ok" : "no") }, s.mode === "auto" ? "Otomatis aktif" : "Manual aktif")),
+        h("div", { class: "seg mt" },
+            h("button", { class: s.mode === "manual" ? "pri" : "", onclick: s.mode === "manual" ? undefined : setMode("manual") }, "QRIS Manual (/setqris)"),
+            h("button", { class: s.mode === "auto" ? "pri" : "", disabled: !s.autoReady && s.mode !== "auto", onclick: s.mode === "auto" ? undefined : setMode("auto") }, "QRIS Otomatis")),
+        h("p", { class: "mut mt" }, s.mode === "auto"
+            ? "User membayar lewat QR dinamis, saldo WL mereka masuk sendiri beberapa saat setelah bayar. Uang masuk ke saldo di bawah ini."
+            : "User scan QRIS statis milikmu, lalu admin toko menekan Success/Cancel di Discord. Uang langsung ke rekeningmu sendiri."),
+        !s.autoReady ? h("p", { class: "mut" }, "QRIS otomatis belum tersedia dari penjual.") : null);
+
+    const withdrawModal = () => {
+        const amt = h("input", { type: "number", min: s.minWithdraw, step: "1", placeholder: "Nominal (Rp)", inputmode: "numeric" });
+        const m = modal("Tarik Saldo", h("p", { class: "mut" }, `Saldo tersedia ${rpf(s.available)}. Minimal ${rpf(s.minWithdraw)}.` + (s.withdrawFee ? ` Biaya penarikan ${rpf(s.withdrawFee)}.` : "")),
+            field("Nominal penarikan", amt), h("p", { class: "mut" }, `Dikirim ke ${s.bank ? `${s.bank.bankName} ${s.bank.accountNoMasked} a.n. ${s.bank.accountName}` : "-"}. Diproses manual oleh penjual.`),
+            h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async (ev) => {
+                const b = ev.currentTarget; if (b.disabled) return; b.disabled = true;
+                try { await api("POST", "/api/wallet/withdraw", { amount: Number(amt.value) }); m.close(); toast("Permintaan penarikan dikirim."); again(); }
+                finally { b.disabled = false; }
+            }) }, "Ajukan penarikan"), h("button", { onclick: () => m.close() }, "Batal")));
+    };
+    const canWithdraw = !s.frozen && s.bank && !s.openWithdrawal && s.available >= s.minWithdraw;
+    const why = s.frozen ? "Dibekukan penjual." : !s.bank ? "Isi rekening tujuan dulu." : s.openWithdrawal ? "Masih ada penarikan yang diproses." : s.available < s.minWithdraw ? `Minimal ${rpf(s.minWithdraw)}.` : "";
+
+    const balance = card(h("div", { class: "pay-main" }, h("div", {}, h("span", { class: "mut" }, "Saldo Tersedia"), h("b", { class: "pay-big" }, rpf(s.available))),
+        h("div", {}, h("button", { class: "pri", disabled: !canWithdraw, onclick: withdrawModal }, "Tarik Saldo"), why ? h("div", { class: "mut" }, why) : null)),
+        h("div", { class: "grid" }, stat(`Saldo Tertunda (Hold ${s.holdHours} jam)`, rpf(s.pending), "warnc"), stat("Total Saldo", rpf(s.total)), stat("Sedang Ditarik", rpf(s.locked)),
+            stat("Total Transaksi", fmt(s.totalTx)), stat("Transaksi Berhasil", fmt(s.paidTx), "okc")),
+        h("div", { class: "notice warn mt", role: "note" }, `Setiap pembayaran masuk ditahan selama ${s.holdHours} jam sebelum bisa ditarik. Setelah itu saldo otomatis pindah ke Saldo Tersedia.`));
+
+    const bn = h("input", { placeholder: "Contoh: DANA, BCA", value: "" }), an = h("input", { placeholder: "Nomor rekening / e-wallet", inputmode: "numeric", autocomplete: "off" }), nm = h("input", { placeholder: "Nama pemilik" });
+    const bank = card(h("h2", {}, "Rekening Saya"),
+        s.bank ? h("p", {}, h("b", {}, s.bank.bankName), ` ${s.bank.accountNoMasked} a.n. ${s.bank.accountName}`) : h("p", { class: "mut" }, "Belum ada rekening tujuan."),
+        field("Bank / e-wallet", bn), field("Nomor", an), field("Nama pemilik", nm),
+        h("p", { class: "mut" }, "Mengganti rekening yang sudah ada menahan penarikan selama 24 jam demi keamanan."),
+        h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/wallet/bank", { bankName: bn.value, accountNo: an.value, accountName: nm.value }); toast("Rekening tersimpan."); again(); }) }, s.bank ? "Ganti rekening" : "Simpan rekening")));
+
+    const txRows = tx.transactions.map((t) => h("tr", {}, h("td", { class: "mono" }, t.orderId), h("td", {}, t.discordId || "-"), h("td", {}, rpf(t.amount)),
+        h("td", {}, t.status === "paid" ? rpf(t.net) : "-"), h("td", {}, pillOf(TX_STATUS, t.status)), h("td", {}, when(t.paidAt || t.createdAt))));
+    const txCard = card(h("h2", {}, "Transaksi QRIS"), h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ...["Order", "User Discord", "Nominal", "Masuk saldo", "Status", "Waktu"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, ...(txRows.length ? txRows : [h("tr", {}, h("td", { colspan: "6" }, empty("clipboard", "Belum ada transaksi", "Transaksi QRIS otomatis dari user tokomu akan tampil di sini.")))])))));
+
+    const wdRows = wd.withdrawals.map((w) => h("tr", {}, h("td", {}, when(w.createdAt)), h("td", {}, rpf(w.amount)), h("td", {}, rpf(w.payout)),
+        h("td", {}, w.bank ? `${w.bank.bankName} ${w.bank.accountNoMasked}` : "-"), h("td", {}, pillOf(WD_STATUS, w.status)), h("td", {}, w.reason || w.reference || "")));
+    const wdCard = card(h("h2", {}, "Riwayat penarikan"), h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ...["Diajukan", "Nominal", "Dikirim", "Tujuan", "Status", "Catatan"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, ...(wdRows.length ? wdRows : [h("tr", {}, h("td", { colspan: "6" }, empty("box", "Belum ada penarikan", "Permintaan tarik saldo kamu akan tampil di sini.")))])))));
+
+    return h("div", {}, head("Pembayaran", "QRIS otomatis, saldo, dan penarikan."),
+        s.frozen ? h("div", { class: "notice bad", role: "alert" }, h("b", {}, "Wallet dibekukan."), " Deposit otomatis dan penarikan dinonaktifkan penjual.") : null,
+        s.mock ? h("div", { class: "notice warn", role: "status" }, h("b", {}, "Mode uji coba."), " QRIS di sini palsu dan tidak melibatkan uang sungguhan.") : null,
+        modeCard, balance, bank, txCard, wdCard);
+}
+
 // ---------- router ----------
 const STORE_NAV = [
     ["dashboard", "Dashboard", "dashboard"], ["products", "Products", "package"],
-    ["users", "Users", "users"], ["settings", "Settings", "settings"],
+    ["users", "Users", "users"], ["payments", "Pembayaran", "wallet"], ["settings", "Settings", "settings"],
     ["emojis", "Custom Emoji", "palette"], ["banner", "Custom Banner", "image"],
     ["bot", "Bot & Server", "server"], ["tutorial", "Tutorial Setup", "book"],
     ["subscription", "Subscription", "credit-card"]
@@ -779,7 +848,8 @@ const NAV_ICON_PATHS = {
     book: ['M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22z','M4 4.5v15A2.5 2.5 0 0 1 6.5 17H20','M8 6h8'],
     'credit-card': ['M3 5h18v14H3z','M3 10h18','M7 15h4'],
     sliders: ['M4 21v-7','M4 10V3','M12 21v-9','M12 8V3','M20 21v-5','M20 12V3','M2 14h4','M10 8h4','M18 16h4'],
-    'shopping-bag': ['M5 8h14l1 13H4L5 8Z','M9 8V6a3 3 0 0 1 6 0v2']
+    'shopping-bag': ['M5 8h14l1 13H4L5 8Z','M9 8V6a3 3 0 0 1 6 0v2'],
+    wallet: ['M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z','M3 7l2-3h12v3','M16 13h2']
 };
 function navIcon(name) {
     const ns = "http://www.w3.org/2000/svg";
@@ -791,7 +861,7 @@ function navIcon(name) {
     });
     return h("span", { class: "nav-icon nav-icon-" + name }, svg);
 }
-const VIEWS = { dashboard, products, users, settings, bot, tutorial, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
+const VIEWS = { dashboard, products, users, payments, settings, bot, tutorial, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;

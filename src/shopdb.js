@@ -7,7 +7,6 @@ const conns = new Map(); // licenseId -> { url, client, last }
 const COL = {
     list: "lists", price: "prices", shop: "shops", bal: "bals",
     discount: "discounts", bulk: "bulkdiscounts", wlrate: "wlrates", mt: "mts", api: "apisettings",
-    orders: "orderhistories", // riwayat order, ditulis bot (bot/src/Schema/orderhistory.js)
 };
 
 async function getDb(id, url) {

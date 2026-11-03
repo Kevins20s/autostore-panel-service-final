@@ -4,18 +4,19 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node --env-file=.env server.js",
+    "start": "node server.js",
     "setup": "npm install && npm install --prefix bot && npm install --prefix service",
     "test": "node test/smoke.js",
     "test:shop": "node test/shop.js",
     "test:ui": "node test/ui.js",
-    "test:ui-mock": "node test/ui-mock.js",
     "test:all": "node test/smoke.js && node test/shop.js && node test/ui.js",
-    "test:shared": "node test/shared-tenants.js && node test/shared-tenant-db.js"
+    "test:shared": "node test/shared-tenants.js && node test/shared-tenant-db.js",
+    "test:wallet": "node test/wallet.js && node test/walletapi.js && node test/botcontract.js && node test/walletboot.js && node test/walletui.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "mongodb": "^6.8.0"
+    "mongodb": "^6.8.0",
+    "qrcode": "^1.5.4"
   },
   "engines": {
     "node": ">=20.6"

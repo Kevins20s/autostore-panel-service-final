@@ -18,15 +18,20 @@ const auth = require("./src/auth");
 const { checkDiscord, checkMongo } = require("./src/validate");
 const { Runner } = require("./src/runner");
 const createShopRouter = require("./src/shopapi");
-const { closeConn, getDb, COL } = require("./src/shopdb");
+const { closeConn } = require("./src/shopdb");
 const { MongoClient } = require("mongodb");
+const { createOrders } = require("./src/orders");
+const { createNotifier } = require("./src/notify");
+const registerOrderRoutes = require("./src/ordersapi");
+const { createWalletDb } = require("./src/walletdb");
+const { createAutoko } = require("./src/autoko");
+const { createWallet } = require("./src/wallet");
+const { registerWalletWebhook, registerWalletRoutes, createBotForwarder, internalToken, botHookSecret } = require("./src/walletapi");
 
 const PORT = Number(process.env.PANEL_PORT || process.env.PORT || 8080);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const SKIP_VALIDATE = process.env.SKIP_VALIDATE === "1";
 const DAY = 86400000;
-// Nomor WhatsApp penjual (format internasional tanpa +, contoh 628123456789) untuk tombol perpanjang di panel pembeli.
-const SELLER_WHATSAPP = String(process.env.SELLER_WHATSAPP || "").replace(/\D/g, "");
 
 if (ADMIN_PASSWORD.length < 8) { console.error("ADMIN_PASSWORD wajib diisi (minimal 8 karakter)."); process.exit(1); }
 require("./src/crypto").encrypt({});
@@ -37,11 +42,38 @@ const store = createStore(DATA_FILE);
 const backup = createBackup({ file: DATA_FILE, url: process.env.BACKUP_WEBHOOK_URL });
 const runner = new Runner(
     process.env.BOT_DIR || path.join(__dirname, "bot"),
-    process.env.SERVICE_DIR || path.join(__dirname, "service")
+    process.env.SERVICE_DIR || path.join(__dirname, "service"),
+    {
+        // Bot memanggil panel lewat alamat lokal. Token dan secret diturunkan dari MASTER_KEY per pembeli.
+        extraEnv: (id, type) => type === "service" ? {} : {
+            PANEL_INTERNAL_URL: `http://127.0.0.1:${PORT}`,
+            PANEL_LICENSE_ID: id,
+            PANEL_INTERNAL_TOKEN: internalToken(id),
+            PANEL_WEBHOOK_SECRET: botHookSecret(id),
+        },
+    }
 );
 const licenses = () => store.data.licenses;
 
 const valid = (l) => !l.revoked && l.expiresAt > Date.now();
+
+// ---- Wallet / QRIS otomatis (aktif kalau WALLET_MONGO_URL diisi) ----
+const numEnv = (k, d) => (process.env[k] !== undefined && process.env[k] !== "" && Number.isFinite(Number(process.env[k])) ? Number(process.env[k]) : d);
+const findLicense = (id) => licenses().find((x) => x.id === id);
+const walletDb = createWalletDb();
+const autoko = createAutoko();
+const forwardToBot = createBotForwarder({ findLicense, isRunning: (id) => runner.status(id) === "running" });
+const wallet = walletDb.enabled ? createWallet({
+    getCols: walletDb.getCols, autoko, forwardToBot, notify: createNotifier(), publicUrl: process.env.PUBLIC_URL || "",
+    isFrozen: (id) => !!findLicense(id)?.walletFrozen,
+    holdMs: numEnv("WALLET_HOLD_HOURS", 3) * 3600e3,
+    feePercent: numEnv("WALLET_FEE_PERCENT", 0), feeFlat: numEnv("WALLET_FEE_FLAT", 0),
+    minDeposit: numEnv("WALLET_MIN_DEPOSIT", 1000), maxDeposit: numEnv("WALLET_MAX_DEPOSIT", 5000000),
+    depositTtlMs: numEnv("WALLET_DEPOSIT_TTL_MIN", 15) * 60e3,
+    minWithdraw: numEnv("WALLET_MIN_WITHDRAW", 10000), withdrawFee: numEnv("WALLET_WITHDRAW_FEE", 0),
+    bankCooldownMs: numEnv("WALLET_BANK_COOLDOWN_HOURS", 24) * 3600e3,
+}) : null;
+console.log("[PANEL] Wallet:", wallet ? `aktif (Autoko: ${autoko.mode})` : "nonaktif (isi WALLET_MONGO_URL untuk mengaktifkan)");
 const FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRET = new Set(["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"]);
 const isId = (v) => /^\d{17,20}$/.test(v);
@@ -61,6 +93,18 @@ function newKey(type = "autostore") {
     const g = () => Array.from(crypto.randomBytes(4), (b) => A[b % A.length]).join("");
     const prefix = type === "service" ? "SV" : "AS";
     return `${prefix}-${g()}-${g()}-${g()}-${g()}`;
+}
+
+// Dipakai pesanan web setelah admin konfirmasi. Isinya sama dengan rute admin "buat key".
+function issueLicense(name, type, days, { save = true } = {}) {
+    const key = newKey(type);
+    licenses().push({
+        id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
+        createdAt: Date.now(), expiresAt: Date.now() + days * DAY, revoked: false,
+        port: store.data.nextPort++, config: null, desired: "stopped",
+    });
+    if (save) store.save();
+    return key;
 }
 
 function reconcile(l) {
@@ -97,6 +141,8 @@ app.post("/hook/:id", express.raw({ type: "*/*", limit: "100kb" }), async (req, 
         res.sendStatus(r.status);
     } catch { res.sendStatus(502); }
 });
+
+registerWalletWebhook(app, { wallet, autoko });
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -138,6 +184,14 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
 app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
 
+// ---- Pesanan key lewat web (QRIS manual) ----
+const notifier = createNotifier();
+const ORDER_TTL_MIN = Number(process.env.ORDER_TTL_MIN) > 0 ? Number(process.env.ORDER_TTL_MIN) : 30;
+const orders = createOrders({ store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "" });
+registerOrderRoutes(app, { admin, orders, ttlMin: ORDER_TTL_MIN });
+registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
+console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
+
 app.post("/api/login", (req, res) => {
     if (auth.tooMany(req.ip)) return res.status(429).json({ error: "Terlalu banyak percobaan. Coba lagi 10 menit lagi." });
     const key = String(req.body?.key || "").trim().toUpperCase();
@@ -158,8 +212,8 @@ app.get("/api/me", buyer, (req, res) => {
         buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix,
         expiresAt: l.expiresAt, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
         revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
-        sellerWhatsapp: SELLER_WHATSAPP,
         webhookUrl: `${base}/hook/${l.id}`,
+        walletEnabled: !!wallet, autoAvailable: autoko.enabled, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
         config: {
             clientId: c.clientId || "", ownerId: c.ownerId || "", adminIds: c.adminIds || "",
             guildId: c.guildId || "", paymentUrl: c.paymentUrl || "",
@@ -212,55 +266,6 @@ app.post("/api/bot/start", buyer, botAction("start"));
 app.post("/api/bot/stop", buyer, botAction("stop"));
 app.post("/api/bot/restart", buyer, botAction("restart"));
 app.get("/api/logs", buyer, (req, res) => res.json({ lines: runner.logs(req.lic.id).slice(-100) }));
-
-// ---------- Checklist setup & IP server ----------
-// IP publik server untuk whitelist MongoDB Atlas. Bisa dipaksa lewat SERVER_IP (mis. kalau memakai proxy / IP tetap).
-let ipCache = { ip: "", at: 0 };
-async function serverIp() {
-    const forced = String(process.env.SERVER_IP || "").trim();
-    if (forced) return { ip: forced, source: "env" };
-    if (ipCache.ip && Date.now() - ipCache.at < 6 * 3600e3) return { ip: ipCache.ip, source: "auto" };
-    for (const url of ["https://api.ipify.org", "https://ifconfig.me/ip"]) {
-        try {
-            const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
-            const t = (await r.text()).trim();
-            if (r.ok && /^[0-9a-f:.]{7,45}$/i.test(t)) { ipCache = { ip: t, at: Date.now() }; return { ip: t, source: "auto" }; }
-        } catch { /* coba alamat berikutnya */ }
-    }
-    return { ip: ipCache.ip, source: "auto" };
-}
-app.get("/api/server-info", buyer, wrap(async (req, res) => res.json(await serverIp())));
-
-// Apakah bot sudah masuk ke server Discord? Dicek lewat Discord API memakai token pembeli (di-cache 30 detik).
-const guildCache = new Map();
-async function botInGuild(licId, token, guildId) {
-    const th = sha256(token + "|" + (guildId || ""));
-    const hit = guildCache.get(licId);
-    if (hit && hit.th === th && Date.now() - hit.at < 30000) return hit.v;
-    let v = null;
-    try {
-        const r = await fetch("https://discord.com/api/v10/users/@me/guilds?limit=100", {
-            headers: { Authorization: `Bot ${token}` }, signal: AbortSignal.timeout(6000),
-        });
-        if (r.ok) { const g = await r.json(); v = guildId ? g.some((x) => String(x.id) === String(guildId)) : g.length > 0; }
-    } catch { /* tidak bisa dicek -> null */ }
-    guildCache.set(licId, { th, at: Date.now(), v });
-    return v;
-}
-app.get("/api/setup-status", buyer, wrap(async (req, res) => {
-    const l = req.lic;
-    const c = l.config ? decrypt(l.config) : {};
-    const out = {
-        type: l.type || "autostore", token: !!c.botToken, mongo: !!c.mongoUrl,
-        invited: null, botRunning: runner.status(l.id) === "running", products: null,
-    };
-    if (c.botToken && !SKIP_VALIDATE) out.invited = await botInGuild(l.id, c.botToken, c.guildId);
-    if (l.type !== "service" && c.mongoUrl && valid(l)) {
-        try { out.products = await (await getDb(l.id, c.mongoUrl)).collection(COL.list).countDocuments(); }
-        catch { out.products = null; }
-    }
-    res.json(out);
-}));
 
 const SERVICE_DEFS = {
     "PLANT": { label: "PLANT", unit: "World", defaultPrice: 30 },
@@ -393,13 +398,9 @@ app.post("/api/admin/login", (req, res) => {
     res.json({ ok: true });
 });
 
-app.post("/api/admin/logout", (req, res) => { auth.clearSession(res); res.json({ ok: true }); });
-
-const cleanContact = (v) => String(v || "").trim().slice(0, 80);
 const row = (l) => ({
-    id: l.id, buyer: l.buyer, contact: l.contact || "", type: l.type || "autostore", keyPrefix: l.keyPrefix,
-    createdAt: l.createdAt || 0, expiresAt: l.expiresAt, revoked: l.revoked,
-    configured: !!l.config, bot: runner.status(l.id),
+    id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked,
+    configured: !!l.config, bot: runner.status(l.id), walletFrozen: !!l.walletFrozen, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
 });
 app.get("/api/admin/licenses", admin, (req, res) => res.json({ licenses: licenses().map(row) }));
 
@@ -410,7 +411,7 @@ app.post("/api/admin/licenses", admin, (req, res) => {
     const type = req.body?.type === "service" ? "service" : "autostore";
     const key = newKey(type);
     licenses().push({
-        id: crypto.randomBytes(8).toString("hex"), buyer: name, contact: cleanContact(req.body?.contact), type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
+        id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
         createdAt: Date.now(), expiresAt: Date.now() + days * DAY, revoked: false,
         port: store.data.nextPort++, config: null, desired: "stopped",
     });
@@ -423,16 +424,6 @@ const find = (req, res) => {
     if (!l) res.status(404).json({ error: "Tidak ditemukan." });
     return l;
 };
-app.put("/api/admin/licenses/:id", admin, (req, res) => {
-    const l = find(req, res); if (!l) return;
-    if (typeof req.body?.buyer === "string") {
-        const name = req.body.buyer.trim().slice(0, 60);
-        if (!name) return res.status(400).json({ error: "Nama pembeli tidak boleh kosong." });
-        l.buyer = name;
-    }
-    if (typeof req.body?.contact === "string") l.contact = cleanContact(req.body.contact);
-    store.save(); res.json({ ok: true });
-});
 app.post("/api/admin/licenses/:id/extend", admin, (req, res) => {
     const l = find(req, res); if (!l) return;
     const days = Math.min(3650, Math.max(1, Math.floor(Number(req.body?.days) || 30)));
@@ -446,6 +437,12 @@ app.post("/api/admin/licenses/:id/revoke", admin, (req, res) => {
 });
 app.delete("/api/admin/licenses/:id", admin, wrap(async (req, res) => {
     const l = find(req, res); if (!l) return;
+    if (wallet) {
+        // Gagal-aman: kalau saldo tidak bisa dicek, jangan hapus.
+        let owed;
+        try { owed = await wallet.balanceOf(l.id); } catch { return res.status(503).json({ error: "Saldo wallet tidak bisa dicek sekarang, coba lagi." }); }
+        if (owed > 0) return res.status(409).json({ error: `Pembeli ini masih punya saldo wallet Rp${owed.toLocaleString("id-ID")}. Selesaikan penarikannya dulu.` });
+    }
     await runner.stop(l.id);
     closeConn(l.id);
     store.data.licenses = licenses().filter((x) => x !== l);
@@ -461,6 +458,11 @@ app.use((err, req, res, next) => {
 
 const WATCH_MS = Number(process.env.WATCH_MS || 60000);
 setInterval(() => licenses().forEach(reconcile), WATCH_MS).unref();
+if (wallet) {
+    // Saat start: hitung ulang saldo dari ledger (menyembuhkan sisa proses yang terputus), lalu rutin tiap menit.
+    setTimeout(() => wallet.reconcile(null, { fix: true }).then((d) => d.length && console.warn("[WALLET] saldo dikoreksi dari ledger:", JSON.stringify(d))).catch((e) => console.error("[WALLET] reconcile:", e.message)), 5000).unref();
+    setInterval(() => wallet.sweep().catch((e) => console.error("[WALLET] sweep:", e.message)), numEnv("WALLET_SWEEP_MS", 60000)).unref();
+}
 if (backup.enabled()) backup.schedule(process.env.BACKUP_EVERY_HOURS);
 if (backup.enabled()) setTimeout(() => backup.send("server start").catch((e) => console.error("[BACKUP]", e.message)), 15000).unref();
 licenses().forEach(reconcile);
@@ -482,6 +484,7 @@ async function shutdown() {
     setTimeout(() => process.exit(1), 10000).unref();
     server.close();
     try { await Promise.all(licenses().map((l) => runner.stop(l.id))); } catch (e) { console.error(e); }
+    await walletDb.close();
     process.exit(0);
 }
 process.on("SIGINT", shutdown);

@@ -6,6 +6,7 @@
   var cur = null;        // { id, token }
   var order = null;      // data pesanan terakhir dari server
   var poll = null, tick = null, packages = [], chosen = "autostore";
+  var lastQrPng = null;  // cache: QR PNG dari response sebelumnya (untuk re-render)
 
   function rp(n) { return "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
   function show(id) { STATES.forEach(function (s) { $(s).classList.toggle("hide", s !== id); }); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -30,12 +31,39 @@
 
   function fmtTimer(ms) { if (ms < 0) ms = 0; var s = Math.floor(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
 
+  function setQrImage(o) {
+    var img = $("qrImg");
+    var isAuto = o.provider === "autoko";
+    var png = o.qrPngBase64 || lastQrPng;
+    if (isAuto && png) {
+      img.src = "data:image/png;base64," + png;
+      $("qrDl").href = img.src;
+      $("qrDl").setAttribute("download", "QRIS-" + (o.code || "order") + ".png");
+      lastQrPng = png;
+    } else if (isAuto && o.qrImageUrl) {
+      img.src = o.qrImageUrl;
+      $("qrDl").href = o.qrImageUrl;
+      $("qrDl").setAttribute("download", "QRIS-" + (o.code || "order") + ".png");
+    } else {
+      img.src = "/qris.png";
+      $("qrDl").href = "/qris.png";
+      $("qrDl").setAttribute("download", "QRIS-GevraStore.png");
+    }
+  }
+
   function render(o) {
     order = o; stop();
     if (o.status === "pending") {
       $("payAmount").textContent = rp(o.amount); $("payAmount2").textContent = rp(o.amount); $("payCode").textContent = o.code;
+      setQrImage(o);
+      var isAuto = o.provider === "autoko";
+      $("stepAction").textContent = isAuto
+        ? "Key muncul otomatis di halaman ini begitu pembayaran terverifikasi, tanpa perlu menekan apa pun."
+        : "Kembali ke sini dan tekan tombol di bawah.";
+      $("btnPaid").style.display = isAuto ? "none" : "";
       var upd = function () { var left = o.expiresAt - Date.now(); $("payTimer").textContent = fmtTimer(left); if (left <= 0) refresh(); };
-      upd(); tick = setInterval(upd, 1000); poll = setInterval(refresh, 10000);
+      upd(); tick = setInterval(upd, 1000);
+      poll = setInterval(refresh, isAuto ? 3000 : 10000);
       show("stPay");
     } else if (o.status === "claimed") {
       $("waitCode").textContent = o.code; $("waitAmount").textContent = rp(o.amount);
@@ -50,6 +78,8 @@
       }
     } else if (o.status === "rejected") {
       end("Pesanan tidak dilanjutkan", "Pembayaranmu belum bisa diverifikasi. Kalau kamu sudah membayar, hubungi penjual dan sebutkan kode pesanan " + o.code + ".");
+    } else if (o.status === "mismatch" || o.status === "paid_unfulfilled") {
+      end("Pembayaran diterima, key sedang disiapkan", "Kamu sudah bayar, tapi key belum terbit otomatis. Hubungi penjual dan sebutkan kode pesanan " + o.code + ". Biasanya selesai dalam beberapa menit.");
     } else {
       end("Pesanan kedaluwarsa", "Batas waktu pembayaran sudah lewat. Kalau kamu sudah terlanjur membayar, hubungi penjual dan sebutkan kode pesanan " + o.code + ". Kalau belum, buat pesanan baru.");
     }
@@ -62,7 +92,7 @@
     catch (e) { if (e.status === 404) { reset(); } }
   }
 
-  function reset() { stop(); cur = null; order = null; lsSet(null); history.replaceState(null, "", location.pathname); show("stForm"); }
+  function reset() { stop(); cur = null; order = null; lastQrPng = null; lsSet(null); history.replaceState(null, "", location.pathname); show("stForm"); }
 
   function renderPkgs() {
     var box = $("pkgs"); box.replaceChildren();
@@ -83,7 +113,9 @@
     var b = $("btnOrder"); msg("formMsg", ""); b.disabled = true; var old = b.textContent; b.textContent = "Memproses...";
     try {
       var r = await api("POST", "/api/orders", { type: chosen, name: $("fName").value, contact: $("fContact").value });
-      cur = { id: r.order.id, token: r.token }; lsSet(cur); history.replaceState(null, "", "#" + cur.id + "." + cur.token); render(r.order);
+      cur = { id: r.order.id, token: r.token };
+      lastQrPng = r.order.qrPngBase64 || null;
+      lsSet(cur); history.replaceState(null, "", "#" + cur.id + "." + cur.token); render(r.order);
     } catch (e) { msg("formMsg", e.message); }
     b.disabled = false; b.textContent = old;
   });
@@ -105,7 +137,12 @@
     var m = /^#([0-9a-f]{12})\.([0-9a-f]{48})$/.exec(location.hash), saved = lsGet();
     cur = m ? { id: m[1], token: m[2] } : (saved && saved.id && saved.token ? saved : null);
     if (cur) {
-      try { var r = await api("GET", "/api/orders/" + encodeURIComponent(cur.id), null, cur.token); lsSet(cur); history.replaceState(null, "", "#" + cur.id + "." + cur.token); render(r.order); return; }
+      try {
+        var r = await api("GET", "/api/orders/" + encodeURIComponent(cur.id), null, cur.token);
+        lsSet(cur); history.replaceState(null, "", "#" + cur.id + "." + cur.token);
+        render(r.order);
+        return;
+      }
       catch (e) { cur = null; lsSet(null); }
     }
     show("stForm");

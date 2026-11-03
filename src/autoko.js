@@ -101,7 +101,7 @@ function createAutoko(env = process.env) {
     async function call(p, body) {
         let r;
         try {
-            r = await fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000) });
+            r = await fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(35000) });
         } catch (e) {
             console.error("[AUTOKO] gateway tidak bisa dihubungi:", e.name === "TimeoutError" ? "waktu habis" : e.message);
             throw new AutokoError("Pembayaran otomatis sedang gangguan. Coba lagi sebentar lagi.", 503);

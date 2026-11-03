@@ -20,7 +20,7 @@ async function requestAutoDeposit({ amount, discordId }) {
                 Authorization: `Bearer ${config.PanelInternalToken}`,
             },
             body: JSON.stringify({ amount, discordId }),
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(40000),
         });
     } catch (err) {
         console.error("[PANEL] Gagal menghubungi panel:", err.message);

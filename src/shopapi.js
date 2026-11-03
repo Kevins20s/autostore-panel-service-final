@@ -7,6 +7,17 @@ const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
 const num = (v) => (typeof v === "number" ? v : Number(String(v ?? "").trim().replace(",", ".")));
 const okNum = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// Zona waktu untuk "hari ini" dan grafik per hari (bisa diubah lewat STORE_TZ).
+let TZ = process.env.STORE_TZ || "Asia/Jakarta";
+try { new Intl.DateTimeFormat("en-CA", { timeZone: TZ }); } catch { TZ = "Asia/Jakarta"; }
+const dayKey = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d); // YYYY-MM-DD
+const LOW_STOCK = 5; // produk dengan stok sebanyak ini atau kurang dianggap hampir habis
+
+// Bot menyimpan diskon sebagai pecahan (0.15 = 15%). Data lama dari panel versi sebelumnya
+// tersimpan sebagai persen utuh (15), jadi nilai di atas 1 dianggap persen.
+const discToPercent = (v) => (v == null ? null : v > 1 ? v : round2(v * 100));
 
 module.exports = function createShopRouter({ valid, decrypt }) {
     const r = express.Router();
@@ -39,6 +50,75 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         res.json({ products, stock, users, sold: sold[0]?.t || 0, balance: bal[0]?.t || 0, maintenance: !!mt?.mt });
     }));
 
+    // ---------- dashboard & riwayat order ----------
+    async function salesByDay(req, days) {
+        const since = new Date(Date.now() - (days + 1) * 86400000);
+        const rows = await c(req, "orders").aggregate([
+            { $match: { createdAt: { $gte: since } } },
+            { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: TZ } }, orders: { $sum: 1 }, qty: { $sum: "$qty" }, revenue: { $sum: "$total" } } },
+        ]).toArray();
+        const by = new Map(rows.map((x) => [x._id, x]));
+        const out = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const date = dayKey(new Date(Date.now() - i * 86400000)), x = by.get(date) || {};
+            out.push({ date, orders: x.orders || 0, qty: x.qty || 0, revenue: round2(x.revenue) });
+        }
+        return out;
+    }
+
+    r.get("/dashboard", wrap(async (req, res) => {
+        const [lists, prices, stocks, tracked, days] = await Promise.all([
+            c(req, "list").find({}).project({ code: 1, name: 1, sold: 1, type: 1 }).toArray(),
+            c(req, "price").find({}).toArray(),
+            c(req, "shop").aggregate([{ $group: { _id: "$code", n: { $sum: 1 } } }]).toArray(),
+            c(req, "orders").estimatedDocumentCount(),
+            salesByDay(req, 14),
+        ]);
+        const priceBy = Object.fromEntries(prices.map((p) => [p.code, p.price]));
+        const stockBy = Object.fromEntries(stocks.map((s) => [s._id, s.n]));
+        const lowStock = lists
+            .map((p) => ({ code: p.code, name: p.name, type: p.type, stock: stockBy[p.code] || 0, price: priceBy[p.code] ?? null }))
+            .filter((p) => p.stock <= LOW_STOCK)
+            .sort((a, b) => a.stock - b.stock || a.code.localeCompare(b.code))
+            .slice(0, 10);
+        const topProducts = lists
+            .filter((p) => (p.sold || 0) > 0)
+            .sort((a, b) => (b.sold || 0) - (a.sold || 0))
+            .slice(0, 5)
+            .map((p) => ({ code: p.code, name: p.name, sold: p.sold || 0 }));
+        const today = days[days.length - 1];
+        res.json({
+            tracked: tracked > 0, tz: TZ, salesByDay: days, today: { orders: today.orders, revenue: today.revenue },
+            totals: { orders: days.reduce((a, d) => a + d.orders, 0), revenue: round2(days.reduce((a, d) => a + d.revenue, 0)) },
+            topProducts, lowStock, lowStockLimit: LOW_STOCK,
+        });
+    }));
+
+    r.get("/orders", wrap(async (req, res) => {
+        const q = String(req.query.q || "").trim().slice(0, 50);
+        const skip = Math.max(0, Math.floor(Number(req.query.skip)) || 0);
+        const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit)) || 20));
+        const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+        const or = [{ growId: rx }, { discordId: rx }, { username: rx }, { code: rx }, { productName: rx }];
+        if (/^\d{1,9}$/.test(q)) or.push({ orderNumber: Number(q) });
+        const filter = q ? { $or: or } : {};
+        const [total, rows, all, days] = await Promise.all([
+            c(req, "orders").countDocuments(filter),
+            c(req, "orders").find(filter).sort({ createdAt: -1, orderNumber: -1 }).skip(skip).limit(limit).toArray(),
+            c(req, "orders").aggregate([{ $group: { _id: null, n: { $sum: 1 }, qty: { $sum: "$qty" }, revenue: { $sum: "$total" } } }]).toArray(),
+            salesByDay(req, 1),
+        ]);
+        res.json({
+            total, tz: TZ,
+            stats: { orders: all[0]?.n || 0, qty: all[0]?.qty || 0, revenue: round2(all[0]?.revenue), today: { orders: days[0].orders, revenue: days[0].revenue } },
+            orders: rows.map((o) => ({
+                orderNumber: o.orderNumber ?? null, discordId: o.discordId || "", username: o.username || "", growId: o.growId || "",
+                code: o.code || "", product: o.productName || o.code || "", qty: o.qty || 0, total: round2(o.total),
+                createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : null,
+            })),
+        });
+    }));
+
     // ---------- produk ----------
     r.get("/products", wrap(async (req, res) => {
         const [lists, prices, stocks, discs, bulks, rate, api] = await Promise.all([
@@ -51,7 +131,7 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         ]);
         const priceBy = Object.fromEntries(prices.map((p) => [p.code, p.price]));
         const stockBy = Object.fromEntries(stocks.map((s) => [s._id, s.n]));
-        const discBy = Object.fromEntries(discs.map((d) => [d.code, d.discount]));
+        const discBy = Object.fromEntries(discs.map((d) => [d.code, discToPercent(d.discount)]));
         res.json({
             rate: { pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true },
             products: lists.map((p) => ({
@@ -123,7 +203,8 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         if (!(await needPrice(req, res))) return;
         const d = num(req.body?.discount);
         if (!okNum(d, 1, 100)) return fail(res, "Diskon harus 1 sampai 100 (%).");
-        await c(req, "discount").updateOne({ code: req.params.code }, { $set: { code: req.params.code, discount: d } }, { upsert: true });
+        // Disimpan sebagai pecahan (15% -> 0.15), sama seperti /setdiscount di bot.
+        await c(req, "discount").updateOne({ code: req.params.code }, { $set: { code: req.params.code, discount: Number((d / 100).toFixed(6)) } }, { upsert: true });
         res.json({ ok: true });
     }));
     r.delete("/products/:code/discount", wrap(async (req, res) => {
@@ -160,15 +241,25 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         const text = String(req.body?.text ?? "");
         // Script selalu satu stok utuh. Impor file bisa memilih mode per baris;
         // input manual tetap mendukung pemisahan whitespace seperti versi sebelumnya.
-        const items = String(prod.type).includes("script")
+        let items = String(prod.type).includes("script")
             ? [text.trim()].filter(Boolean)
             : req.body?.lineMode === true
                 ? text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
                 : text.split(/\s+/).filter(Boolean);
         if (!items.length) return fail(res, "Tidak ada isi stok.");
         if (items.length > 5000) return fail(res, "Maksimal 5000 item sekali tambah.");
+        // Opsi buang duplikat: duplikat di dalam input dan item yang sudah ada di stok produk ini dilewati.
+        let skipped = 0;
+        if (req.body?.dedupe === true) {
+            const before = items.length;
+            items = [...new Set(items)];
+            const have = new Set((await c(req, "shop").find({ code, data: { $in: items } }).project({ data: 1 }).toArray()).map((x) => x.data));
+            items = items.filter((x) => !have.has(x));
+            skipped = before - items.length;
+            if (!items.length) return fail(res, `Semua ${before} item sudah ada di stok (duplikat), tidak ada yang ditambahkan.`);
+        }
         await c(req, "shop").insertMany(items.map((data) => ({ code, data, __v: 0 })), { ordered: false });
-        res.json({ ok: true, added: items.length });
+        res.json({ ok: true, added: items.length, skipped });
     }));
 
     r.delete("/products/:code/stock", wrap(async (req, res) => {

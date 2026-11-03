@@ -1,53 +1,37 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GevraStore Admin</title><meta name="theme-color" content="#080b12"><meta name="robots" content="noindex,nofollow"><link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css"><script src="/ui-extras.js"></script></head>
-<body class="adm"><main class="adm-main">
-<header class="adm-head">
-  <div class="adm-logo"><img src="/logo.png" alt="" width="48" height="48"></div>
-  <div><h1>GevraStore Admin</h1><p class="mut">Kelola key pembeli, backup, dan masa aktif.</p></div>
-</header>
-<section id="login" class="card adm-login hide">
-  <h2>Masuk admin</h2><p class="mut">Masukkan password admin untuk melanjutkan.</p>
-  <div class="adm-pw"><input id="pw" type="password" placeholder="Password admin" autocomplete="current-password"></div>
-  <div class="row" style="margin-top:12px"><button class="pri" id="btnLogin">Masuk</button></div><div id="loginMsg" class="msg"></div>
+<title>GevraStore Admin</title><link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css"></head>
+<body class="admin"><main class="admin-main">
+<div class="admin-top">
+  <h1>GevraStore Admin</h1>
+  <button id="btnLogout" class="hide" type="button">Keluar</button>
+</div>
+<section id="login" class="card hide">
+  <h2>Masuk admin</h2><input id="pw" type="password" placeholder="Password admin" aria-label="Password admin">
+  <div class="row mt"><button class="pri" id="btnLogin">Masuk</button></div><div id="loginMsg" class="msg" role="alert"></div>
 </section>
 <section id="dash" class="hide">
-  <div class="adm-stats">
-    <div class="adm-stat"><span class="mut">Total pembeli</span><b id="stTotal">0</b></div>
-    <div class="adm-stat pend"><span class="mut">Pesanan menunggu</span><b id="stPending">0</b></div>
-    <div class="adm-stat pend hide" id="stWdBox"><span class="mut">Penarikan menunggu</span><b id="stWd">0</b></div>
-    <div class="adm-stat ok"><span class="mut">Aktif</span><b id="stActive">0</b></div>
-    <div class="adm-stat warn"><span class="mut">Hampir habis (7 hari)</span><b id="stSoon">0</b></div>
-    <div class="adm-stat bad"><span class="mut">Habis / dicabut</span><b id="stDead">0</b></div>
-  </div>
-  <div class="card"><h2>Pesanan masuk <span class="adm-count hide" id="ordCount"></span></h2>
-    <p class="mut">Pembeli membayar lewat QRIS di <b>/beli</b>. Cek mutasi DANA, cocokkan nominalnya (termasuk 3 angka terakhir), lalu tekan <b>Konfirmasi</b> untuk membuat key otomatis.</p>
-    <div id="orderKey" class="hide adm-newkey"><p class="mut" id="orderKeyNote">Key dibuat:</p><div class="adm-keyrow"><div class="key" id="orderKeyText"></div><button type="button" class="pri" id="btnCopyOrderKey">Salin key</button></div></div>
-    <div class="adm-table"><table><thead><tr><th>Kode</th><th>Paket</th><th>Nominal</th><th>Pembeli</th><th>Status</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></div>
-    <p id="emptyOrders" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pesanan.</p>
-  </div>
-  <div class="card hide" id="walletCard"><h2>Penarikan saldo pembeli <span class="adm-count hide" id="wdCount"></span></h2>
-    <p class="mut" id="walletInfo"></p>
-    <div class="adm-table"><table><thead><tr><th>Pembeli</th><th>Dikirim</th><th>Ke rekening</th><th>Diajukan</th><th></th></tr></thead><tbody id="wdRows"></tbody></table></div>
-    <p id="emptyWd" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada permintaan penarikan.</p>
-    <div class="row" style="margin-top:12px"><button type="button" id="btnReconcile">Cek konsistensi saldo</button></div>
-    <div id="mockBox" class="row hide" style="margin-top:12px"><input id="mockOrder" placeholder="Order ID (DP-…) untuk simulasi bayar" style="flex:2"><button type="button" id="btnMockPay">Simulasi bayar (uji coba)</button></div>
-    <div id="wdMsg" class="msg"></div>
-  </div>
   <div class="card"><h2>Buat key baru</h2>
-    <div class="row adm-new"><input id="buyer" placeholder="Nama pembeli" style="flex:2"><select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option><option value="service">AutoStore Service</option></select><input id="days" type="number" value="30" min="1" style="flex:1" aria-label="Lama (hari)"><button class="pri" id="btnNew">Buat</button></div>
+    <div class="row new-row">
+      <input id="buyer" placeholder="Nama pembeli" aria-label="Nama pembeli" style="flex:2">
+      <input id="contact" placeholder="Kontak (WA / Discord)" aria-label="Kontak pembeli" style="flex:2">
+      <select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option><option value="service">AutoStore Service</option></select>
+      <input id="days" type="number" value="30" min="1" aria-label="Durasi (hari)" style="flex:1">
+      <button class="pri" id="btnNew">Buat</button>
+    </div>
     <div id="newMsg" class="msg"></div>
-    <div id="newKey" class="hide adm-newkey"><p class="mut">Salin sekarang, key ini tidak akan ditampilkan lagi:</p><div class="adm-keyrow"><div class="key" id="keyText"></div><button type="button" class="pri" id="btnCopyKey">Salin key</button></div></div>
-  </div>
-  <div class="card"><h2>Daftar pembeli</h2>
-    <div class="adm-search"><input id="q" type="search" placeholder="Cari nama pembeli atau awalan key…" autocomplete="off"></div>
-    <div class="adm-table"><table><thead><tr><th>Pembeli</th><th>Mode</th><th>Key</th><th>Masa aktif</th><th>Bot</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
-    <p id="emptyRows" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pembeli yang cocok.</p>
+    <div id="newKey" class="hide"><p class="mut">Salin sekarang, key ini tidak akan ditampilkan lagi:</p><div class="key" id="keyText"></div><div class="row mt"><button id="btnCopyKey" type="button" class="sm">Salin key</button></div></div>
   </div>
   <div class="card"><h2>Backup data</h2>
     <p class="mut">Data pembeli disimpan di data.json. Backup otomatis dikirim ke Discord tiap 12 jam dan setiap server menyala (isi BACKUP_WEBHOOK_URL di Railway). Untuk pindah server, tekan Restore dan pilih file data.json.</p>
     <div class="row"><a href="/api/admin/backup" download="data.json"><button class="pri" type="button">Download data.json</button></a><button id="btnSend" type="button">Kirim ke Discord sekarang</button><button id="btnRestore" class="bad" type="button">Restore dari file</button><input id="fileRestore" type="file" accept=".json,application/json" class="hide"></div>
     <div id="bkMsg" class="msg"></div>
   </div>
+  <div class="card"><h2>Daftar pembeli</h2>
+    <div id="summary" class="admin-summary"></div>
+    <div class="toolbar"><input id="search" type="search" class="search" placeholder="Cari nama, kontak, atau awal key" aria-label="Cari pembeli" autocomplete="off"></div>
+    <div class="tbl"><table><thead><tr><th>Pembeli</th><th>Kontak</th><th>Mode</th><th>Key</th><th>Habis</th><th>Bot</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <p id="emptyRows" class="mut hide mt"></p>
+  </div>
 </section>
-</main><script src="/admin.js"></script></body></html>
+</main><div id="toast"></div><script src="/ui.js"></script><script src="/admin.js"></script></body></html>

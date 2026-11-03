@@ -44,7 +44,6 @@ const runner = new Runner(
     process.env.BOT_DIR || path.join(__dirname, "bot"),
     process.env.SERVICE_DIR || path.join(__dirname, "service"),
     {
-        // Bot memanggil panel lewat alamat lokal. Token dan secret diturunkan dari MASTER_KEY per pembeli.
         extraEnv: (id, type) => type === "service" ? {} : {
             PANEL_INTERNAL_URL: `http://127.0.0.1:${PORT}`,
             PANEL_LICENSE_ID: id,
@@ -142,6 +141,48 @@ app.post("/hook/:id", express.raw({ type: "*/*", limit: "100kb" }), async (req, 
     } catch { res.sendStatus(502); }
 });
 
+// ---- Webhook Autoko (QRIS): melayani deposit wallet ("DP-…") DAN pembelian key ----
+app.post("/hook-autoko", express.raw({ type: "*/*", limit: "100kb" }), async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.sendStatus(400);
+    let ev;
+    try { ev = autoko.verifyWebhook(req.body, req.headers); }
+    catch (e) {
+        if (e.status === 401) console.warn("[AUTOKO] webhook signature tidak valid");
+        return res.sendStatus(e.status === 401 ? 401 : e.status === 503 ? 503 : 400);
+    }
+    if (!ev.paid) return res.sendStatus(200); // belum dibayar: ack
+
+    // 1) Deposit wallet end-user
+    if (String(ev.orderId).startsWith("DP-")) {
+        if (!wallet) return res.sendStatus(200);
+        try {
+            const r = await wallet.handlePaid({ orderId: ev.orderId, amount: ev.amount, providerRef: ev.providerRef }, { background: true });
+            if (!r.ok && r.reason === "unknown_order") console.warn("[WALLET] webhook order tak dikenal:", ev.orderId);
+            return res.sendStatus(200);
+        } catch (e) {
+            console.error("[WALLET] gagal memproses webhook:", e.message);
+            return res.sendStatus(500);
+        }
+    }
+
+    // 2) Order beli key. Cocokkan via providerRef (gateway) dulu, fallback ke orderId.
+    try {
+        const o = (autoko && autoko.mode !== "off") ? null : null; // noop; hanya untuk kejelasan
+        const orderDoc = orders ? (orders.findByAutokoId(ev.providerRef) || orders.findById(ev.orderId)) : null;
+        if (!orderDoc) {
+            console.warn("[ORDERS] webhook Autoko tidak cocok ke order mana pun:", ev.providerRef);
+            return res.sendStatus(200);
+        }
+        const r = orders.handlePaidPayment(orderDoc.id, { amount: ev.amount });
+        if (!r.ok) console.warn(`[ORDERS] ${orderDoc.id} pembayaran diterima tapi fulfill gagal: ${r.reason}`);
+        return res.sendStatus(200);
+    } catch (e) {
+        console.error("[ORDERS] gagal proses webhook:", e.message);
+        return res.sendStatus(500);
+    }
+});
+
+// Fungsi ini sekarang no-op, tapi tetap dipanggil supaya kompatibilitas import terjaga.
 registerWalletWebhook(app, { wallet, autoko });
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -184,11 +225,11 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
 app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
 
-// ---- Pesanan key lewat web (QRIS manual) ----
+// ---- Pesanan key lewat web ----
 const notifier = createNotifier();
 const ORDER_TTL_MIN = Number(process.env.ORDER_TTL_MIN) > 0 ? Number(process.env.ORDER_TTL_MIN) : 30;
 const orders = createOrders({ store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "" });
-registerOrderRoutes(app, { admin, orders, ttlMin: ORDER_TTL_MIN });
+registerOrderRoutes(app, { admin, orders, autoko, ttlMin: ORDER_TTL_MIN });
 registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
@@ -327,8 +368,6 @@ app.get("/api/service/orders", buyer, wrap(async (req, res) => {
     res.json(result);
 }));
 
-// ---------- Custom Emoji (AutoStore + AutoStore Service) ----------
-// Kedua nama endpoint didukung agar frontend lama maupun Service sama-sama kompatibel.
 function emojiConfig(l) {
     const isService = l.type === "service";
     const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
@@ -459,7 +498,6 @@ app.use((err, req, res, next) => {
 const WATCH_MS = Number(process.env.WATCH_MS || 60000);
 setInterval(() => licenses().forEach(reconcile), WATCH_MS).unref();
 if (wallet) {
-    // Saat start: hitung ulang saldo dari ledger (menyembuhkan sisa proses yang terputus), lalu rutin tiap menit.
     setTimeout(() => wallet.reconcile(null, { fix: true }).then((d) => d.length && console.warn("[WALLET] saldo dikoreksi dari ledger:", JSON.stringify(d))).catch((e) => console.error("[WALLET] reconcile:", e.message)), 5000).unref();
     setInterval(() => wallet.sweep().catch((e) => console.error("[WALLET] sweep:", e.message)), numEnv("WALLET_SWEEP_MS", 60000)).unref();
 }

@@ -1,3 +1,6 @@
+// Baca .env lebih dulu (aman kalau file tidak ada, variabel dari hosting tidak ditimpa).
+require("./src/loadenv").loadEnv();
+
 // DNS publik untuk pengecekan MongoDB (mongodb+srv). Isi di .env, contoh: DNS_SERVERS=8.8.8.8,1.1.1.1
 // Harus dijalankan paling awal, sebelum modul lain memakai DNS.
 if (process.env.DNS_SERVERS) {
@@ -20,7 +23,9 @@ const { Runner } = require("./src/runner");
 const createShopRouter = require("./src/shopapi");
 const { closeConn } = require("./src/shopdb");
 const { MongoClient } = require("mongodb");
-const { createOrders } = require("./src/orders");
+const { createOrders, OrderError } = require("./src/orders");
+const { createTurnstile } = require("./src/turnstile");
+const { createWalletBackup } = require("./src/walletbackup");
 const { createNotifier } = require("./src/notify");
 const registerOrderRoutes = require("./src/ordersapi");
 const { createWalletDb } = require("./src/walletdb");
@@ -44,11 +49,18 @@ const runner = new Runner(
     process.env.BOT_DIR || path.join(__dirname, "bot"),
     process.env.SERVICE_DIR || path.join(__dirname, "service"),
     {
+        // Bot memanggil panel lewat alamat lokal. Token dan secret diturunkan dari MASTER_KEY per pembeli.
         extraEnv: (id, type) => type === "service" ? {} : {
             PANEL_INTERNAL_URL: `http://127.0.0.1:${PORT}`,
             PANEL_LICENSE_ID: id,
             PANEL_INTERNAL_TOKEN: internalToken(id),
             PANEL_WEBHOOK_SECRET: botHookSecret(id),
+        },
+        // Bot pembeli menyerah setelah crash berulang: kabari kamu lewat Telegram/ntfy/Discord (kalau notifikasi diaktifkan).
+        onCrash: (id) => {
+            const l = licenses().find((x) => x.id === id);
+            const url = process.env.PUBLIC_URL ? process.env.PUBLIC_URL.replace(/\/+$/, "") + "/admin.html" : "";
+            return notifier({ title: "Bot pembeli crash", text: ["⚠️ Bot pembeli berhenti (crash berulang)", `Pembeli: ${l ? l.buyer : id}`, "Minta pembeli cek Bot & Server (token / MongoDB), lalu Start lagi.", url].filter(Boolean).join("\n"), url });
         },
     }
 );
@@ -73,6 +85,7 @@ const wallet = walletDb.enabled ? createWallet({
     bankCooldownMs: numEnv("WALLET_BANK_COOLDOWN_HOURS", 24) * 3600e3,
 }) : null;
 console.log("[PANEL] Wallet:", wallet ? `aktif (Autoko: ${autoko.mode})` : "nonaktif (isi WALLET_MONGO_URL untuk mengaktifkan)");
+const walletBackup = wallet ? createWalletBackup({ getCols: walletDb.getCols, sendFile: backup.sendFile, enabled: backup.enabled }) : null;
 const FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRET = new Set(["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"]);
 const isId = (v) => /^\d{17,20}$/.test(v);
@@ -115,6 +128,10 @@ function reconcile(l) {
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+// Turnstile (CAPTCHA /beli): CSP hanya dilonggarkan kalau fiturnya diaktifkan.
+const turnstile = createTurnstile();
+const TS_CSP = turnstile.enabled ? " https://challenges.cloudflare.com" : "";
+
 const app = express();
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.disable("x-powered-by");
@@ -122,7 +139,7 @@ app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     // Izinkan preview custom Discord emoji.
-    res.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net");
+    res.setHeader("Content-Security-Policy", `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'${TS_CSP}; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net${TS_CSP ? `; frame-src${TS_CSP}; connect-src 'self'${TS_CSP}` : ""}`);
     next();
 });
 
@@ -141,49 +158,7 @@ app.post("/hook/:id", express.raw({ type: "*/*", limit: "100kb" }), async (req, 
     } catch { res.sendStatus(502); }
 });
 
-// ---- Webhook Autoko (QRIS): melayani deposit wallet ("DP-…") DAN pembelian key ----
-app.post("/hook-autoko", express.raw({ type: "*/*", limit: "100kb" }), async (req, res) => {
-    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.sendStatus(400);
-    let ev;
-    try { ev = autoko.verifyWebhook(req.body, req.headers); }
-    catch (e) {
-        if (e.status === 401) console.warn("[AUTOKO] webhook signature tidak valid");
-        return res.sendStatus(e.status === 401 ? 401 : e.status === 503 ? 503 : 400);
-    }
-    if (!ev.paid) return res.sendStatus(200); // belum dibayar: ack
-
-    // 1) Deposit wallet end-user
-    if (String(ev.orderId).startsWith("DP-")) {
-        if (!wallet) return res.sendStatus(200);
-        try {
-            const r = await wallet.handlePaid({ orderId: ev.orderId, amount: ev.amount, providerRef: ev.providerRef }, { background: true });
-            if (!r.ok && r.reason === "unknown_order") console.warn("[WALLET] webhook order tak dikenal:", ev.orderId);
-            return res.sendStatus(200);
-        } catch (e) {
-            console.error("[WALLET] gagal memproses webhook:", e.message);
-            return res.sendStatus(500);
-        }
-    }
-
-    // 2) Order beli key. Cocokkan via providerRef (gateway) dulu, fallback ke orderId.
-    try {
-        const o = (autoko && autoko.mode !== "off") ? null : null; // noop; hanya untuk kejelasan
-        const orderDoc = orders ? (orders.findByAutokoId(ev.providerRef) || orders.findById(ev.orderId)) : null;
-        if (!orderDoc) {
-            console.warn("[ORDERS] webhook Autoko tidak cocok ke order mana pun:", ev.providerRef);
-            return res.sendStatus(200);
-        }
-        const r = orders.handlePaidPayment(orderDoc.id, { amount: ev.amount });
-        if (!r.ok) console.warn(`[ORDERS] ${orderDoc.id} pembayaran diterima tapi fulfill gagal: ${r.reason}`);
-        return res.sendStatus(200);
-    } catch (e) {
-        console.error("[ORDERS] gagal proses webhook:", e.message);
-        return res.sendStatus(500);
-    }
-});
-
-// Fungsi ini sekarang no-op, tapi tetap dipanggil supaya kompatibilitas import terjaga.
-registerWalletWebhook(app, { wallet, autoko });
+registerWalletWebhook(app, { wallet, autoko, getOrders: () => orders });
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -208,6 +183,12 @@ app.post("/api/admin/backup/send", admin, wrap(async (req, res) => {
     try { await backup.send("manual"); res.json({ ok: true }); }
     catch (e) { res.status(400).json({ error: e.message }); }
 }));
+app.get("/api/admin/wallet/backup/status", admin, (req, res) => res.json(walletBackup ? { enabled: true, ...walletBackup.status() } : { enabled: false }));
+app.post("/api/admin/wallet/backup", admin, wrap(async (req, res) => {
+    if (!walletBackup) return res.status(503).json({ error: "Wallet belum diaktifkan." });
+    try { const r = await walletBackup.send("manual"); res.json({ ok: true, counts: r.counts }); }
+    catch (e) { res.status(400).json({ error: e.message }); }
+}));
 app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" }), wrap(async (req, res) => {
     let d;
     try { d = JSON.parse(Buffer.from(req.body).toString("utf8")); } catch { return res.status(400).json({ error: "File bukan JSON yang valid." }); }
@@ -225,12 +206,24 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
 app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
 
-// ---- Pesanan key lewat web ----
+// ---- Pesanan key lewat web (QRIS manual) ----
 const notifier = createNotifier();
 const ORDER_TTL_MIN = Number(process.env.ORDER_TTL_MIN) > 0 ? Number(process.env.ORDER_TTL_MIN) : 30;
-const orders = createOrders({ store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "" });
-registerOrderRoutes(app, { admin, orders, autoko, ttlMin: ORDER_TTL_MIN });
+// Perpanjangan: tambah masa aktif key lama (penyimpanan dilakukan oleh orders.confirm setelah ini).
+function extendLicense(id, days) {
+    const l = findLicense(id);
+    if (!l) throw new OrderError("Key pembeli ini sudah dihapus, perpanjangan tidak bisa diproses.", 409);
+    l.expiresAt = Math.max(l.expiresAt, Date.now()) + days * DAY;
+    reconcile(l);
+    return l.expiresAt;
+}
+const orders = createOrders({
+    store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "",
+    autoko, autoOrders: process.env.ORDER_AUTO === "1", getLicense: findLicense, extendLicense,
+});
+registerOrderRoutes(app, { admin, buyer, orders, ttlMin: ORDER_TTL_MIN, turnstile });
 registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
+console.log("[PANEL] Pembayaran key di /beli:", orders.autoEnabled() ? "QRIS otomatis aktif (cadangan: QRIS statis)" : "QRIS statis + konfirmasi admin", "| CAPTCHA:", turnstile.enabled ? "Turnstile aktif" : "nonaktif");
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
 app.post("/api/login", (req, res) => {
@@ -368,6 +361,8 @@ app.get("/api/service/orders", buyer, wrap(async (req, res) => {
     res.json(result);
 }));
 
+// ---------- Custom Emoji (AutoStore + AutoStore Service) ----------
+// Kedua nama endpoint didukung agar frontend lama maupun Service sama-sama kompatibel.
 function emojiConfig(l) {
     const isService = l.type === "service";
     const defaults = isService ? SERVICE_EMOJI_DEFAULTS : AUTOSTORE_EMOJI_DEFAULTS;
@@ -498,11 +493,29 @@ app.use((err, req, res, next) => {
 const WATCH_MS = Number(process.env.WATCH_MS || 60000);
 setInterval(() => licenses().forEach(reconcile), WATCH_MS).unref();
 if (wallet) {
+    // Saat start: hitung ulang saldo dari ledger (menyembuhkan sisa proses yang terputus), lalu rutin tiap menit.
     setTimeout(() => wallet.reconcile(null, { fix: true }).then((d) => d.length && console.warn("[WALLET] saldo dikoreksi dari ledger:", JSON.stringify(d))).catch((e) => console.error("[WALLET] reconcile:", e.message)), 5000).unref();
     setInterval(() => wallet.sweep().catch((e) => console.error("[WALLET] sweep:", e.message)), numEnv("WALLET_SWEEP_MS", 60000)).unref();
 }
+if (orders.autoEnabled()) setInterval(() => orders.sweepAuto().catch((e) => console.error("[ORDERS] sweep:", e.message)), numEnv("ORDER_SWEEP_MS", 60000)).unref();
+if (wallet) {
+    // Cek harian: saldo di dokumen wallet harus sama dengan hitungan ulang dari ledger. Kalau beda (dua kali cek), kabari lewat notifikasi.
+    const checkConsistency = async () => {
+        let diffs = await wallet.reconcile(null, { fix: false });
+        if (diffs.length) { await new Promise((r) => setTimeout(r, 20000)); diffs = await wallet.reconcile(null, { fix: false }); } // hindari alarm palsu saat ada transaksi berjalan
+        if (!diffs.length) return;
+        console.warn("[WALLET] saldo tidak cocok dengan ledger:", JSON.stringify(diffs));
+        const url = process.env.PUBLIC_URL ? process.env.PUBLIC_URL.replace(/\/+$/, "") + "/admin.html" : "";
+        await notifier({ title: "Saldo wallet tidak cocok", text: [`⚠️ ${diffs.length} wallet punya saldo berbeda dari ledger`, "Buka halaman admin, tekan Cek konsistensi saldo, lalu periksa.", url].filter(Boolean).join("\n"), url });
+    };
+    setInterval(() => checkConsistency().catch((e) => console.error("[WALLET] cek konsistensi:", e.message)), numEnv("WALLET_CHECK_HOURS", 24) * 3600e3).unref();
+}
 if (backup.enabled()) backup.schedule(process.env.BACKUP_EVERY_HOURS);
 if (backup.enabled()) setTimeout(() => backup.send("server start").catch((e) => console.error("[BACKUP]", e.message)), 15000).unref();
+if (backup.enabled() && walletBackup) {
+    walletBackup.schedule(process.env.BACKUP_EVERY_HOURS);
+    setTimeout(() => walletBackup.send("server start").catch((e) => console.error("[WALLET-BACKUP]", e.message)), 40000).unref();
+}
 licenses().forEach(reconcile);
 
 const HOST = process.env.PANEL_HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : "0.0.0.0");

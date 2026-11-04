@@ -1,4 +1,4 @@
-let { Owner, Admin, serverId } = require("../../config/config.json");
+]let { Owner, Admin, serverId } = require("../../config/config.json");
 let {
     InteractionType,
     ButtonStyle,
@@ -13,6 +13,7 @@ let shop = require("../../Schema/shop.js");
 let list = require("../../Schema/list.js");
 let Price = require("../../Schema/priceproduct.js");
 let order = require("../../Schema/orderproduct.js");
+let orderLog = require("../../Schema/orderlog.js");
 let mt = require("../../Schema/maintenance.js");
 let { MessageEmbed } = require("discord.js");
 let ctesti = require("../../Schema/SettingChannel.js");
@@ -241,6 +242,15 @@ client.on("interactionCreate", async (interaction) => {
 
         // Update jumlah "Sold" produk ini (dihitung begitu stok sudah diambil dari database)
         await list.updateOne({ code: item }, { $inc: { sold: Number(howmuch) } }).catch(console.error);
+
+        // Catat riwayat order untuk halaman Orders & grafik di panel web. Kegagalan di sini tidak boleh mengganggu pembelian.
+        try {
+            const charged = getCode.type.includes("script") ? Number(price) : (saf ? Number(pricos) : Number(prico));
+            await orderLog.create({
+                orderNumber: orderN, discordId: user.id, growId: getBal?.GrowIDNow || getBal?.GrowID || "",
+                code: item, productName: getCode?.name || item, qty: Number(howmuch), total: charged,
+            });
+        } catch (e) { console.error("[ORDERLOG]", e.message); }
 
         try {
             if (!member.roles.cache.some((r) => r.id == getCode?.role)) {

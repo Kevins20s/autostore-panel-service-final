@@ -10,6 +10,11 @@
 </header>
 
 <section id="stForm" class="card buy-card">
+  <ul class="buy-feats" aria-label="Keunggulan">
+    <li><b>Setup lewat web</b><span>Isi token bot dan MongoDB di panel, tanpa coding.</span></li>
+    <li><b>Toko produk di Discord</b><span>Stok, harga, diskon, auto-role, dan saldo user.</span></li>
+    <li><b>Pembayaran QRIS</b><span>Key langsung muncul di halaman ini setelah lunas.</span></li>
+  </ul>
   <h2>1. Pilih paket</h2>
   <div id="pkgs" class="buy-pkgs" role="radiogroup" aria-label="Paket"></div>
   <label class="buy-lbl" for="fName">Nama</label>
@@ -17,6 +22,7 @@
   <label class="buy-lbl" for="fContact">Kontak (WhatsApp atau Discord)</label>
   <input id="fContact" maxlength="60" placeholder="0812xxxxxxx atau username#1234" autocomplete="off">
   <p class="mut buy-note">Kontak dipakai kalau ada kendala dengan pesananmu.</p>
+  <div id="tsBox" class="buy-ts hide"></div>
   <div class="row" style="margin-top:14px"><button class="pri" id="btnOrder" type="button">Lanjut ke pembayaran</button></div>
   <div id="formMsg" class="msg"></div>
 </section>
@@ -24,14 +30,15 @@
 <section id="stPay" class="card buy-card hide">
   <h2>2. Bayar lewat QRIS</h2>
   <div class="buy-amount"><span class="mut">Bayar tepat sebesar</span><b id="payAmount">Rp0</b><button type="button" class="copy-btn" id="btnCopyAmt">Salin nominal</button></div>
-  <p class="buy-warn">Nominal harus <b>persis sama</b> (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.</p>
+  <p class="buy-warn" id="payWarn">Nominal harus <b>persis sama</b> (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.</p>
   <div class="buy-qr"><img id="qrImg" src="/qris.png" alt="QRIS GEVRA STORE" width="320"></div>
   <p class="buy-qr-actions"><a id="qrDl" href="/qris.png" download="QRIS-GevraStore.png">Simpan gambar QRIS</a><span class="mut"> · cocok untuk scan dari galeri</span></p>
   <ol class="buy-steps">
     <li>Buka DANA atau e-wallet/m-banking apa pun yang mendukung QRIS, lalu scan kode di atas.</li>
     <li>Masukkan nominal <b id="payAmount2"></b> dengan tepat, lalu bayar.</li>
-    <li id="stepAction">Kembali ke sini dan tekan tombol di bawah.</li>
+    <li id="payStep3">Kembali ke sini dan tekan tombol di bawah.</li>
   </ol>
+  <p class="buy-auto hide" id="payAuto"><span class="buy-spin buy-spin-sm" aria-hidden="true"></span>Menunggu pembayaran... halaman ini otomatis menampilkan hasilnya begitu lunas. Tidak perlu menekan tombol apa pun.</p>
   <div class="buy-meta mut">Kode pesanan <b id="payCode"></b> · Selesaikan dalam <b id="payTimer">--:--</b></div>
   <div class="row" style="margin-top:14px"><button class="pri" id="btnPaid" type="button">Saya sudah bayar</button><button id="btnCancel" type="button">Batalkan</button></div>
   <div id="payMsg" class="msg"></div>
@@ -44,6 +51,12 @@
   <div class="buy-meta mut" style="text-align:center">Kode pesanan <b id="waitCode"></b> · Nominal <b id="waitAmount"></b></div>
   <p class="mut buy-note" style="text-align:center">Kamu boleh menutup halaman ini. Untuk kembali, buka lagi halaman ini di browser yang sama, atau pakai link pesananmu:</p>
   <div class="row" style="justify-content:center"><button type="button" id="btnCopyLink">Salin link pesanan</button></div>
+</section>
+
+<section id="stRenewed" class="card buy-card hide">
+  <h2>Perpanjangan berhasil</h2>
+  <p class="mut" id="renewText"></p>
+  <div class="row"><a href="/"><button class="pri" type="button">Kembali ke panel</button></a></div>
 </section>
 
 <section id="stDone" class="card buy-card hide">
@@ -62,6 +75,14 @@
   <h2 id="endTitle">Pesanan berakhir</h2>
   <p class="mut" id="endText"></p>
   <div class="row"><button class="pri" id="btnNew" type="button">Buat pesanan baru</button></div>
+</section>
+
+<section class="buy-faq" aria-label="Pertanyaan umum">
+  <h2>Pertanyaan umum</h2>
+  <details><summary>Berapa lama key aktif?</summary><p>Sesuai paket yang dipilih (30 atau 90 hari) dihitung sejak key dibuat. Kamu bisa memperpanjang kapan saja dari menu Subscription di panel, sisa harinya tidak hangus.</p></details>
+  <details><summary>Kapan key saya muncul?</summary><p>Kalau pembayaran otomatis aktif, beberapa detik setelah lunas. Kalau memakai QRIS manual, setelah penjual memeriksa mutasi dan mengonfirmasi (biasanya beberapa menit).</p></details>
+  <details><summary>Saya sudah bayar tapi key belum muncul</summary><p>Jangan bayar dua kali. Simpan kode pesananmu, lalu hubungi penjual dengan kode itu. Link pesanan di halaman ini bisa dibuka lagi kapan saja.</p></details>
+  <details><summary>Apa yang perlu saya siapkan?</summary><p>Token dan Client ID bot Discord milikmu, serta database MongoDB (Atlas gratis cukup). Panduan lengkapnya ada di menu Tutorial Setup setelah login.</p></details>
 </section>
 
 <p class="buy-foot"><a href="/">Sudah punya key? Masuk ke panel</a></p>

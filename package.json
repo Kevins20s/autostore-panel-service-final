@@ -6,12 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "setup": "npm install && npm install --prefix bot && npm install --prefix service",
-    "test": "node test/smoke.js",
+    "test": "node test/smoke.js && node test/orders.js && node test/orders-auto.js && node test/misc.js && node test/wallet.js && node test/shopapi-fake.js",
     "test:shop": "node test/shop.js",
     "test:ui": "node test/ui.js",
-    "test:all": "node test/smoke.js && node test/shop.js && node test/ui.js",
+    "test:all": "npm test && node test/shop.js && node test/ui.js",
     "test:shared": "node test/shared-tenants.js && node test/shared-tenant-db.js",
-    "test:wallet": "node test/wallet.js && node test/walletapi.js && node test/botcontract.js && node test/walletboot.js && node test/walletui.js"
+    "test:wallet": "node test/wallet.js"
   },
   "dependencies": {
     "express": "^4.19.2",

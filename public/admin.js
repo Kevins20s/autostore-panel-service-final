@@ -18,12 +18,35 @@ function stats(list) {
     }
     $("stTotal").textContent = list.length; $("stActive").textContent = active; $("stSoon").textContent = soon; $("stDead").textContent = dead;
 }
-function btn(text, fn, cls) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = async () => { try { await fn(); } catch (e) { alert(e.message); } load(); }; return b; }
+function btn(text, fn, cls) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = async () => { try { await fn(); } catch (e) { await gsAlert(e.message); } load(); }; return b; }
 
 const ORD = { pending: ["Menunggu bayar", "off"], claimed: ["Sudah klik bayar", "warn"], done: ["Selesai", "ok"], rejected: ["Ditolak", "bad"], expired: ["Kedaluwarsa", "off"] };
 const rp = (n) => "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 function ago(t) { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "baru saja" : m < 60 ? `${m} menit lalu` : m < 1440 ? `${Math.round(m / 60)} jam lalu` : `${Math.round(m / 1440)} hari lalu`; }
 function showOrderKey(key, note) { $("orderKeyText").textContent = key; $("orderKeyNote").textContent = note; $("orderKey").classList.remove("hide"); }
+const ADM = { mock: false, pk: "" };
+function pkgCell(o) {
+    const c = td(`${o.packageName} ${o.days} hari`);
+    for (const [on, txt, st] of [[o.auto, "Otomatis", "ok"], [o.renew, "Perpanjangan", "warn"]]) if (on) { const sp = document.createElement("span"); sp.className = "adm-pill adm-" + st; sp.textContent = txt; sp.style.marginLeft = "6px"; c.append(sp); }
+    return c;
+}
+async function loadPackages() {
+    let r; try { r = await api("GET", "/api/admin/packages"); } catch { return; }
+    ADM.mock = !!r.mock;
+    $("pkAutoInfo").textContent = r.auto ? (r.mock ? "aktif (MODE UJI COBA, QRIS palsu)" : "aktif") : "nonaktif (isi ORDER_AUTO=1 dan aktifkan Autoko untuk menyalakan)";
+    const sig = JSON.stringify(r.packages);
+    const box = $("pkRows");
+    if (sig === ADM.pk || box.contains(document.activeElement)) return; // jangan menimpa isian yang sedang diketik
+    ADM.pk = sig; box.replaceChildren();
+    for (const p of r.packages) {
+        const row = document.createElement("div"); row.className = "adm-pkrow";
+        const name = document.createElement("div"); name.className = "adm-pkname"; const b1 = document.createElement("b"); b1.textContent = p.name; const sm = document.createElement("div"); sm.className = "mut"; sm.textContent = `${p.days} hari, key ${p.type}`; name.append(b1, sm);
+        const price = document.createElement("input"); price.type = "number"; price.min = "1000"; price.max = "1000000"; price.step = "500"; price.value = p.price; price.setAttribute("aria-label", "Harga " + p.name);
+        const lab = document.createElement("label"); lab.className = "check-row"; const ck = document.createElement("input"); ck.type = "checkbox"; ck.checked = p.sellable; const sp = document.createElement("span"); sp.textContent = "Dijual"; lab.append(ck, sp);
+        const save = btn("Simpan", async () => { await api("PUT", "/api/admin/packages/" + p.id, { price: Number(price.value), sellable: ck.checked }); ADM.pk = ""; msg("pkMsg", `${p.name} tersimpan.`, true); }, "pri");
+        row.append(name, price, lab, save); box.append(row);
+    }
+}
 async function loadOrders() {
     let r; try { r = await api("GET", "/api/admin/orders"); } catch { return; }
     const list = r.orders, body = $("orderRows"); body.replaceChildren();
@@ -38,16 +61,21 @@ async function loadOrders() {
         const [lbl, st] = ORD[o.status] || [o.status, "off"];
         const code = td(""); const c1 = document.createElement("b"); c1.textContent = o.code; const t1 = document.createElement("div"); t1.className = "mut"; t1.textContent = ago(o.claimedAt || o.createdAt); code.append(c1, t1);
         const amt = td(""); const a1 = document.createElement("b"); a1.textContent = rp(o.amount); amt.append(a1);
-        tr.append(code, td(`${o.packageName} · ${o.days} hari`), amt, who, pillTd(lbl, st));
+        tr.append(code, pkgCell(o), amt, who, pillTd(lbl, st));
         const act = document.createElement("td"); act.className = "row";
         if (o.status !== "done" && o.status !== "rejected") {
+            const lunas = o.auto ? "Pesanan otomatis seharusnya lunas sendiri. Tetap konfirmasi manual sekarang?" : `Sudah cek mutasi DANA sebesar ${rp(o.amount)} dari ${o.name}?`;
             act.append(
                 btn("Konfirmasi", async () => {
-                    if (!confirm(`Sudah cek mutasi DANA sebesar ${rp(o.amount)} dari ${o.name}?\nKey akan dibuat sekarang.`)) return;
+                    const what = o.renew ? "Masa aktif key akan ditambah." : "Key akan dibuat sekarang.";
+                    if (!(await gsConfirm(`${lunas}\n${what}`, { okText: "Konfirmasi" }))) return;
                     const out = await api("POST", `/api/admin/orders/${o.id}/confirm`);
+                    if (out.renewed) { msg("ordMsg", `Perpanjangan ${o.name} (${o.code}) selesai. Berlaku sampai ${new Date(out.expiresAt).toLocaleString("id-ID")}.`, true); return; }
+                    $("ordMsg").style.display = "none";
                     showOrderKey(out.key, `Key untuk ${o.name} (${o.code}). Key juga muncul otomatis di halaman pembeli selama 24 jam:`);
                 }, "pri"),
-                btn("Tolak", async () => { if (confirm(`Tolak pesanan ${o.code}?`)) await api("POST", `/api/admin/orders/${o.id}/reject`); }, "bad"));
+                ...(o.auto && ADM.mock ? [btn("Simulasi bayar", () => api("POST", `/api/admin/orders/${o.id}/mock-pay`))] : []),
+                btn("Tolak", async () => { if (await gsConfirm(`Tolak pesanan ${o.code}?`, { danger: true, okText: "Tolak" })) await api("POST", `/api/admin/orders/${o.id}/reject`); }, "bad"));
         }
         tr.append(act); body.append(tr);
     }
@@ -73,11 +101,11 @@ async function loadWallet() {
         act.append(
             copyBtn(w.bankFull.accountNo, "Salin no."), copyBtn(String(w.payout), "Salin nominal"),
             btn("Sudah ditransfer", async () => {
-                const ref = prompt(`Transfer ${rp(w.payout)} ke ${w.bankFull.bankName} ${w.bankFull.accountNo} a.n. ${w.bankFull.accountName} sudah dilakukan?\nCatatan/ref transfer (opsional):`);
+                const ref = await gsPrompt(`Transfer ${rp(w.payout)} ke ${w.bankFull.bankName} ${w.bankFull.accountNo} a.n. ${w.bankFull.accountName} sudah dilakukan?\nCatatan/ref transfer (opsional):`);
                 if (ref === null) return;
                 await api("POST", `/api/admin/withdrawals/${w.id}/paid`, { reference: ref });
             }, "pri"),
-            btn("Tolak", async () => { const why = prompt(`Tolak penarikan ${rp(w.amount)} dari ${w.buyer}? Saldo dikembalikan.\nAlasan (opsional):`); if (why === null) return; await api("POST", `/api/admin/withdrawals/${w.id}/reject`, { reason: why }); }, "bad"));
+            btn("Tolak", async () => { const why = await gsPrompt(`Tolak penarikan ${rp(w.amount)} dari ${w.buyer}? Saldo dikembalikan.\nAlasan (opsional):`); if (why === null) return; await api("POST", `/api/admin/withdrawals/${w.id}/reject`, { reason: why }); }, "bad"));
         tr.append(act); body.append(tr);
     }
 }
@@ -85,7 +113,7 @@ async function load() {
     let data;
     try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("login").classList.remove("hide"); return; }
     $("login").classList.add("hide"); $("dash").classList.remove("hide");
-    loadOrders(); loadWallet();
+    loadOrders(); loadWallet(); loadPackages();
     const body = $("rows"); body.replaceChildren();
     stats(data.licenses);
     const qv = ($("q") ? $("q").value : "").trim().toLowerCase();
@@ -101,7 +129,7 @@ async function load() {
             btn("+30 hari", () => api("POST", `/api/admin/licenses/${l.id}/extend`, { days: 30 })),
             ...(l.type === "service" ? [] : [btn(l.walletFrozen ? "Buka wallet" : "Bekukan wallet", () => api("POST", `/api/admin/licenses/${l.id}/wallet-freeze`, { frozen: !l.walletFrozen }))]),
             btn(l.revoked ? "Aktifkan" : "Cabut", () => api("POST", `/api/admin/licenses/${l.id}/revoke`, { revoked: !l.revoked })),
-            btn("Hapus", async () => { if (confirm(`Hapus ${l.buyer}? Bot akan dimatikan.`)) await api("DELETE", `/api/admin/licenses/${l.id}`); }, "bad"));
+            btn("Hapus", async () => { if (await gsConfirm(`Hapus ${l.buyer}? Bot akan dimatikan.`, { danger: true, okText: "Hapus" })) await api("DELETE", `/api/admin/licenses/${l.id}`); }, "bad"));
         tr.append(act); body.append(tr);
     }
 }
@@ -125,8 +153,14 @@ $("btnReconcile").onclick = async () => {
     try {
         const r = await api("POST", "/api/admin/wallet/reconcile", { fix: false });
         if (!r.diffs.length) return msg("wdMsg", "Semua saldo cocok dengan ledger.", true);
-        if (confirm(`Ada ${r.diffs.length} saldo yang tidak cocok dengan ledger.\nPerbaiki sekarang berdasarkan ledger?`)) { await api("POST", "/api/admin/wallet/reconcile", { fix: true }); msg("wdMsg", "Saldo diperbaiki dari ledger.", true); load(); }
+        if (await gsConfirm(`Ada ${r.diffs.length} saldo yang tidak cocok dengan ledger.\nPerbaiki sekarang berdasarkan ledger?`, { okText: "Perbaiki" })) { await api("POST", "/api/admin/wallet/reconcile", { fix: true }); msg("wdMsg", "Saldo diperbaiki dari ledger.", true); load(); }
     } catch (e) { msg("wdMsg", e.message); }
+};
+$("btnWalletBackup").onclick = async () => {
+    const b = $("btnWalletBackup"); b.disabled = true;
+    try { const r = await api("POST", "/api/admin/wallet/backup"); msg("wdMsg", `Backup wallet terkirim ke Discord (ledger ${r.counts.ledger}, deposit ${r.counts.deposits}, penarikan ${r.counts.withdrawals}).`, true); }
+    catch (e) { msg("wdMsg", e.message); }
+    b.disabled = false;
 };
 $("btnMockPay").onclick = async () => { try { await api("POST", "/api/admin/wallet/mock-pay", { orderId: $("mockOrder").value.trim() }); msg("wdMsg", "Disimulasikan sudah dibayar.", true); load(); } catch (e) { msg("wdMsg", e.message); } };
 $("btnCopyOrderKey").onclick = async () => {
@@ -139,7 +173,7 @@ $("btnRestore").onclick = () => $("fileRestore").click();
 $("fileRestore").onchange = async (ev) => {
     const f = ev.target.files[0]; ev.target.value = "";
     if (!f) return;
-    if (!confirm("Restore akan MENGGANTI semua data pembeli di server ini dengan isi file. Lanjut?")) return;
+    if (!(await gsConfirm("Restore akan MENGGANTI semua data pembeli di server ini dengan isi file. Lanjut?", { danger: true, okText: "Restore" }))) return;
     try {
         const r = await fetch("/api/admin/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: await f.text() });
         const out = await r.json().catch(() => ({}));

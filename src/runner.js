@@ -32,7 +32,13 @@ class Runner {
         this.botDir = botDir;
         this.serviceDir = serviceDir;
         this.extraEnv = opts.extraEnv || null; // (licenseId, type) => env tambahan untuk bot itu
+        this.onCrash = opts.onCrash || null;   // (licenseId, type) dipanggil sekali saat bot menyerah (status "crashed")
         this.items = new Map(); // licenseId -> state
+    }
+
+    _crashed(id, entry) {
+        if (!this.onCrash) return;
+        try { Promise.resolve(this.onCrash(id, entry.type)).catch(() => {}); } catch { /* notifikasi tidak boleh mengganggu runner */ }
     }
 
     status(id) { return this.items.get(id)?.status || "stopped"; }
@@ -65,6 +71,7 @@ class Runner {
         if (!fs.existsSync(entryFile)) {
             entry.status = "crashed";
             this._log(entry, "[PANEL] File bot tidak ditemukan: " + entryFile);
+            this._crashed(id, entry);
             return;
         }
         entry.startedAt = Date.now();
@@ -91,6 +98,7 @@ class Runner {
             if (entry.restarts > 5) {
                 entry.status = "crashed";
                 this._log(entry, "[PANEL] Terlalu sering crash, berhenti otomatis. Periksa pengaturan lalu Start lagi.");
+                this._crashed(id, entry);
                 return;
             }
             entry.status = "restarting";

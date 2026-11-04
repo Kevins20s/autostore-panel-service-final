@@ -6,7 +6,7 @@ const conns = new Map(); // licenseId -> { url, client, last }
 // Nama koleksi = nama yang dibuat Mongoose di bot (model "list" -> "lists", dst.)
 const COL = {
     list: "lists", price: "prices", shop: "shops", bal: "bals",
-    discount: "discounts", bulk: "bulkdiscounts", wlrate: "wlrates", mt: "mts", api: "apisettings",
+    discount: "discounts", bulk: "bulkdiscounts", wlrate: "wlrates", mt: "mts", api: "apisettings", orderlog: "orderlogs",
 };
 
 async function getDb(id, url) {

@@ -21,7 +21,8 @@
     <div class="adm-stat bad"><span class="mut">Habis / dicabut</span><b id="stDead">0</b></div>
   </div>
   <div class="card"><h2>Pesanan masuk <span class="adm-count hide" id="ordCount"></span></h2>
-    <p class="mut">Pembeli membayar lewat QRIS di <b>/beli</b>. Cek mutasi DANA, cocokkan nominalnya (termasuk 3 angka terakhir), lalu tekan <b>Konfirmasi</b> untuk membuat key otomatis.</p>
+    <p class="mut">Pembeli membayar lewat QRIS di <b>/beli</b>. Pesanan berlabel <b>Otomatis</b> lunas dan membuat key sendiri. Pesanan <b>manual</b>: cek mutasi DANA, cocokkan nominalnya (termasuk 3 angka terakhir), lalu tekan <b>Konfirmasi</b>. Pesanan berlabel <b>Perpanjangan</b> menambah masa aktif key lama.</p>
+    <div id="ordMsg" class="msg"></div>
     <div id="orderKey" class="hide adm-newkey"><p class="mut" id="orderKeyNote">Key dibuat:</p><div class="adm-keyrow"><div class="key" id="orderKeyText"></div><button type="button" class="pri" id="btnCopyOrderKey">Salin key</button></div></div>
     <div class="adm-table"><table><thead><tr><th>Kode</th><th>Paket</th><th>Nominal</th><th>Pembeli</th><th>Status</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></div>
     <p id="emptyOrders" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pesanan.</p>
@@ -30,12 +31,17 @@
     <p class="mut" id="walletInfo"></p>
     <div class="adm-table"><table><thead><tr><th>Pembeli</th><th>Dikirim</th><th>Ke rekening</th><th>Diajukan</th><th></th></tr></thead><tbody id="wdRows"></tbody></table></div>
     <p id="emptyWd" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada permintaan penarikan.</p>
-    <div class="row" style="margin-top:12px"><button type="button" id="btnReconcile">Cek konsistensi saldo</button></div>
+    <div class="row" style="margin-top:12px"><button type="button" id="btnReconcile">Cek konsistensi saldo</button><button type="button" id="btnWalletBackup">Kirim backup wallet ke Discord</button></div>
     <div id="mockBox" class="row hide" style="margin-top:12px"><input id="mockOrder" placeholder="Order ID (DP-…) untuk simulasi bayar" style="flex:2"><button type="button" id="btnMockPay">Simulasi bayar (uji coba)</button></div>
     <div id="wdMsg" class="msg"></div>
   </div>
+  <div class="card"><h2>Harga &amp; paket penjualan</h2>
+    <p class="mut">Harga di halaman /beli dan untuk perpanjangan dari panel. Matikan <b>Dijual</b> untuk menyembunyikan paket dari /beli (key lama tetap bisa diperpanjang). Pembayaran QRIS otomatis: <b id="pkAutoInfo">memeriksa...</b></p>
+    <div id="pkRows"></div>
+    <div id="pkMsg" class="msg"></div>
+  </div>
   <div class="card"><h2>Buat key baru</h2>
-    <div class="row adm-new"><input id="buyer" placeholder="Nama pembeli" style="flex:2"><select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option><option value="service">AutoStore Service</option></select><input id="days" type="number" value="30" min="1" style="flex:1" aria-label="Lama (hari)"><button class="pri" id="btnNew">Buat</button></div>
+    <div class="row adm-new"><input id="buyer" placeholder="Nama pembeli" style="flex:2"><select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option></select><input id="days" type="number" value="30" min="1" style="flex:1" aria-label="Lama (hari)"><button class="pri" id="btnNew">Buat</button></div>
     <div id="newMsg" class="msg"></div>
     <div id="newKey" class="hide adm-newkey"><p class="mut">Salin sekarang, key ini tidak akan ditampilkan lagi:</p><div class="adm-keyrow"><div class="key" id="keyText"></div><button type="button" class="pri" id="btnCopyKey">Salin key</button></div></div>
   </div>

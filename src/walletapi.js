@@ -5,17 +5,12 @@ const express = require("express");
 const { derive } = require("./crypto");
 const { WalletError } = require("./walletdb");
 
-// Token & secret per pembeli diturunkan dari MASTER_KEY, jadi tidak perlu disimpan
-// dan ikut pindah bersama MASTER_KEY.
+// Token & secret per pembeli diturunkan dari MASTER_KEY, jadi tidak perlu disimpan dan ikut pindah bersama MASTER_KEY.
 const internalToken = (licenseId) => derive("wallet-internal:" + licenseId).toString("hex");
 const botHookSecret = (licenseId) => derive("wallet-hook:" + licenseId).toString("hex");
-const safeEq = (a, b) => {
-    const x = Buffer.from(String(a)), y = Buffer.from(String(b));
-    return x.length === y.length && crypto.timingSafeEqual(x, y);
-};
+const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
-// Meneruskan "pembayaran sukses" ke bot pembeli lewat jalur /webhook yang sudah ada,
-// ditandatangani HMAC dengan secret milik pembeli itu.
+// Meneruskan "pembayaran sukses" ke bot pembeli lewat jalur /webhook yang sudah ada, ditandatangani HMAC dengan secret milik pembeli itu.
 function createBotForwarder({ findLicense, isRunning }) {
     return async function forwardToBot(licenseId, payload) {
         const l = findLicense(licenseId);
@@ -23,18 +18,13 @@ function createBotForwarder({ findLicense, isRunning }) {
         const body = JSON.stringify(payload);
         const sig = crypto.createHmac("sha256", botHookSecret(l.id)).update(body).digest("hex");
         try {
-            const r = await fetch(`http://127.0.0.1:${l.port}/webhook`, {
-                method: "POST",
-                headers: { "content-type": "application/json", "x-webhook-signature": sig },
-                body, signal: AbortSignal.timeout(8000),
-            });
+            const r = await fetch(`http://127.0.0.1:${l.port}/webhook`, { method: "POST", headers: { "content-type": "application/json", "x-webhook-signature": sig }, body, signal: AbortSignal.timeout(8000) });
             return r.ok;
         } catch { return false; }
     };
 }
 
-// Permintaan dari bot datang langsung ke 127.0.0.1. Yang lewat proxy (Railway/nginx)
-// selalu membawa header ini, jadi ditolak.
+// Permintaan dari bot datang langsung ke 127.0.0.1. Yang lewat proxy (Railway/nginx) selalu membawa header ini, jadi ditolak.
 const directOnly = (req) => !["x-forwarded-for", "x-real-ip", "forwarded", "x-forwarded-host"].some((h) => req.headers[h]);
 
 function errorResponder(res) {
@@ -45,28 +35,40 @@ function errorResponder(res) {
     };
 }
 
-// /hook-autoko sudah dipindah ke server.js karena sekarang melayani DUA tujuan:
-// deposit wallet (orderId "DP-…") dan pembelian key. Fungsi ini dibiarkan ada
-// supaya import di file lama tidak pecah.
-function registerWalletWebhook(app, { wallet, autoko }) {
-    // no-op: lihat server.js
+// Webhook dari Autoko. Dipasang SEBELUM express.json karena butuh isi mentah untuk cek signature.
+// getOrders (opsional): dipakai untuk pembayaran key lewat /beli. Order berawalan "KO-" milik pesanan, "DP-" milik deposit wallet.
+function registerWalletWebhook(app, { wallet, autoko, getOrders = () => null }) {
+    app.post("/hook-autoko", express.raw({ type: "*/*", limit: "100kb" }), async (req, res) => {
+        const orders = getOrders();
+        const ordersOn = !!(orders && orders.autoEnabled());
+        if (!wallet && !ordersOn) return res.sendStatus(503);
+        if (!Buffer.isBuffer(req.body) || !req.body.length) return res.sendStatus(400);
+        let ev;
+        try { ev = autoko.verifyWebhook(req.body, req.headers); }
+        catch (e) { if (e.status === 401) console.warn("[WALLET] webhook Autoko dengan signature tidak valid ditolak."); return res.sendStatus(e.status === 401 ? 401 : e.status === 503 ? 503 : 400); }
+        if (!ev.paid) return res.sendStatus(200);
+        if (ordersOn && orders.ownsRef(ev.orderId)) {
+            try { orders.handlePaid({ orderId: ev.orderId, amount: ev.amount }); return res.sendStatus(200); }
+            catch (e) { console.error("[ORDERS] gagal memproses webhook:", e.message); return res.sendStatus(500); }
+        }
+        if (!wallet) { console.warn("[ORDERS] webhook untuk order tidak dikenal:", ev.orderId); return res.sendStatus(200); }
+        try {
+            const r = await wallet.handlePaid({ orderId: ev.orderId, amount: ev.amount, providerRef: ev.providerRef }, { background: true });
+            if (!r.ok && r.reason === "unknown_order") console.warn("[WALLET] webhook untuk order tidak dikenal:", ev.orderId);
+            res.sendStatus(200); // 200 juga untuk order tak dikenal / duplikat, supaya Autoko tidak mengulang tanpa henti
+        } catch (e) { console.error("[WALLET] gagal memproses webhook:", e.message); res.sendStatus(500); } // 500 = minta Autoko mengulang
+    });
 }
 
 function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store, qr }) {
     const QRCode = qr || require("qrcode");
     const send = (res) => errorResponder(res);
-    const h = (fn) => async (req, res) => {
-        res.setHeader("Cache-Control", "no-store");
-        try { res.json(await fn(req)); } catch (e) { send(res)(e); }
-    };
+    const h = (fn) => async (req, res) => { res.setHeader("Cache-Control", "no-store"); try { res.json(await fn(req)); } catch (e) { send(res)(e); } };
     const modeOf = (l) => (l.paymentMode === "auto" ? "auto" : "manual");
 
     // ---- API internal untuk bot milik pembeli ----
     const rate = new Map();
-    const tooFast = (id) => {
-        const t = Date.now(), a = (rate.get(id) || []).filter((x) => x > t - 60e3);
-        a.push(t); rate.set(id, a); return a.length > 30;
-    };
+    const tooFast = (id) => { const t = Date.now(), a = (rate.get(id) || []).filter((x) => x > t - 60e3); a.push(t); rate.set(id, a); return a.length > 30; };
     app.post("/internal/wallet/deposit", async (req, res) => {
         if (!directOnly(req)) return res.sendStatus(404);
         const id = String(req.headers["x-license-id"] || "");

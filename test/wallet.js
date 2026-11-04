@@ -1,0 +1,100 @@
+// Tes logika wallet (deposit, hold, penarikan, rekonsiliasi) tanpa MongoDB sungguhan: node test/wallet.js
+// Memakai koleksi tiruan (test/fakemongo.js). Mau diuji ke MongoDB asli? Isi WALLET_TEST_MONGO (database sementara dibuat dan dihapus).
+process.env.MASTER_KEY = process.env.MASTER_KEY || "e".repeat(64);
+const assert = require("assert");
+const { createWallet, WalletError } = require("../src/wallet");
+const { createAutoko } = require("../src/autoko");
+const { createFakeCols } = require("./fakemongo");
+
+const L = "lic1", L2 = "lic2";
+let clock = 1_700_000_000_000; const now = () => clock;
+const bad = async (p, re, status) => { try { await p; } catch (e) { assert(e instanceof WalletError, "harus WalletError: " + e.message); assert.match(e.message, re); if (status) assert.strictEqual(e.status, status); return; } assert.fail("seharusnya error " + re); };
+
+async function setup(extra = {}) {
+    let cols, close = async () => {};
+    if (process.env.WALLET_TEST_MONGO) {
+        const { MongoClient } = require("mongodb"); const client = await new MongoClient(process.env.WALLET_TEST_MONGO).connect(); const db = client.db("wallet_test_" + Date.now());
+        await db.collection("ledger").createIndex({ key: 1 }, { unique: true }); await db.collection("deposits").createIndex({ orderId: 1 }, { unique: true }); await db.collection("withdrawals").createIndex({ id: 1 }, { unique: true });
+        cols = { wallets: db.collection("wallets"), deposits: db.collection("deposits"), ledger: db.collection("ledger"), withdrawals: db.collection("withdrawals") };
+        close = async () => { await db.dropDatabase(); await client.close(); };
+    } else cols = createFakeCols();
+    const sent = [], autoko = createAutoko({ AUTOKO_MODE: "mock" });
+    const w = createWallet({ getCols: async () => cols, autoko, now, notify: async (m) => sent.push(m), holdMs: 3600e3, bankCooldownMs: 0, ...extra });
+    return { w, cols, sent, autoko, close };
+}
+const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Santoso" };
+
+(async () => {
+    // 1. deposit: dibuat, dibayar, ditahan, dirilis
+    { const { w, cols, close } = await setup();
+      const d = await w.createDeposit({ licenseId: L, amount: 50000 });
+      assert.ok(d.orderId && /^DP-/.test(d.orderId), "orderId DP-");
+      let s = await w.summary(L); assert.strictEqual(s.available, 0);
+      const r1 = await w.handlePaid({ orderId: d.orderId, amount: 50000 });
+      s = await w.summary(L); assert.strictEqual(s.pending, 50000, "uang masuk ditahan dulu"); assert.strictEqual(s.available, 0);
+      await w.handlePaid({ orderId: d.orderId, amount: 50000 }); // webhook ganda
+      s = await w.summary(L); assert.strictEqual(s.pending, 50000, "webhook ganda tidak boleh mengkredit dua kali");
+      assert.strictEqual((await cols.ledger.find({ type: "credit" }).toArray()).length, 1);
+      await w.sweep(); s = await w.summary(L); assert.strictEqual(s.available, 0, "belum lewat masa tahan");
+      clock += 3601e3; await w.sweep(); s = await w.summary(L); assert.strictEqual(s.available, 50000); assert.strictEqual(s.pending, 0);
+      assert.deepStrictEqual(await w.reconcile(null, { fix: false }), [], "saldo cocok dengan ledger");
+      console.log("ok  deposit > bayar > ditahan > dirilis, webhook ganda aman"); await close(); }
+
+    // 2. webhook paralel + nominal tak cocok + deposit tak dikenal
+    { const { w, cols, close } = await setup();
+      const d = await w.createDeposit({ licenseId: L, amount: 20000 });
+      await Promise.all(Array.from({ length: 6 }, () => w.handlePaid({ orderId: d.orderId, amount: 20000 })));
+      assert.strictEqual((await w.summary(L)).pending, 20000, "6 webhook bersamaan tetap hanya satu kredit");
+      const d2 = await w.createDeposit({ licenseId: L, amount: 30000 });
+      await w.handlePaid({ orderId: d2.orderId, amount: 29999 });
+      assert.strictEqual((await cols.deposits.findOne({ orderId: d2.orderId })).status, "mismatch");
+      assert.strictEqual((await w.summary(L)).pending, 20000, "nominal tidak cocok tidak mengkredit");
+      await w.handlePaid({ orderId: "DP-TIDAKADA", amount: 1 }).catch(() => {});
+      console.log("ok  webhook paralel, nominal tidak cocok, order tak dikenal"); await close(); }
+
+    // 3. biaya + validasi nominal
+    { const { w, close } = await setup({ feePercent: 10, feeFlat: 500 });
+      const d = await w.createDeposit({ licenseId: L, amount: 10000 }); await w.handlePaid({ orderId: d.orderId, amount: 10000 });
+      assert.strictEqual((await w.summary(L)).pending, 10000 - 1000 - 500, "net = nominal - 10% - Rp500");
+      await bad(w.createDeposit({ licenseId: L, amount: 10 }), /minimal/i); await bad(w.createDeposit({ licenseId: L, amount: 99_000_000 }), /maksimal/i);
+      console.log("ok  biaya persen + tetap, batas nominal"); await close(); }
+
+    // 4. penarikan
+    { const { w, cols, close } = await setup({ holdMs: 0 });
+      const d = await w.createDeposit({ licenseId: L, amount: 100000 }); await w.handlePaid({ orderId: d.orderId, amount: 100000 }); await w.sweep();
+      assert.strictEqual((await w.summary(L)).available, 100000);
+      await bad(w.requestWithdrawal({ licenseId: L, amount: 50000 }), /rekening/i);
+      await w.setBank(L, bank);
+      await bad(w.requestWithdrawal({ licenseId: L, amount: 5000 }), /minimal/i);
+      await bad(w.requestWithdrawal({ licenseId: L, amount: 200000 }), /tidak cukup/i, 409);
+      const wd = await w.requestWithdrawal({ licenseId: L, amount: 60000 });
+      let s = await w.summary(L); assert.strictEqual(s.available, 40000); assert.strictEqual(s.locked, 60000);
+      await bad(w.requestWithdrawal({ licenseId: L, amount: 10000 }), /sedang diproses/i, 409);
+      await w.adminComplete(wd.id, { reference: "TRX1" });
+      s = await w.summary(L); assert.strictEqual(s.locked, 0); assert.strictEqual(s.available, 40000);
+      const wd2 = await w.requestWithdrawal({ licenseId: L, amount: 30000 }); await w.adminReject(wd2.id, { reason: "rekening salah" });
+      s = await w.summary(L); assert.strictEqual(s.available, 40000, "ditolak = saldo kembali"); assert.strictEqual(s.locked, 0);
+      await w.adminReject(wd2.id, {}).catch(() => {}); assert.strictEqual((await w.summary(L)).available, 40000, "tolak dua kali tidak menggandakan refund");
+      assert.deepStrictEqual(await w.reconcile(null, { fix: false }), []);
+      const frozen = await setup({ holdMs: 0, isFrozen: (id) => id === L2 }); await bad(frozen.w.requestWithdrawal({ licenseId: L2, amount: 20000 }), /dibekukan/i, 403);
+      console.log("ok  penarikan: kunci saldo, satu penarikan terbuka, selesai, tolak, bekukan"); await close(); await frozen.close(); }
+
+    // 5. rekening baru ada masa tunggu
+    { const { w, close } = await setup({ holdMs: 0, bankCooldownMs: 24 * 3600e3 });
+      const d = await w.createDeposit({ licenseId: L, amount: 50000 }); await w.handlePaid({ orderId: d.orderId, amount: 50000 }); await w.sweep();
+      await w.setBank(L, bank); await w.requestWithdrawal({ licenseId: L, amount: 10000 }).then((x) => w.adminReject(x.id, {})); // rekening pertama: langsung boleh tarik
+      await w.setBank(L, { ...bank, accountNo: "9999999999" }); await bad(w.requestWithdrawal({ licenseId: L, amount: 20000 }), /jam/i, 403); // ganti rekening: tunggu
+      clock += 25 * 3600e3; await w.requestWithdrawal({ licenseId: L, amount: 20000 });
+      console.log("ok  ganti rekening: tunggu 24 jam, rekening pertama langsung boleh"); await close(); }
+
+    // 6. rekonsiliasi memperbaiki saldo yang rusak
+    { const { w, cols, close } = await setup({ holdMs: 0 });
+      const d = await w.createDeposit({ licenseId: L, amount: 40000 }); await w.handlePaid({ orderId: d.orderId, amount: 40000 }); await w.sweep();
+      await cols.wallets.updateOne({ _id: L }, { $set: { available: 999999 } });
+      const diffs = await w.reconcile(null, { fix: false }); assert.strictEqual(diffs.length, 1);
+      await w.reconcile(null, { fix: true }); assert.strictEqual((await w.summary(L)).available, 40000);
+      assert.deepStrictEqual(await w.reconcile(null, { fix: false }), []);
+      console.log("ok  rekonsiliasi mendeteksi dan memperbaiki selisih"); await close(); }
+
+    console.log("\nSemua tes wallet lulus." + (process.env.WALLET_TEST_MONGO ? " (MongoDB asli)" : " (koleksi tiruan)"));
+})().catch((e) => { console.error("GAGAL:", e); process.exit(1); });

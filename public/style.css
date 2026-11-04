@@ -729,3 +729,62 @@ body.buy{min-height:100vh}
 .pay-big{display:block;font-size:36px;letter-spacing:-.04em;margin-top:6px}
 .seg{display:flex;gap:8px;flex-wrap:wrap}
 .stat b.warnc{color:var(--warn)}.stat b.okc{color:var(--ok)}
+
+/* ===== Pembaruan: dialog, menu HP, dashboard, orders, halaman beli, paket admin ===== */
+/* Dialog pengganti confirm()/alert()/prompt() */
+.gs-dlg-ov{align-items:center;padding:20px 14px;z-index:60}
+.gs-dlg{max-width:430px}
+.gs-dlg-title{font-size:17px;margin:0 0 8px}
+.gs-dlg-msg{margin:0 0 16px;color:var(--mut);white-space:pre-line;line-height:1.55;word-break:break-word}
+.gs-dlg input{width:100%;margin:0 0 14px}
+.gs-dlg-actions{justify-content:flex-end;gap:10px}
+.check-row{display:flex;align-items:center;gap:9px;margin-top:10px;color:var(--mut);cursor:pointer}
+.check-row input{width:auto;margin:0}
+
+/* Menu HP: sidebar jadi header ringkas dengan tombol Menu */
+.nav-toggle{display:none}
+@media(max-width:760px){
+  .nav-toggle{display:inline-flex;align-items:center;gap:8px;position:absolute;top:10px;right:12px;min-height:40px;padding:8px 13px}
+  .nav-toggle-bars{width:16px;height:2px;border-radius:2px;background:currentColor;box-shadow:0 5px 0 currentColor,0 -5px 0 currentColor;margin:5px 0}
+  .side:not(.open) nav,.side:not(.open) .sidefoot{display:none}
+  .side:not(.open) .brand{padding-bottom:6px}
+}
+
+/* Dashboard, Orders, daftar produk */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.toolbar input{flex:1 1 220px;min-width:0}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.split{grid-template-columns:1fr}}
+.rank{list-style:none;margin:8px 0 0;padding:0;counter-reset:rk}
+.rank li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
+.rank li:first-child{border-top:0}
+ol.rank li>span:first-child:before{counter-increment:rk;content:counter(rk) ". ";color:var(--mut2)}
+.pill.bad{background:rgba(255,107,129,.14);color:#ff8fa3;border-color:rgba(255,107,129,.3)}
+.chart{width:100%;height:auto;max-height:240px;display:block;margin-top:10px}
+.ch-axis{stroke:var(--line2);stroke-width:1}
+.ch-bar{fill:var(--ac)}
+.ch-hit{fill:transparent}
+.chart g:hover .ch-bar{fill:var(--ac2)}
+.ch-txt{fill:var(--mut);font-size:11px;font-family:inherit}
+
+/* Halaman /beli */
+.buy-feats{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:10px;grid-template-columns:repeat(3,1fr)}
+.buy-feats li{padding:12px 13px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02)}
+.buy-feats b{display:block;font-size:13.5px;margin-bottom:3px}
+.buy-feats span{color:var(--mut);font-size:12.5px;line-height:1.45}
+@media(max-width:620px){.buy-feats{grid-template-columns:1fr}}
+.buy-ts{margin-top:14px;min-height:65px}
+.buy-auto{display:flex;align-items:center;gap:10px;color:var(--mut);margin:12px 0 0}
+.buy-spin-sm{width:18px;height:18px;margin:0;flex:none;border-width:2px}
+.buy-faq{margin:26px 0 8px}
+.buy-faq h2{font-size:16px;margin:0 0 10px}
+.buy-faq details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;background:rgba(255,255,255,.02)}
+.buy-faq summary{cursor:pointer;font-weight:600}
+.buy-faq summary:focus-visible{outline:2px solid var(--ac);outline-offset:3px;border-radius:6px}
+.buy-faq details p{margin:10px 0 0;color:var(--mut);line-height:1.55}
+
+/* Admin: harga & paket */
+.adm-pkrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}
+.adm-pkrow:first-child{border-top:0}
+.adm-pkname{flex:1 1 160px}
+.adm-pkrow input[type=number]{width:130px}

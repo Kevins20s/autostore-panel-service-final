@@ -1,4 +1,4 @@
-]let { Owner, Admin, serverId } = require("../../config/config.json");
+let { Owner, Admin, serverId } = require("../../config/config.json");
 let {
     InteractionType,
     ButtonStyle,

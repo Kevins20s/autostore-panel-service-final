@@ -167,8 +167,17 @@ module.exports = function createShopRouter({ valid, decrypt }) {
                 : text.split(/\s+/).filter(Boolean);
         if (!items.length) return fail(res, "Tidak ada isi stok.");
         if (items.length > 5000) return fail(res, "Maksimal 5000 item sekali tambah.");
-        await c(req, "shop").insertMany(items.map((data) => ({ code, data, __v: 0 })), { ordered: false });
-        res.json({ ok: true, added: items.length });
+        // Opsi buang duplikat (dedupe: true): duplikat di dalam input dan yang sudah ada di stok produk ini dilewati.
+        let toInsert = items, skipped = 0;
+        if (req.body?.dedupe === true) {
+            const uniq = [...new Set(items)];
+            const have = new Set((await c(req, "shop").find({ code, data: { $in: uniq } }).project({ data: 1 }).toArray()).map((x) => x.data));
+            toInsert = uniq.filter((x) => !have.has(x));
+            skipped = items.length - toInsert.length;
+            if (!toInsert.length) return fail(res, "Semua item sudah ada di stok (duplikat), tidak ada yang ditambahkan.");
+        }
+        await c(req, "shop").insertMany(toInsert.map((data) => ({ code, data, __v: 0 })), { ordered: false });
+        res.json({ ok: true, added: toInsert.length, skipped });
     }));
 
     r.delete("/products/:code/stock", wrap(async (req, res) => {
@@ -213,6 +222,53 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         const out = await c(req, "bal").updateOne(filter, upd);
         if (!out.matchedCount) return fail(res, add ? "User belum mengatur GrowID di bot." : "User tidak ditemukan atau saldo tidak cukup.", 404);
         res.json({ ok: true });
+    }));
+
+    // ---------- riwayat order & statistik (dicatat bot di koleksi orderlogs) ----------
+    r.get("/orders", wrap(async (req, res) => {
+        const q = String(req.query.q || "").trim().slice(0, 50);
+        const skip = Math.max(0, Math.floor(Number(req.query.skip)) || 0);
+        const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+        const filter = q ? { $or: [{ productName: rx }, { code: rx }, { discordId: rx }, { growId: rx }] } : {};
+        const col = c(req, "orderlog");
+        const [total, rows, sum] = await Promise.all([
+            col.countDocuments(filter),
+            col.find(filter).sort({ createdAt: -1 }).skip(skip).limit(50).toArray(),
+            col.aggregate([{ $match: filter }, { $group: { _id: null, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } }]).toArray(),
+        ]);
+        res.json({
+            total, qty: sum[0]?.qty || 0, wl: sum[0]?.wl || 0,
+            orders: rows.map((o) => ({ number: o.orderNumber ?? null, discordId: o.discordId || "", growId: o.growId || "", code: o.code || "", name: o.productName || o.code || "", qty: o.qty || 0, total: o.total || 0, at: o.createdAt ? new Date(o.createdAt).getTime() : null })),
+        });
+    }));
+
+    r.get("/stats", wrap(async (req, res) => {
+        const days = Math.min(90, Math.max(1, Math.floor(Number(req.query.days)) || 14));
+        const lowAt = Math.min(1000, Math.max(0, Math.floor(Number(req.query.lowAt)) || 3));
+        const since = new Date(Date.now() - days * 86400000);
+        const col = c(req, "orderlog");
+        const [daily, top, [lists, prices, stocks]] = await Promise.all([
+            col.aggregate([{ $match: { createdAt: { $gte: since } } },
+                { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "Asia/Jakarta" } }, orders: { $sum: 1 }, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } },
+                { $sort: { _id: 1 } }]).toArray(),
+            col.aggregate([{ $match: { createdAt: { $gte: since } } },
+                { $group: { _id: "$code", name: { $first: "$productName" }, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } },
+                { $sort: { qty: -1 } }, { $limit: 5 }]).toArray(),
+            Promise.all([
+                c(req, "list").find({}).project({ code: 1, name: 1 }).toArray(),
+                c(req, "price").find({}).project({ code: 1, price: 1 }).toArray(),
+                c(req, "shop").aggregate([{ $group: { _id: "$code", n: { $sum: 1 } } }]).toArray(),
+            ]),
+        ]);
+        const priced = new Set(prices.filter((p) => p.price).map((p) => p.code));
+        const stockBy = Object.fromEntries(stocks.map((s) => [s._id, s.n]));
+        const low = lists.filter((p) => priced.has(p.code) && (stockBy[p.code] || 0) <= lowAt).map((p) => ({ code: p.code, name: p.name, stock: stockBy[p.code] || 0 })).sort((a, b) => a.stock - b.stock).slice(0, 8);
+        res.json({
+            days, lowAt,
+            daily: daily.map((d) => ({ date: d._id, orders: d.orders, qty: d.qty, wl: d.wl })),
+            top: top.map((t) => ({ code: t._id, name: t.name || t._id, qty: t.qty, wl: t.wl })),
+            low,
+        });
     }));
 
     // ---------- pengaturan toko ----------

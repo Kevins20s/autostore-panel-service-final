@@ -31,12 +31,12 @@ var CONTACT_URL = "https://discord.gg/ffU9Q6bagA";
   var eye = document.createElement("button");
   eye.type = "button";
   eye.className = "key-eye";
-  eye.setAttribute("aria-label", "Tampilkan key");
+  eye.setAttribute("aria-label", gsT("Tampilkan key"));
   eye.appendChild(icon(EYE));
   eye.addEventListener("click", function () {
     var show = input.type === "password";
     input.type = show ? "text" : "password";
-    eye.setAttribute("aria-label", show ? "Sembunyikan key" : "Tampilkan key");
+    eye.setAttribute("aria-label", show ? gsT("Sembunyikan key") : gsT("Tampilkan key"));
     eye.replaceChildren(icon(show ? EYE_OFF : EYE));
     input.focus();
   });
@@ -57,7 +57,7 @@ var CONTACT_URL = "https://discord.gg/ffU9Q6bagA";
       if (btnLogin.disabled) return;
       btnLogin.disabled = true;
       btnLogin.classList.add("is-loading");
-      btnLogin.textContent = "Memproses...";
+      btnLogin.textContent = gsT("Memproses...");
       timer = setTimeout(idle, 12000); /* jaga-jaga kalau server tidak menjawab */
     });
     /* Pulihkan tombol saat ada pesan error, atau saat login sukses (halaman masuk disembunyikan) */
@@ -72,7 +72,7 @@ var CONTACT_URL = "https://discord.gg/ffU9Q6bagA";
     a.href = CONTACT_URL;
     a.target = "_blank";
     a.rel = "noopener noreferrer";
-    a.textContent = "Hubungi penjual";
+    a.textContent = gsT("Hubungi penjual");
     slot.replaceChildren(a, document.createTextNode("."));
   }
 })();

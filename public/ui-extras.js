@@ -20,7 +20,7 @@
     btn.type = "button"; btn.className = "theme-toggle";
     function draw() {
       var light = root.getAttribute("data-theme") === "light";
-      btn.setAttribute("aria-label", light ? "Ganti ke mode gelap" : "Ganti ke mode terang");
+      btn.setAttribute("aria-label", light ? gsT("Ganti ke mode gelap") : gsT("Ganti ke mode terang"));
       btn.title = btn.getAttribute("aria-label");
       btn.replaceChildren(icon(light ? MOON : SUN));
     }
@@ -84,7 +84,7 @@
 
   window.gsConfirm = function (message, opts) {
     opts = opts || {};
-    return dialog({ title: opts.title || (opts.danger ? "Yakin?" : "Konfirmasi"), message: String(message), okText: opts.okText || (opts.danger ? "Ya, lanjutkan" : "OK"), cancelText: opts.cancelText || "Batal", danger: !!opts.danger });
+    return dialog({ title: opts.title || (opts.danger ? gsT("Yakin?") : gsT("Konfirmasi")), message: String(message), okText: opts.okText || (opts.danger ? gsT("Ya, lanjutkan") : "OK"), cancelText: opts.cancelText || gsT("Batal"), danger: !!opts.danger });
   };
   window.gsAlert = function (message, opts) {
     opts = opts || {};
@@ -92,6 +92,6 @@
   };
   window.gsPrompt = function (message, opts) {
     opts = opts || {};
-    return dialog({ title: opts.title || "Isi dulu", message: String(message), okText: opts.okText || "OK", cancelText: "Batal", input: true, placeholder: opts.placeholder, value: opts.value });
+    return dialog({ title: opts.title || gsT("Isi dulu"), message: String(message), okText: opts.okText || "OK", cancelText: gsT("Batal"), input: true, placeholder: opts.placeholder, value: opts.value });
   };
 })();

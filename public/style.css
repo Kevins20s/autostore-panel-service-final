@@ -1034,3 +1034,21 @@ button.pri:hover, #login.login #btnLogin:hover {
   .desk-metrics .stat { padding: 10px; }
   .checkout-progress { gap: 4px; font-size: 12px; }
 }
+
+.language-select {
+  position: fixed;
+  top: 14px;
+  right: 62px;
+  z-index: 60;
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--tx);
+  background: var(--panel);
+  border-color: var(--line2);
+  border-radius: 10px;
+}
+@media (max-width: 760px) {
+  .language-select { top: auto; bottom: 16px; }
+}

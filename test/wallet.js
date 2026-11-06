@@ -52,6 +52,40 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
       await w.handlePaid({ orderId: "DP-TIDAKADA", amount: 1 }).catch(() => {});
       console.log("ok  webhook paralel, nominal tidak cocok, order tak dikenal"); await close(); }
 
+    // Deposit bot GevraStore: pengguna dan nominal rupiah sama di dua lisensi.
+    { const { createHostedCredit } = require("../src/shared-deposit");
+      const { hostedDbName } = require("../src/shared-tenants");
+      const discordId = "123456789012345678";
+      const databases = new Map();
+      const creditHosted = createHostedCredit({ mongoUrl: "mongodb://unused", openDb: async (_id, _url, name) => {
+          if (!databases.has(name)) databases.set(name, { credits: new Map(), balance: 0 });
+          const data = databases.get(name);
+          return {
+              client: { withSession: fn => fn({ withTransaction: fn => fn() }) },
+              collection: key => key === "hostedcredits" ? {
+                  findOne: async query => data.credits.get(query._id),
+                  insertOne: async doc => data.credits.set(doc._id, doc),
+              } : {
+                  updateOne: async (query, update) => {
+                      assert.strictEqual(query.DiscordID, discordId);
+                      data.balance += update.$inc.Balance;
+                  },
+              },
+          };
+      } });
+      let legacyCalls = 0;
+      const { w, close } = await setup({ creditHosted, forwardToBot: async () => { legacyCalls++; return true; } });
+      const a = await w.createDeposit({ licenseId: L, amount: 20000, discordId, hostedWL: 100 });
+      const b = await w.createDeposit({ licenseId: L2, amount: 20000, discordId, hostedWL: 150 });
+      await w.handlePaid({ orderId: a.orderId, amount: 20000 });
+      await w.handlePaid({ orderId: a.orderId, amount: 20000 });
+      assert.strictEqual(databases.has(hostedDbName("autostore", L2)), false);
+      await w.handlePaid({ orderId: b.orderId, amount: 20000 });
+      assert.strictEqual(databases.get(hostedDbName("autostore", L)).balance, 100);
+      assert.strictEqual(databases.get(hostedDbName("autostore", L2)).balance, 150);
+      assert.strictEqual(legacyCalls, 0);
+      console.log("ok  deposit GevraStore dikreditkan ke database lisensi yang benar"); await close(); }
+
     // 3. biaya + validasi nominal
     { const { w, close } = await setup({ feePercent: 10, feeFlat: 500 });
       const d = await w.createDeposit({ licenseId: L, amount: 10000 }); await w.handlePaid({ orderId: d.orderId, amount: 10000 });

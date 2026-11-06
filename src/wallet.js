@@ -17,7 +17,7 @@ const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ")
 
 function createWallet(opts) {
     const {
-        getCols, autoko, notify = async () => {}, forwardToBot = async () => false, isFrozen = () => false, now = Date.now,
+        getCols, autoko, notify = async () => {}, forwardToBot = async () => false, creditHosted = async () => false, isFrozen = () => false, now = Date.now,
         holdMs = 3 * 3600e3, feePercent = 0, feeFlat = 0,
         minDeposit = 1000, maxDeposit = 5_000_000, depositTtlMs = 15 * 60e3,
         minWithdraw = 10000, withdrawFee = 0, bankCooldownMs = 24 * 3600e3,
@@ -39,7 +39,7 @@ function createWallet(opts) {
     };
 
     // ---------------------------------------------------------------- Deposit
-    async function createDeposit({ licenseId, amount, discordId = "" }) {
+    async function createDeposit({ licenseId, amount, discordId = "", hostedWL }) {
         if (!autoko.enabled) throw new WalletError("Pembayaran otomatis belum aktif.", 503);
         if (isFrozen(licenseId)) throw new WalletError("Pembayaran otomatis toko ini sedang dibekukan penjual.", 403);
         const amt = needInt(amount, "Nominal");
@@ -49,10 +49,14 @@ function createWallet(opts) {
         const t = now(), live = { status: "pending", expiresAt: { $gt: t } };
         if ((await c.deposits.countDocuments({ licenseId, ...live })) >= maxOpenDeposits) throw new WalletError("Terlalu banyak QRIS yang belum dibayar. Tunggu sebentar lalu coba lagi.", 429);
         const did = clean(discordId, 25);
+        if (hostedWL !== undefined && (!Number.isSafeInteger(hostedWL) || hostedWL < 1 || !/^\d{17,20}$/.test(did))) {
+            throw new WalletError("Nominal saldo atau akun Discord tidak valid.");
+        }
         if (did && (await c.deposits.countDocuments({ licenseId, discordId: did, ...live })) >= maxOpenPerUser) throw new WalletError("Kamu masih punya beberapa QRIS yang belum dibayar. Bayar atau tunggu kedaluwarsa dulu.", 429);
 
         const fee = feeOf(amt);
         const dep = { orderId: newOrderId(), licenseId, discordId: did, amount: amt, fee, net: amt - fee, status: "pending", createdAt: t, expiresAt: t + depositTtlMs, botDeliveredAt: null, botAttempts: 0 };
+        if (hostedWL !== undefined) dep.hostedWL = hostedWL;
         await c.deposits.insertOne(dep);
         try {
             const q = await autoko.createQris({ orderId: dep.orderId, amount: amt, expiresAt: dep.expiresAt });
@@ -66,11 +70,16 @@ function createWallet(opts) {
 
     async function deliver(c, dep) {
         let ok = false;
-        try { ok = await forwardToBot(dep.licenseId, { status: "completed", externalId: dep.orderId, amount: dep.amount }); } catch { ok = false; }
+        try {
+            ok = dep.hostedWL === undefined
+                ? await forwardToBot(dep.licenseId, { status: "completed", externalId: dep.orderId, amount: dep.amount })
+                : await creditHosted(dep);
+        } catch { ok = false; }
         if (ok) { await c.deposits.updateOne({ orderId: dep.orderId }, { $set: { botDeliveredAt: now() } }); return true; }
         const upd = await c.deposits.findOneAndUpdate({ orderId: dep.orderId }, { $inc: { botAttempts: 1 } }, { returnDocument: "after" });
         if (upd && upd.botAttempts === maxBotAttempts)
-            await tell("⚠️ Deposit sudah dibayar tapi belum masuk ke bot pembeli", [`Order: ${dep.orderId}`, `Nominal: ${rp(dep.amount)}`, "Admin toko pembeli bisa menekan tombol Success di log donasi Discord sebagai jalan keluar."]);
+            await tell("⚠️ Deposit sudah dibayar tapi belum masuk ke bot pembeli", [`Order: ${dep.orderId}`, `Nominal: ${rp(dep.amount)}`,
+                dep.hostedWL === undefined ? "Admin toko pembeli bisa menekan tombol Success di log donasi Discord sebagai jalan keluar." : "Cek koneksi database toko GevraStore dan transaksi deposit."]);
         return false;
     }
 

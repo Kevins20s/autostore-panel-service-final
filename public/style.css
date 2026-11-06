@@ -39,6 +39,12 @@ button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 a{color:inherit}
 .hide{display:none!important}
+.bot-mode-options { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
+.bot-mode-options legend { margin-bottom: 10px; font-weight: 700; }
+.bot-mode-options label { display: flex; align-items: start; gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--line2); border-radius: 10px; cursor: pointer; }
+.bot-mode-options input[type="radio"] { width: auto; margin: 4px 0 0; accent-color: var(--ac); }
+.bot-mode-options small { display: block; margin-top: 4px; }
+.bot-mode-options label:has(input:checked) { border-color: var(--ac); }
 .m0{margin:0!important}.mt{margin-top:14px!important}.w80{width:80px!important}
 .mut{color:var(--mut);font-size:13px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
 

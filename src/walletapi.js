@@ -76,6 +76,7 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
         if (!l || !safeEq(tok, internalToken(id))) return res.sendStatus(401);
         if (l.type === "service" || !valid(l)) return res.status(403).json({ error: "Key tidak aktif." });
+        if (l.runMode === "central") return res.status(409).json({ error: "Gunakan perintah isi saldo di bot GevraStore." });
         if (modeOf(l) === "manual") return res.json({ mode: "manual" });
         if (!wallet) return res.status(503).json({ error: "Pembayaran otomatis belum aktif." });
         if (tooFast(id)) return res.status(429).json({ error: "Terlalu banyak permintaan. Coba lagi sebentar lagi." });

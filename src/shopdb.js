@@ -9,7 +9,7 @@ const COL = {
     discount: "discounts", bulk: "bulkdiscounts", wlrate: "wlrates", mt: "mts", api: "apisettings", orderlog: "orderlogs",
 };
 
-async function getDb(id, url) {
+async function getDb(id, url, dbName) {
     let c = conns.get(id);
     if (c && c.url !== url) { await c.client.close().catch(() => {}); conns.delete(id); c = null; }
     if (!c) {
@@ -19,7 +19,7 @@ async function getDb(id, url) {
         conns.set(id, c);
     }
     c.last = Date.now();
-    return c.client.db();
+    return c.client.db(dbName);
 }
 
 function closeConn(id) {

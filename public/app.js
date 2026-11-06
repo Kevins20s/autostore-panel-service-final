@@ -446,8 +446,77 @@ async function settings() {
 let botFilled = false;
 const BOT_FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRETS = ["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"];
+
+function hostedBotCard(outcome) {
+    const content = h("div", {});
+    const load = h("button", { class: "pri" }, gsT("Tampilkan server Discord"));
+    load.onclick = guard(async () => {
+        load.disabled = true;
+        try {
+            const { reconnect, servers } = await api("GET", "/api/discord-install/servers");
+            if (reconnect) {
+                content.replaceChildren(h("a", { href: "/api/auth/discord" }, gsT("Hubungkan akun Discord")));
+                return;
+            }
+            if (!servers.length) {
+                content.replaceChildren(h("p", { class: "mut" }, gsT("Tidak ada server yang bisa kamu kelola dengan akun ini.")));
+                return;
+            }
+            const select = h("select", {}, ...servers.map(server => h("option", { value: server.id }, server.name)));
+            const invite = h("a", { href: servers[0].invite, target: "_blank", rel: "noopener" }, gsT("Lanjutkan di Discord"));
+            select.onchange = () => { invite.href = servers.find(server => server.id === select.value).invite; };
+            content.replaceChildren(field(gsT("Pilih server Discord"), select), invite);
+        } finally {
+            load.disabled = false;
+        }
+    });
+    const connect = h("a", { href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
+    content.append(h("div", { class: "row gap" }, connect, load));
+    if (outcome === "connected") load.click();
+    const notice = {
+        error: "Discord gagal terhubung. Coba lagi.",
+        conflict: "Lisensi ini sudah terhubung ke akun Discord lain.",
+        unavailable: "Bot GevraStore belum tersedia untuk lisensi ini.",
+    }[outcome];
+    return card(h("h2", {}, gsT("Undang bot GevraStore")),
+        h("p", { class: "mut" }, gsT("Hubungkan Discord, pilih server yang kamu kelola, lalu konfirmasi undangan.")),
+        notice ? h("p", { class: "mut", role: "status" }, gsT(notice)) : null, content);
+}
+
+function hostedBotUnavailable() {
+    return card(h("h2", {}, gsT("Bot GevraStore")),
+        h("p", { class: "mut" }, gsT("Bot GevraStore belum tersedia untuk lisensi ini. Saat aktif, kamu bisa memilih server Discord tanpa menyiapkan token atau MongoDB.")));
+}
+
+function botModePicker(ownBot, hostedBot, showHosted) {
+    const own = h("input", { type: "radio", name: "botMode", value: "own", checked: !showHosted });
+    const hosted = h("input", { type: "radio", name: "botMode", value: "hosted", checked: showHosted });
+    const hostedPanel = hostedBot || hostedBotUnavailable();
+    const show = () => {
+        ownBot.classList.toggle("hide", hosted.checked);
+        hostedPanel.classList.toggle("hide", !hosted.checked);
+    };
+    own.addEventListener("change", show);
+    hosted.addEventListener("change", show);
+    show();
+    return [
+        card(h("fieldset", { class: "bot-mode-options" },
+            h("legend", {}, gsT("Pilih cara menjalankan bot")),
+            h("label", {}, own, h("span", {}, h("strong", {}, gsT("Bot sendiri")), h("small", { class: "mut" }, gsT("Gunakan token Discord dan MongoDB milikmu.")))),
+            h("label", {}, hosted, h("span", {}, h("strong", {}, gsT("Bot GevraStore")), h("small", { class: "mut" }, gsT("Pilih server Discord. Hosting dan database disiapkan GevraStore.")))))),
+        ownBot,
+        hostedPanel,
+    ];
+}
+
 async function bot() {
     me = await api("GET", "/api/me");
+    const url = new URL(location.href);
+    const outcome = url.searchParams.get("discord");
+    if (outcome) {
+        url.searchParams.delete("discord");
+        history.replaceState(null, "", url);
+    }
     const inp = {};
     const mk = (k, type = "text") => (inp[k] = h("input", { type, autocomplete: "off", placeholder: SECRETS.includes(k) && me.config.has[k] ? gsT("(tersimpan)") : "", value: SECRETS.includes(k) ? "" : me.config[k] || "" }));
     const pre = h("pre", {}, "-"), msg = h("div", { class: "mut mt" });
@@ -466,7 +535,7 @@ async function bot() {
     }
     clearInterval(logTimer); logTimer = setInterval(refreshLogs, 5000); setTimeout(refreshLogs, 50);
     const isService = me.type === "service";
-    return h("div", {}, head(isService ? "Service Bot & Server" : "Bot & Server", isService ? gsT("Hubungkan bot AutoStore Service dan database kamu.") : gsT("Hubungkan bot Discord dan database kamu.")),
+    const ownBot = h("div", {},
         card(h("div", { class: "row sp" }, h("div", { class: "row" }, h("b", {}, gsT("Status bot")), state),
             h("div", { class: "row gap" }, h("button", { class: "pri", onclick: act("start") }, "Start"), h("button", { onclick: act("restart") }, "Restart"), h("button", { class: "bad", onclick: act("stop") }, "Stop"))),
             invite ? h("p", { class: "mut" }, gsT("Belum masuk ke server? "), h("a", { href: invite, target: "_blank", rel: "noopener" }, gsT("Undang bot ke server")), " ", copyBtn(invite, gsT("Salin link"))) : null),
@@ -487,6 +556,9 @@ async function bot() {
                 finally { btn.disabled = false; btn.textContent = gsT("Simpan"); }
             }) }, gsT("Simpan"))), msg),
         card(h("h2", {}, gsT("Log bot")), pre));
+    return h("div", {},
+        head(isService ? "Service Bot & Server" : "Bot & Server", isService ? gsT("Hubungkan bot AutoStore Service dan database kamu.") : gsT("Pilih bot untuk server tokomu.")),
+        isService ? ownBot : botModePicker(ownBot, me.discordInstallEnabled ? hostedBotCard(outcome) : null, !!outcome));
 }
 
 
@@ -1059,29 +1131,10 @@ async function render() {
 function landingSection() {
     return document.getElementById(location.hash.slice(1))?.closest(".landing-section");
 }
-let linkDiscord = false;
-async function showDiscordLogin() {
-    const note = $("discordNote");
-    try {
-        const status = await api("GET", "/api/auth/discord/status");
-        $("discordLogin").classList.toggle("hide", !status.enabled);
-        linkDiscord = status.needsLicense;
-        const url = new URL(location.href);
-        if (url.searchParams.get("discord") === "error") {
-            note.textContent = gsT("Login Discord gagal. Coba lagi atau masuk dengan kunci lisensi.");
-            url.searchParams.delete("discord");
-            history.replaceState(null, "", url);
-        } else {
-            note.textContent = linkDiscord ? gsT("Discord terverifikasi. Masukkan kunci lisensi untuk menautkannya ke akun Discord ini.") : "";
-        }
-        note.classList.toggle("hide", !note.textContent);
-    } catch { /* Login dengan lisensi tetap tersedia */ }
-}
 function showLogin() {
     $("app").classList.add("hide");
     $("login").classList.remove("hide");
     landingSection()?.scrollIntoView?.();
-    showDiscordLogin();
 }
 async function boot() {
     try { me = await api("GET", "/api/me"); } catch { return showLogin(); }
@@ -1096,7 +1149,7 @@ window.addEventListener("hashchange", () => {
 });
 $("btnLogin").onclick = async () => {
     const m = $("loginMsg");
-    try { await api("POST", "/api/login", { key: $("key").value, linkDiscord }); linkDiscord = false; boot(); }
+    try { await api("POST", "/api/login", { key: $("key").value }); boot(); }
     catch (e) { m.textContent = gsT(e.message); m.className = "msg err"; m.style.display = "block"; }
 };
 $("key").onkeydown = (e) => { if (e.key === "Enter") $("btnLogin").click(); };

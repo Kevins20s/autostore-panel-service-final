@@ -31,7 +31,8 @@ function readCookie(req, name = COOKIE) {
 function setSession(res, payload, hours = 12) {
     const token = sign({ ...payload, exp: Date.now() + hours * 3600e3 });
     const secure = process.env.COOKIE_SECURE === "1" ? "; Secure" : "";
-    res.append("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${hours * 3600}${secure}`);
+    const sameSite = payload.t === "buyer" ? "Lax" : "Strict";
+    res.append("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${hours * 3600}${secure}`);
 }
 
 const clearSession = (res) => res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);

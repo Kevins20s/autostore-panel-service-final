@@ -4,12 +4,14 @@ const fs = require("fs"), os = require("os"), path = require("path"), assert = r
 const P = 5055, base = `http://127.0.0.1:${P}`;
 const data = path.join(os.tmpdir(), `panel-${Date.now()}.json`);
 const MASTER = "a".repeat(64);
+process.env.MASTER_KEY = MASTER;
+const { verify } = require("../src/auth");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let cookie = "";
 async function call(method, url, body, ck) {
     const r = await fetch(base + url, { method, headers: { "Content-Type": "application/json", ...(ck ? { Cookie: ck } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const sc = r.headers.get("set-cookie");
-    return { status: r.status, json: await r.json().catch(() => ({})), cookie: sc ? sc.split(";")[0] : null };
+    return { status: r.status, json: await r.json().catch(() => ({})), cookie: sc ? sc.split(";")[0] : null, setCookie: sc };
 }
 const waitBot = async (ck, want, ms = 6000) => {
     const t = Date.now();
@@ -20,7 +22,9 @@ const waitBot = async (ck, want, ms = 6000) => {
 (async () => {
     const srv = spawn(process.execPath, ["server.js"], {
         env: { ...process.env, PANEL_PORT: P, MASTER_KEY: MASTER, ADMIN_PASSWORD: "supersecret1", DATA_FILE: data,
-               BOT_DIR: path.join(__dirname, "fakebot"), SKIP_VALIDATE: "1", WATCH_MS: "300", BASE_PORT: "4500" },
+               BOT_DIR: path.join(__dirname, "fakebot"), SKIP_VALIDATE: "1", WATCH_MS: "300", BASE_PORT: "4500",
+               PUBLIC_URL: base, DISCORD_LOGIN_CLIENT_ID: "123456789012345678", DISCORD_LOGIN_CLIENT_SECRET: "test",
+               DISCORD_HOSTED_BOT_CLIENT_ID: "223456789012345678" },
         stdio: "inherit",
     });
     try {
@@ -37,6 +41,7 @@ const waitBot = async (ck, want, ms = 6000) => {
         // buyer login
         assert.strictEqual((await call("POST", "/api/login", { key: "AS-SALAH" })).status, 401);
         const b = await call("POST", "/api/login", { key }); assert.strictEqual(b.status, 200); const ck = b.cookie;
+        assert.match(b.setCookie, /SameSite=Lax/);
         assert.strictEqual((await call("GET", "/api/me", null, adm)).status, 401, "cookie admin bukan akses pembeli");
         console.log("ok  login pembeli + pemisahan akses");
 
@@ -49,6 +54,19 @@ const waitBot = async (ck, want, ms = 6000) => {
         const me = (await call("GET", "/api/me", null, ck)).json;
         assert.ok(me.config.has.botToken && !JSON.stringify(me).includes("TOKEN-RAHASIA"), "secret tidak boleh bocor ke browser");
         console.log("ok  simpan config, secret tidak dikembalikan");
+
+        assert.strictEqual((await call("GET", "/api/auth/discord")).status, 401);
+        assert.strictEqual((await call("GET", "/api/auth/discord/callback")).status, 401);
+        const startDiscord = await fetch(base + "/api/auth/discord", { headers: { Cookie: ck }, redirect: "manual" });
+        assert.strictEqual(startDiscord.status, 302);
+        const oauth = new URL(startDiscord.headers.get("location"));
+        assert.strictEqual(oauth.searchParams.get("scope"), "identify guilds");
+        const flowCookie = startDiscord.headers.getSetCookie().find(value => value.startsWith("gs_discord_flow="));
+        const flow = verify(decodeURIComponent(flowCookie.split(";")[0].slice("gs_discord_flow=".length)));
+        const licenseId = (await call("GET", "/api/admin/licenses", null, adm)).json.licenses[0].id;
+        assert.strictEqual(flow.licenseId, licenseId);
+        assert.deepStrictEqual((await call("GET", "/api/discord-install/servers", null, ck)).json, { reconnect: true });
+        console.log("ok  Discord hanya dapat dihubungkan setelah login dengan key");
 
         // start bot
         assert.strictEqual((await call("POST", "/api/bot/start", null, ck)).status, 200);

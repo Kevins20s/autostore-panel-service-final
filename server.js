@@ -73,9 +73,11 @@ const numEnv = (k, d) => (process.env[k] !== undefined && process.env[k] !== "" 
 const findLicense = (id) => licenses().find((x) => x.id === id);
 const walletDb = createWalletDb();
 const autoko = createAutoko();
+const hostedMongoUrl = process.env.DISCORD_CATALOG_PILOT_MONGO_URL;
+const creditHosted = require("./src/shared-deposit").createHostedCredit({ mongoUrl: hostedMongoUrl });
 const forwardToBot = createBotForwarder({ findLicense, isRunning: (id) => runner.status(id) === "running" });
 const wallet = walletDb.enabled ? createWallet({
-    getCols: walletDb.getCols, autoko, forwardToBot, notify: createNotifier(), publicUrl: process.env.PUBLIC_URL || "",
+    getCols: walletDb.getCols, autoko, forwardToBot, creditHosted, notify: createNotifier(), publicUrl: process.env.PUBLIC_URL || "",
     isFrozen: (id) => !!findLicense(id)?.walletFrozen,
     holdMs: numEnv("WALLET_HOLD_HOURS", 3) * 3600e3,
     feePercent: numEnv("WALLET_FEE_PERCENT", 0), feeFlat: numEnv("WALLET_FEE_FLAT", 0),
@@ -120,7 +122,7 @@ function issueLicense(name, type, days, { save = true, lifetime = false } = {}) 
 }
 
 function reconcile(l) {
-    const shouldRun = l.desired === "running" && valid(l) && !!l.config;
+    const shouldRun = l.runMode !== "central" && l.desired === "running" && valid(l) && !!l.config;
     const st = runner.status(l.id);
     if (shouldRun && st === "stopped") runner.start(l.id, decrypt(l.config), l.port, l.type || "autostore");
     else if (!shouldRun && st !== "stopped") runner.stop(l.id);
@@ -165,9 +167,15 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const buyer = (req, res, next) => {
     const s = auth.session(req);
-    const l = s?.t === "buyer" && licenses().find((x) => x.id === s.id);
+    const l = s?.t === "buyer" && s.via !== "discord" && licenses().find((x) => x.id === s.id);
     if (!l) return res.status(401).json({ error: "Belum login." });
     req.lic = l;
+    next();
+};
+const ownBotOnly = (req, res, next) => {
+    if (req.lic.runMode === "central") {
+        return res.status(403).json({ error: "Lisensi ini sedang menggunakan Bot GevraStore." });
+    }
     next();
 };
 const admin = (req, res, next) =>
@@ -204,7 +212,7 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
     res.json({ ok: true, count: licenses().length });
 }));
 
-app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
+app.use("/api/shop", buyer, ownBotOnly, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
 
 // ---- Pesanan key lewat web (QRIS manual) ----
@@ -224,7 +232,7 @@ const orders = createOrders({
 });
 registerOrderRoutes(app, { admin, buyer, orders, ttlMin: ORDER_TTL_MIN, turnstile });
 registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
-const discordLogin = require("./src/discord-login")(app, { licenses });
+const discordLogin = require("./src/discord-login")(app, { buyer, valid, save: store.save });
 console.log("[PANEL] Pembayaran key di /beli:", orders.autoEnabled() ? "QRIS otomatis aktif (cadangan: QRIS statis)" : "QRIS statis + konfirmasi admin", "| CAPTCHA:", turnstile.enabled ? "Turnstile aktif" : "nonaktif");
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
@@ -233,26 +241,13 @@ app.post("/api/login", (req, res) => {
     const key = String(req.body?.key || "").trim().toUpperCase();
     const l = key && licenses().find((x) => x.keyHash === sha256(key));
     if (!l) { auth.recordFail(req.ip); return res.status(401).json({ error: "Key tidak ditemukan." }); }
-    if (req.body?.linkDiscord === true) {
-        const discordId = discordLogin.pendingId(req);
-        if (!discordId) return res.status(401).json({ error: "Sesi Discord sudah habis. Masuk dengan Discord lagi." });
-        if ((l.discordLoginId && l.discordLoginId !== discordId) ||
-            licenses().some(other => other.id !== l.id && other.discordLoginId === discordId)) {
-            return res.status(409).json({ error: "Akun Discord atau lisensi sudah ditautkan." });
-        }
-        if (!l.discordLoginId) {
-            l.discordLoginId = discordId;
-            try { store.save(); }
-            catch (error) { delete l.discordLoginId; console.error("[AUTH] Gagal menyimpan tautan Discord:", error.code); return res.status(500).json({ error: "Tautan Discord belum bisa disimpan." }); }
-        }
-    }
     auth.clearFails(req.ip);
     auth.setSession(res, { t: "buyer", id: l.id });
-    discordLogin.clear(res);
+    discordLogin.clearInstall(res);
     res.json({ ok: true, type: l.type || "autostore" });
 });
 
-app.post("/api/logout", (req, res) => { auth.clearSession(res); discordLogin.clear(res); res.json({ ok: true }); });
+app.post("/api/logout", (req, res) => { auth.clearSession(res); discordLogin.clearInstall(res); res.json({ ok: true }); });
 
 app.get("/api/me", buyer, (req, res) => {
     const l = req.lic;
@@ -262,6 +257,7 @@ app.get("/api/me", buyer, (req, res) => {
         buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix,
         expiresAt: l.expiresAt, lifetime: !!l.lifetime, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
         revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
+        discordInstallEnabled: discordLogin.eligible(l),
         webhookUrl: `${base}/hook/${l.id}`,
         walletEnabled: !!wallet, autoAvailable: autoko.enabled, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
         config: {
@@ -274,7 +270,7 @@ app.get("/api/me", buyer, (req, res) => {
     });
 });
 
-app.put("/api/config", buyer, wrap(async (req, res) => {
+app.put("/api/config", buyer, ownBotOnly, wrap(async (req, res) => {
     const l = req.lic;
     const cur = l.config ? decrypt(l.config) : {};
     const next = { ...cur };
@@ -312,10 +308,10 @@ const botAction = (action) => wrap(async (req, res) => {
     store.save();
     res.json({ ok: true });
 });
-app.post("/api/bot/start", buyer, botAction("start"));
-app.post("/api/bot/stop", buyer, botAction("stop"));
-app.post("/api/bot/restart", buyer, botAction("restart"));
-app.get("/api/logs", buyer, (req, res) => res.json({ lines: runner.logs(req.lic.id).slice(-100) }));
+app.post("/api/bot/start", buyer, ownBotOnly, botAction("start"));
+app.post("/api/bot/stop", buyer, ownBotOnly, botAction("stop"));
+app.post("/api/bot/restart", buyer, ownBotOnly, botAction("restart"));
+app.get("/api/logs", buyer, ownBotOnly, (req, res) => res.json({ lines: runner.logs(req.lic.id).slice(-100) }));
 
 const SERVICE_DEFS = {
     "PLANT": { label: "PLANT", unit: "World", defaultPrice: 30 },
@@ -418,8 +414,8 @@ const putEmojis = wrap(async (req, res) => {
     }
     res.json({ ok: true, restarted: wasRunning, emojis: merged });
 });
-app.put("/api/emojis", buyer, putEmojis);
-app.put("/api/service/emojis", buyer, putEmojis);
+app.put("/api/emojis", buyer, ownBotOnly, putEmojis);
+app.put("/api/service/emojis", buyer, ownBotOnly, putEmojis);
 
 const resetEmojis = wrap(async (req, res) => {
     const l = req.lic;
@@ -436,8 +432,8 @@ const resetEmojis = wrap(async (req, res) => {
     }
     res.json({ ok: true, restarted: wasRunning, emojis: defaults });
 });
-app.post("/api/emojis/reset", buyer, resetEmojis);
-app.post("/api/service/emojis/reset", buyer, resetEmojis);
+app.post("/api/emojis/reset", buyer, ownBotOnly, resetEmojis);
+app.post("/api/service/emojis/reset", buyer, ownBotOnly, resetEmojis);
 
 app.post("/api/admin/login", (req, res) => {
     if (auth.tooMany(req.ip)) return res.status(429).json({ error: "Terlalu banyak percobaan." });
@@ -535,6 +531,47 @@ if (backup.enabled() && walletBackup) {
 }
 licenses().forEach(reconcile);
 
+// Pilot terpisah: perintah toko hanya dipasang di guild tes yang terikat lisensi.
+let catalogPilot;
+if (process.env.DISCORD_CATALOG_PILOT_TOKEN && hostedMongoUrl && licenses().some(l => l.runMode === "central" && valid(l))) {
+    try {
+        const { Client, Events, GatewayIntentBits } = require(require.resolve("discord.js", { paths: [path.join(__dirname, "bot")] }));
+        const { buildTenantRegistry } = require("./src/shared-tenants");
+        const { createCatalogHandler, commands } = require("./src/shared-catalog");
+        const registry = () => buildTenantRegistry(licenses(), "autostore", decrypt, {
+            hostedMongoUrl,
+        });
+        const guildIds = [...registry().keys()];
+        if (!guildIds.length) throw new Error("No test guilds configured");
+        catalogPilot = new Client({ intents: [GatewayIntentBits.Guilds] });
+        const createDeposit = wallet && autoko.enabled && autoko.mode === "live" && process.env.DISCORD_CATALOG_PILOT_QRIS === "1"
+            ? input => wallet.createDeposit(input)
+            : undefined;
+        const handle = createCatalogHandler({ registry, createDeposit });
+        catalogPilot.on(Events.InteractionCreate, interaction => {
+            handle(interaction).catch(() => console.error("[CATALOG PILOT] Gagal menangani interaksi."));
+        });
+        catalogPilot.on(Events.Error, () => console.error("[CATALOG PILOT] Koneksi Discord bermasalah."));
+        catalogPilot.once(Events.ClientReady, async client => {
+            for (const id of guildIds) {
+                try {
+                    const guild = await client.guilds.fetch(id);
+                    for (const command of commands) {
+                        if (command.name !== "isi-saldo" || createDeposit) await guild.commands.create(command);
+                    }
+                } catch {
+                    console.error("[CATALOG PILOT] Gagal mendaftarkan perintah untuk guild tes", id);
+                }
+            }
+        });
+        catalogPilot.login(process.env.DISCORD_CATALOG_PILOT_TOKEN).catch(() => {
+            console.error("[CATALOG PILOT] Gagal masuk ke Discord.");
+        });
+    } catch {
+        console.error("[CATALOG PILOT] Konfigurasi pilot belum lengkap atau tidak valid.");
+    }
+}
+
 const HOST = process.env.PANEL_HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : "0.0.0.0");
 const server = app.listen(PORT, HOST, () => console.log(`[PANEL] jalan di ${HOST}:${PORT}`));
 server.on("error", (e) => {
@@ -551,6 +588,7 @@ async function shutdown() {
     closing = true;
     setTimeout(() => process.exit(1), 10000).unref();
     server.close();
+    catalogPilot?.destroy();
     try { await Promise.all(licenses().map((l) => runner.stop(l.id))); } catch (e) { console.error(e); }
     await walletDb.close();
     process.exit(0);

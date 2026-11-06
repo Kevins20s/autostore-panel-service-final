@@ -40,6 +40,7 @@ function createTenantDbManager(mongoose, options = {}) {
         let item = cache.get(key);
         if (!item) {
             const connection = mongoose.createConnection(tenant.config.mongoUrl, {
+                ...(tenant.dbName ? { dbName: tenant.dbName } : {}),
                 connectTimeoutMS,
                 serverSelectionTimeoutMS,
                 maxPoolSize: 5,

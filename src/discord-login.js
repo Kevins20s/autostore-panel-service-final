@@ -2,13 +2,16 @@
 
 const crypto = require("node:crypto");
 const auth = require("./auth");
+const { encrypt, decrypt } = require("./crypto");
 
 const FLOW = "gs_discord_flow";
-const PENDING = "gs_discord_link";
 const MAX_AGE = 10 * 60 * 1000;
 const API = "https://discord.com/api/v10";
+const INSTALL = "gs_discord_install";
+const DISCORD_ID = /^\d{17,20}$/;
+const CAN_INSTALL = (1n << 3n) | (1n << 5n); // Administrator atau Manage Server
 
-module.exports = function registerDiscordLogin(app, { licenses }) {
+module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
     const clientId = process.env.DISCORD_LOGIN_CLIENT_ID;
     const clientSecret = process.env.DISCORD_LOGIN_CLIENT_SECRET;
     let redirectUri;
@@ -19,38 +22,76 @@ module.exports = function registerDiscordLogin(app, { licenses }) {
         }
     } catch { /* OAuth belum dikonfigurasi */ }
     const enabled = !!(clientId && clientSecret && redirectUri);
+    const botId = process.env.DISCORD_HOSTED_BOT_CLIENT_ID || "";
+    const botPermissions = process.env.DISCORD_HOSTED_BOT_PERMISSIONS || "0";
+    const installEnabled = enabled && DISCORD_ID.test(botId) && /^\d+$/.test(botPermissions);
+    const pilotLicense = process.env.DISCORD_HOSTED_PILOT_LICENSE_ID;
+    const pilotGuilds = new Set((process.env.DISCORD_HOSTED_PILOT_GUILD_IDS || "").split(",").filter(Boolean));
+    const eligible = license => installEnabled && license.type !== "service" && valid(license) &&
+        (!pilotLicense || (license.id === pilotLicense && pilotGuilds.size > 0));
     const options = { httpOnly: true, sameSite: "lax", secure: !!redirectUri?.startsWith("https:"), path: "/api" };
     const read = (req, name) => auth.verify(auth.readCookie(req, name));
     const set = (res, name, payload) => res.cookie(name, auth.sign({ ...payload, exp: Date.now() + MAX_AGE }), { ...options, maxAge: MAX_AGE });
-    const pendingId = (req) => {
-        const data = enabled && read(req, PENDING);
-        return data?.t === PENDING ? data.id : null;
-    };
-    const clear = (res) => res.clearCookie(PENDING, options);
     const noStore = (_req, res, next) => { res.set("Cache-Control", "no-store"); next(); };
+    const installOptions = { ...options, path: "/api/discord-install" };
+    const clearInstall = (res) => res.clearCookie(INSTALL, installOptions);
 
-    app.get("/api/auth/discord/status", noStore, (req, res) => {
-        res.json({ enabled, needsLicense: !!pendingId(req) });
+    app.get("/api/discord-install/servers", noStore, buyer, async (req, res) => {
+        if (!eligible(req.lic)) return res.sendStatus(403);
+        let session;
+        try { session = decrypt(auth.readCookie(req, INSTALL)); } catch { /* Belum login atau cookie rusak. */ }
+        if (!session || session.exp <= Date.now() || session.licenseId !== req.lic.id || session.id !== req.lic.discordLoginId) {
+            return res.json({ reconnect: true });
+        }
+        try {
+            const response = await fetch(API + "/users/@me/guilds?limit=200", {
+                headers: { Authorization: "Bearer " + session.accessToken },
+                signal: AbortSignal.timeout(8000),
+            });
+            if (response.status === 401 || response.status === 403) {
+                clearInstall(res);
+                return res.json({ reconnect: true });
+            }
+            if (!response.ok) throw new Error("Discord guild lookup failed");
+            const servers = (await response.json()).filter(guild =>
+                DISCORD_ID.test(guild.id) &&
+                (!pilotLicense || pilotGuilds.has(guild.id)) &&
+                (guild.owner === true || (/^\d+$/.test(guild.permissions) && (BigInt(guild.permissions) & CAN_INSTALL) !== 0n))
+            ).map(({ id, name }) => {
+                const params = new URLSearchParams({
+                    client_id: botId, scope: "bot applications.commands", permissions: botPermissions,
+                    integration_type: "0", guild_id: id, disable_guild_select: "true",
+                });
+                return { id, name, invite: "https://discord.com/oauth2/authorize?" + params };
+            });
+            res.json({ servers });
+        } catch {
+            res.status(502).json({ error: "Daftar server Discord belum bisa dimuat. Coba lagi." });
+        }
     });
-    app.get("/api/auth/discord", noStore, (_req, res) => {
-        if (!enabled) return res.sendStatus(404);
+
+    app.get("/api/auth/discord/status", noStore, (_req, res) => {
+        res.json({ enabled: installEnabled });
+    });
+    app.get("/api/auth/discord", noStore, buyer, (req, res) => {
+        if (!eligible(req.lic)) return res.redirect("/?discord=unavailable#/bot");
         const state = crypto.randomBytes(24).toString("base64url");
         const verifier = crypto.randomBytes(32).toString("base64url");
         const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
-        clear(res);
-        set(res, FLOW, { t: FLOW, state, verifier });
+        clearInstall(res);
+        set(res, FLOW, { t: FLOW, state, verifier, licenseId: req.lic.id });
         const params = new URLSearchParams({
-            client_id: clientId, redirect_uri: redirectUri, response_type: "code", scope: "identify",
+            client_id: clientId, redirect_uri: redirectUri, response_type: "code", scope: "identify guilds",
             state, code_challenge: challenge, code_challenge_method: "S256",
         });
         res.redirect("https://discord.com/oauth2/authorize?" + params);
     });
-    app.get("/api/auth/discord/callback", noStore, async (req, res) => {
-        if (!enabled) return res.sendStatus(404);
+    app.get("/api/auth/discord/callback", noStore, buyer, async (req, res) => {
         const flow = read(req, FLOW);
         res.clearCookie(FLOW, options);
-        if (flow?.t !== FLOW || req.query.state !== flow.state || typeof req.query.code !== "string") {
-            return res.redirect("/?discord=error#masuk");
+        const license = req.lic;
+        if (!eligible(license) || flow?.t !== FLOW || flow.licenseId !== license.id || req.query.state !== flow.state || typeof req.query.code !== "string") {
+            return res.redirect("/?discord=error#/bot");
         }
         try {
             const token = await fetch(API + "/oauth2/token", {
@@ -70,19 +111,20 @@ module.exports = function registerDiscordLogin(app, { licenses }) {
             });
             if (!profile.ok) throw new Error("Discord identity lookup failed");
             const { id } = await profile.json();
-            if (typeof id !== "string" || !/^\d{17,20}$/.test(id)) throw new Error("Invalid Discord ID");
-            const linked = licenses().find(license => license.discordLoginId === id);
-            if (linked) {
-                clear(res);
-                auth.setSession(res, { t: "buyer", id: linked.id });
-                return res.redirect("/");
+            if (typeof id !== "string" || !DISCORD_ID.test(id)) throw new Error("Invalid Discord ID");
+            if (!eligible(license)) return res.redirect("/?discord=unavailable#/bot");
+            if (license.discordLoginId && license.discordLoginId !== id) return res.redirect("/?discord=conflict#/bot");
+            if (!license.discordLoginId) {
+                license.discordLoginId = id;
+                try { save(); }
+                catch (error) { delete license.discordLoginId; throw error; }
             }
-            set(res, PENDING, { t: PENDING, id });
-            return res.redirect("/#masuk");
+            res.cookie(INSTALL, encrypt({ id, accessToken, licenseId: license.id, exp: Date.now() + MAX_AGE }), { ...installOptions, maxAge: MAX_AGE });
+            return res.redirect("/?discord=connected#/bot");
         } catch {
-            return res.redirect("/?discord=error#masuk");
+            return res.redirect("/?discord=error#/bot");
         }
     });
 
-    return { pendingId, clear };
+    return { clearInstall, eligible };
 };

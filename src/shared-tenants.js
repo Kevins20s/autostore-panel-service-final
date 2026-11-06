@@ -1,10 +1,14 @@
 'use strict';
 
+const { createHash } = require('node:crypto');
+
 // Foundation for shared-bot routing. This module is deliberately not wired into
 // production startup until command/event handlers have been converted to use a
 // tenant-scoped database and config context.
 const DISCORD_ID = /^\d{17,20}$/;
 const PRODUCTS = new Set(['autostore', 'service']);
+const hostedDbName = (product, licenseId) =>
+    'gevra_' + createHash('sha256').update(`${product}:${licenseId}`).digest('hex').slice(0, 32);
 
 function productOf(license) {
     const type = license?.type || 'autostore';
@@ -18,7 +22,7 @@ function productOf(license) {
  * stores or logs secrets. Duplicate guild bindings fail closed rather than
  * choosing one buyer silently.
  */
-function buildTenantRegistry(licenses, product, getConfig) {
+function buildTenantRegistry(licenses, product, getConfig, { hostedMongoUrl } = {}) {
     if (!PRODUCTS.has(product)) throw new Error('Produk shared bot tidak valid.');
     if (!Array.isArray(licenses)) throw new TypeError('Daftar license harus berupa array.');
     if (typeof getConfig !== 'function') throw new TypeError('getConfig wajib berupa fungsi.');
@@ -34,18 +38,25 @@ function buildTenantRegistry(licenses, product, getConfig) {
         if (!DISCORD_ID.test(guildId)) {
             throw new Error(`License ${license.id || '(tanpa ID)'} mode terpusat wajib memiliki ID server Discord yang valid.`);
         }
-        if (!cfg?.mongoUrl || !/^mongodb(?:\+srv)?:\/\//.test(cfg.mongoUrl)) {
+        const licenseId = String(license.id || '');
+        if (!licenseId) throw new Error('License mode terpusat wajib memiliki ID.');
+        const mongoUrl = hostedMongoUrl ?? cfg?.mongoUrl;
+        if (typeof mongoUrl !== 'string' || !/^mongodb(?:\+srv)?:\/\//.test(mongoUrl)) {
             throw new Error(`License ${license.id || '(tanpa ID)'} mode terpusat wajib memiliki MongoDB URL yang valid.`);
         }
         if (tenants.has(guildId)) {
             const existing = tenants.get(guildId);
             throw new Error(`Server Discord ${guildId} terikat ke lebih dari satu license (${existing.licenseId}, ${license.id}).`);
         }
+        const dbName = hostedMongoUrl != null
+            ? hostedDbName(product, licenseId)
+            : undefined;
         tenants.set(guildId, Object.freeze({
-            licenseId: String(license.id),
+            licenseId,
             product,
             guildId,
-            config: Object.freeze({ ...cfg }),
+            dbName,
+            config: Object.freeze({ ...cfg, mongoUrl }),
         }));
     }
     return tenants;
@@ -57,4 +68,4 @@ function tenantForGuild(registry, guildId) {
     return registry.get(id) || null;
 }
 
-module.exports = { buildTenantRegistry, tenantForGuild, productOf };
+module.exports = { buildTenantRegistry, tenantForGuild, productOf, hostedDbName };

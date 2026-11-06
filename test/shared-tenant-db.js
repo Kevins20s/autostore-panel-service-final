@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { createTenantDbManager } = require('../src/shared-tenant-db');
+const { buildTenantRegistry } = require('../src/shared-tenants');
 
 function fakeMongoose() {
   const connections = [];
@@ -42,5 +43,22 @@ const tenant = (licenseId, guildId, product = 'autostore', mongoUrl = `mongodb:/
   assert.equal(manager.size(), 0);
   assert.equal(b.connection.closed, true);
   await assert.rejects(manager.get(tenant('x', 'bad-guild')), /Konteks tenant/);
+  const guildA = '123456789012345678';
+  const guildB = '987654321098765432';
+  const licenses = [guildA, guildB].map((guildId, index) => ({
+    id: String(index), runMode: 'central', expiresAt: Date.now() + 60000,
+    config: { guildId, dbName: 'buyer-supplied' },
+  }));
+  const hostedMongoUrl = 'mongodb://localhost/default';
+  const build = () => buildTenantRegistry(licenses, 'autostore', cfg => cfg, { hostedMongoUrl });
+  const hosted = build();
+  const hostedA = await manager.get(hosted.get(guildA), { Order: schema });
+  const hostedB = await manager.get(hosted.get(guildB), { Order: schema });
+  assert.equal(hostedA.connection.uri, hostedB.connection.uri);
+  assert.match(hostedA.connection.options.dbName, /^gevra_[a-f0-9]{32}$/);
+  assert.notEqual(hostedA.connection.options.dbName, hostedB.connection.options.dbName);
+  licenses[0].config.guildId = '222222222222222222';
+  assert.equal(build().get(licenses[0].config.guildId).dbName, hostedA.connection.options.dbName);
+  await manager.closeAll();
   console.log('OK: tenant DB manager isolation checks');
 })().catch((err) => { console.error(err); process.exitCode = 1; });

@@ -45,7 +45,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
     function sweep() {
         const t = now(); let changed = false;
         for (const o of all()) {
-            if ((o.status === "pending" && o.expiresAt <= t) || (o.status === "claimed" && o.claimedAt + CLAIMED_HOLD_MS <= t)) { o.status = "expired"; o.endedAt = t; delete o.qrString; changed = true; }
+            if ((o.status === "pending" && o.expiresAt <= t) || (o.status === "claimed" && o.claimedAt + CLAIMED_HOLD_MS <= t)) { o.status = "expired"; o.endedAt = t; delete o.qrString; delete o.qrImageUrl; changed = true; }
             if (o.keyEnc && o.keyUntil <= t) { delete o.keyEnc; changed = true; }
         }
         const keep = all().filter((o) => isActive(o) || t - (o.endedAt || o.createdAt) < KEEP_FINISHED_MS);
@@ -88,7 +88,13 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
     function view(o, withKey = false) {
         const v = { id: o.id, code: o.code, type: o.type, packageName: PACKAGES[o.type]?.name || o.type, days: o.days, amount: o.amount, status: o.status, createdAt: o.createdAt, expiresAt: o.expiresAt };
         if (o.renewLicenseId) { v.renew = true; if (o.renewedUntil) v.renewedUntil = o.renewedUntil; }
-        if (o.auto) { v.auto = true; if (o.status === "pending" && o.qrString) v.qrString = o.qrString; }
+        if (o.auto) {
+            v.auto = true;
+            if (o.status === "pending") {
+                if (o.qrString) v.qrString = o.qrString;
+                if (o.qrImageUrl) v.qrImageUrl = o.qrImageUrl;
+            }
+        }
         if (withKey && o.status === "done" && o.keyEnc && o.keyUntil > now()) {
             try { v.key = decrypt(o.keyEnc).key; v.keyUntil = o.keyUntil; } catch { /* kunci tidak terbaca: abaikan */ }
         }
@@ -158,7 +164,10 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         return view(o);
     }
 
-    const adminView = (o) => { const v = { ...view(o), name: o.name, contact: o.contact, claimedAt: o.claimedAt || null, confirmedAt: o.confirmedAt || null }; delete v.qrString; return v; };
+    const adminView = (o) => {
+        const { qrString, qrImageUrl, ...summary } = view(o);
+        return { ...summary, name: o.name, contact: o.contact, claimedAt: o.claimedAt || null, confirmedAt: o.confirmedAt || null };
+    };
     const RANK = { claimed: 0, pending: 1 };
     function adminList() {
         sweep();
@@ -183,12 +192,12 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         if (o.renewLicenseId) {
             // Perpanjangan: tambah masa aktif key lama, tidak ada key baru.
             const until = extendLicense(o.renewLicenseId, o.days);
-            o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.renewedUntil = until; delete o.qrString;
+            o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.renewedUntil = until; delete o.qrString; delete o.qrImageUrl;
             store.save();
             return { order: adminView(o), key: null, renewed: true, expiresAt: until, already: false };
         }
         const key = issueLicense(o.name, o.licType || o.type, o.days, { save: false });
-        o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.keyEnc = encrypt({ key }); o.keyUntil = t + KEY_VISIBLE_MS; delete o.qrString;
+        o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.keyEnc = encrypt({ key }); o.keyUntil = t + KEY_VISIBLE_MS; delete o.qrString; delete o.qrImageUrl;
         store.save(); // satu kali simpan: key dan pesanan berubah bersamaan
         return { order: adminView(o), key, already: false };
     }
@@ -197,7 +206,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         sweep();
         const o = adminFind(id);
         if (o.status === "done") throw new OrderError("Pesanan sudah dikonfirmasi, tidak bisa ditolak.", 409);
-        if (o.status !== "rejected") { o.status = "rejected"; o.endedAt = now(); delete o.qrString; store.save(); }
+        if (o.status !== "rejected") { o.status = "rejected"; o.endedAt = now(); delete o.qrString; delete o.qrImageUrl; store.save(); }
         return { order: adminView(o) };
     }
 
@@ -222,8 +231,13 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         if (!o || o.status !== "pending" || o.auto) return false;
         const ref = "KO-" + o.id;
         const q = await autoko.createQris({ orderId: ref, amount: o.price });
-        if (!q || !q.qrString) return false; // gateway hanya memberi URL gambar: tetap manual
-        o.auto = true; o.autoRef = ref; o.amount = o.price; o.qrString = q.qrString; if (q.providerRef) o.providerRef = q.providerRef;
+        if (!q || (!q.qrString && !q.qrImageUrl)) return false;
+        o.auto = true;
+        o.autoRef = ref;
+        o.amount = o.price;
+        if (q.qrString) o.qrString = q.qrString;
+        if (q.qrImageUrl) o.qrImageUrl = q.qrImageUrl;
+        if (q.providerRef) o.providerRef = q.providerRef;
         store.save();
         return true;
     }

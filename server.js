@@ -139,7 +139,8 @@ app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     // Izinkan preview custom Discord emoji.
-    res.setHeader("Content-Security-Policy", `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'${TS_CSP}; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net${TS_CSP ? `; frame-src${TS_CSP}; connect-src 'self'${TS_CSP}` : ""}`);
+    const qrImages = req.path === "/beli.html" ? " https:" : "";
+    res.setHeader("Content-Security-Policy", `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'${TS_CSP}; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net${qrImages}${TS_CSP ? `; frame-src${TS_CSP}; connect-src 'self'${TS_CSP}` : ""}`);
     next();
 });
 

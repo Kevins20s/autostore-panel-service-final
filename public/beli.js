@@ -72,9 +72,23 @@
   }
   // Pesanan QRIS otomatis memakai QR dinamis dengan nominal tepat dan terdeteksi sendiri; manual memakai QRIS statis + tombol "Saya sudah bayar".
   function payMode(o) {
-    var auto = !!(o.auto && o.qrPng);
-    $("qrImg").src = auto ? o.qrPng : "/qris.png";
-    $("qrDl").href = auto ? o.qrPng : "/qris.png";
+    const auto = !!o.auto;
+    const image = $("qrImg");
+    const download = $("qrDl");
+    const source = auto ? (o.qrPng || o.qrImageUrl) : "/qris.png";
+    const imageFailed = () => {
+      image.classList.add("hide");
+      download.classList.add("hide");
+      msg("payMsg", gsT("Gambar QRIS belum bisa dimuat. Muat ulang halaman untuk mencoba lagi."));
+    };
+    msg("payMsg", "");
+    image.onerror = auto ? imageFailed : null;
+    image.classList.remove("hide");
+    download.classList.remove("hide");
+    if (source) {
+      image.src = source;
+      download.href = source;
+    } else imageFailed();
     $("btnPaid").classList.toggle("hide", auto);
     $("payStep3").classList.toggle("hide", auto);
     $("payAuto").classList.toggle("hide", !auto);

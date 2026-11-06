@@ -9,6 +9,7 @@ const gsLanguage = (() => {
 const gsLocale = gsLanguage === "en" ? "en-US" : "id-ID";
 
 const gsEnglish = {
+  "Gambar QRIS belum bisa dimuat. Muat ulang halaman untuk mencoba lagi.": "The QRIS image could not load. Reload the page to try again.",
   "Fitur": "Features",
   "Navigasi utama": "Main navigation",
   "GevraStore / Panel toko Discord": "GevraStore / Discord store dashboard",

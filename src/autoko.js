@@ -126,13 +126,21 @@ function createAutoko(env = process.env) {
             if (status === 503) throw new AutokoError("Semua slot QRIS sedang penuh. Coba lagi beberapa saat lagi.", 503);
             throw new AutokoError("Pembayaran otomatis sedang tidak tersedia. Coba lagi nanti.", 503);
         }
+        const qrString = typeof json.qrisString === "string" ? json.qrisString.trim() : "";
+        let qrImageUrl = null;
+        if (!qrString && typeof json.qrisUrl === "string" && json.qrisUrl.trim()) {
+            try {
+                const url = new URL(json.qrisUrl, base);
+                if (url.protocol === "https:" && !url.username && !url.password) qrImageUrl = url.href;
+            } catch { /* URL tidak bisa dipakai */ }
+        }
+        if (!qrString && !qrImageUrl) throw new AutokoError("Gateway tidak mengirim kode QRIS yang dapat ditampilkan.", 503);
         try { map.set(String(json.orderId), orderId, String(json.qrisId)); }
         catch (e) {
             console.error(`[AUTOKO] GAGAL menyimpan pemetaan order (gateway ${json.orderId}, qrisId ${json.qrisId}):`, e.message);
             throw new AutokoError("Pembayaran otomatis sedang gangguan. Coba lagi sebentar lagi.", 503);
         }
-        const qrString = json.qrisString ? String(json.qrisString) : null;
-        return { providerRef: String(json.orderId), qrString, qrImageUrl: qrString ? null : (json.qrisUrl ? String(json.qrisUrl) : null) };
+        return { providerRef: String(json.orderId), qrString: qrString || null, qrImageUrl };
     }
 
     // Dipakai sweep untuk menangkap webhook yang terlewat.

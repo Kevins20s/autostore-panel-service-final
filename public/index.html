@@ -38,6 +38,13 @@
         <article><span>03</span><h3>Bot &amp; pengaturan</h3><p>Hubungkan bot dan database, atur kurs, serta sesuaikan emoji dan banner toko.</p></article>
       </div>
     </section>
+    <section class="landing-section" id="mode-bot">
+      <p class="landing-tag">Pilihan bot</p><h2>Pilih cara menjalankan tokomu.</h2>
+      <div class="landing-grid">
+        <article><span>Segera hadir</span><h3>Pakai Bot GevraStore</h3><p>Rencana untuk toko yang ingin mulai tanpa membuat bot atau memasukkan token sendiri.</p></article>
+        <article><span>Tersedia</span><h3>Pakai bot sendiri</h3><p>Hubungkan bot Discord milikmu dan kelola katalog serta stok dari panel GevraStore.</p><a href="#paket">Lihat paket</a></article>
+      </div>
+    </section>
     <section class="landing-section landing-showcase" id="showcase">
       <div><p class="landing-tag">02 / Showcase</p><h2>Lihat alur toko dalam satu pesanan.</h2><p>Contoh pembelian voucher dari produk dipilih sampai stok berkurang.</p></div>
       <div class="landing-story">
@@ -66,6 +73,8 @@
     <section class="landing-section landing-access" id="masuk">
       <div><p class="landing-tag">Akses pelanggan</p><h2>Masuk ke GevraStore.</h2><p>Gunakan kunci lisensi untuk membuka panel tokomu.</p></div>
       <div class="landing-login">
+        <a class="landing-btn discord-login hide" id="discordLogin" href="/api/auth/discord">Masuk dengan Discord</a>
+        <p class="discord-note hide" id="discordNote" role="status"></p>
         <label class="login-key-label" for="key">Kunci lisensi</label>
         <div class="key-wrap"><input id="key" type="password" placeholder="AS-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"></div>
         <button class="landing-btn" id="btnLogin" type="button">Masuk</button>

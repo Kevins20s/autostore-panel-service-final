@@ -148,7 +148,7 @@ async function dashboard() {
             h("div", {}, h("h1", {}, gsT("Ringkasan toko")),
                 h("p", { class: "mut" }, gsT("Penjualan, inventaris, dan bot Discord."))),
             h("a", { class: "desk-bot-link", href: "#/bot" }, botPill(),
-                h("span", { class: "mut" }, me.valid ? gsT`Lisensi aktif · ${me.daysLeft} hari lagi` : gsT("Lisensi tidak aktif")))),
+                h("span", { class: "mut" }, me.valid ? (me.lifetime ? gsT("Lisensi seumur hidup") : gsT`Lisensi aktif · ${me.daysLeft} hari lagi`) : gsT("Lisensi tidak aktif")))),
         h("section", { class: "desk-metrics", "aria-label": gsT("Ringkasan toko") },
             stat(gsT("Terjual"), fmt(s.sold)), stat(gsT("Stok tersedia"), fmt(s.stock)),
             stat(gsT("Produk"), fmt(s.products)), stat(gsT("Pelanggan"), fmt(s.users)),
@@ -903,9 +903,10 @@ async function subscription() {
     return h("div", {}, head("Subscription", gsT("Status key kamu.")),
         card(h("table", {}, h("tbody", {}, row(gsT("Pemilik"), me.buyer), row("Key", me.keyPrefix + "…"),
             row("Status", me.revoked ? gsT("Dicabut") : me.valid ? gsT("Aktif") : gsT("Habis")),
-            row(gsT("Berlaku sampai"), new Date(me.expiresAt).toLocaleString(gsLocale)), row(gsT("Sisa"), me.daysLeft + gsT(" hari"))))),
-        h("div", { class: "row mt" }, me.revoked ? null : h("button", { class: "pri", onclick: () => renewDialog() }, gsT("Perpanjang sekarang"))),
-        h("p", { class: "mut" }, me.revoked ? gsT("Key dinonaktifkan penjual. Hubungi penjual untuk bantuan.") : gsT("Perpanjang lewat QRIS. Ada kendala? Hubungi penjual.")));
+            me.lifetime ? row(gsT("Masa aktif"), gsT("Seumur hidup")) : row(gsT("Berlaku sampai"), new Date(me.expiresAt).toLocaleString(gsLocale)),
+            me.lifetime ? null : row(gsT("Sisa"), me.daysLeft + gsT(" hari"))))),
+        h("div", { class: "row mt" }, me.revoked || me.lifetime ? null : h("button", { class: "pri", onclick: () => renewDialog() }, gsT("Perpanjang sekarang"))),
+        h("p", { class: "mut" }, me.revoked ? gsT("Key dinonaktifkan penjual. Hubungi penjual untuk bantuan.") : me.lifetime ? gsT("Lisensi ini tidak memerlukan perpanjangan.") : gsT("Perpanjang lewat QRIS. Ada kendala? Hubungi penjual.")));
 }
 
 // ---------- Pembayaran: QRIS otomatis, saldo, rekening, penarikan ----------
@@ -1058,10 +1059,29 @@ async function render() {
 function landingSection() {
     return document.getElementById(location.hash.slice(1))?.closest(".landing-section");
 }
+let linkDiscord = false;
+async function showDiscordLogin() {
+    const note = $("discordNote");
+    try {
+        const status = await api("GET", "/api/auth/discord/status");
+        $("discordLogin").classList.toggle("hide", !status.enabled);
+        linkDiscord = status.needsLicense;
+        const url = new URL(location.href);
+        if (url.searchParams.get("discord") === "error") {
+            note.textContent = gsT("Login Discord gagal. Coba lagi atau masuk dengan kunci lisensi.");
+            url.searchParams.delete("discord");
+            history.replaceState(null, "", url);
+        } else {
+            note.textContent = linkDiscord ? gsT("Discord terverifikasi. Masukkan kunci lisensi untuk menautkannya ke akun Discord ini.") : "";
+        }
+        note.classList.toggle("hide", !note.textContent);
+    } catch { /* Login dengan lisensi tetap tersedia */ }
+}
 function showLogin() {
     $("app").classList.add("hide");
     $("login").classList.remove("hide");
     landingSection()?.scrollIntoView?.();
+    showDiscordLogin();
 }
 async function boot() {
     try { me = await api("GET", "/api/me"); } catch { return showLogin(); }
@@ -1076,7 +1096,8 @@ window.addEventListener("hashchange", () => {
 });
 $("btnLogin").onclick = async () => {
     const m = $("loginMsg");
-    try { await api("POST", "/api/login", { key: $("key").value }); boot(); } catch (e) { m.textContent = e.message; m.className = "msg err"; m.style.display = "block"; }
+    try { await api("POST", "/api/login", { key: $("key").value, linkDiscord }); linkDiscord = false; boot(); }
+    catch (e) { m.textContent = gsT(e.message); m.className = "msg err"; m.style.display = "block"; }
 };
 $("key").onkeydown = (e) => { if (e.key === "Enter") $("btnLogin").click(); };
 $("btnOut").onclick = async () => { await api("POST", "/api/logout"); location.hash = ""; location.reload(); };

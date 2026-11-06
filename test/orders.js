@@ -26,13 +26,13 @@ const throwsMsg = (fn, re, status) => { try { fn(); } catch (e) { assert(e insta
 { const { o } = mk();
   throwsMsg(() => o.create({ type: "x", name: "Budi", contact: "0812" }), /Paket/);
   throwsMsg(() => o.create({ type: "autostore", name: "B", contact: "0812" }), /Nama/);
-  throwsMsg(() => o.create({ type: "autostore", name: "Budi", contact: "" }), /kontak/i);
+  throwsMsg(() => o.create({ type: "service" }), /Paket/);
   console.log("ok  validasi input"); }
 
 // 2. alur normal + nominal unik + token
 { const { o, store, sent } = mk();
   const a = o.create({ type: "autostore", name: "Budi", contact: "0812-3456" });
-  assert(a.order.amount > 20000 && a.order.amount <= 20499, "nominal 20.001-20.499");
+  assert(a.order.amount > 15000 && a.order.amount <= 15499, "nominal 15.001-15.499");
   assert.strictEqual(a.order.status, "pending");
   assert(!JSON.stringify(store.data.orders).includes(a.token), "token mentah tidak boleh tersimpan");
   assert.strictEqual(o.get(a.order.id, a.token).status, "pending");
@@ -40,7 +40,7 @@ const throwsMsg = (fn, re, status) => { try { fn(); } catch (e) { assert(e insta
   throwsMsg(() => o.get(a.order.id, ""), /tidak ditemukan/, 404);
   assert.strictEqual(sent.length, 0, "belum ada notifikasi sebelum klik sudah bayar");
   o.claim(a.order.id, a.token);
-  assert.strictEqual(sent.length, 1); assert.match(sent[0].text, /GS-/); assert.match(sent[0].text, /Rp20\.\d{3}/); assert.match(sent[0].text, /admin\.html/);
+  assert.strictEqual(sent.length, 1); assert.match(sent[0].text, /GS-/); assert.match(sent[0].text, /Rp15\.\d{3}/); assert.match(sent[0].text, /admin\.html/);
   o.claim(a.order.id, a.token); assert.strictEqual(sent.length, 1, "klik ganda tidak mengirim notifikasi ganda");
   assert.strictEqual(store.data.licenses.length, 0, "key BELUM dibuat sebelum admin konfirmasi");
   assert.strictEqual(o.get(a.order.id, a.token).key, undefined);
@@ -54,9 +54,9 @@ const throwsMsg = (fn, re, status) => { try { fn(); } catch (e) { assert(e insta
 
 // 3. key hanya tampil 24 jam
 { const { o } = mk();
-  const a = o.create({ type: "service", name: "Sari", contact: "sari#1234" });
+  const a = o.create({ type: "autostore", name: "Sari", contact: "sari#1234" });
   o.claim(a.order.id, a.token); const { key } = o.confirm(a.order.id);
-  assert.match(key, /^SV-/);
+  assert.match(key, /^AS-/);
   clock += 23 * 3600e3; assert.strictEqual(o.get(a.order.id, a.token).key, key);
   clock += 2 * 3600e3; const v = o.get(a.order.id, a.token); assert.strictEqual(v.key, undefined); assert.strictEqual(v.status, "done");
   console.log("ok  key hilang dari halaman pembeli setelah 24 jam"); }
@@ -92,7 +92,11 @@ const throwsMsg = (fn, re, status) => { try { fn(); } catch (e) { assert(e insta
 // 7. lapisan HTTP (app tiruan)
 (async () => {
     const { o } = mk(); const routes = {};
-    const app = { get: (p, ...f) => (routes["GET " + p] = f), post: (p, ...f) => (routes["POST " + p] = f) };
+    const app = {
+        get: (p, ...f) => (routes["GET " + p] = f),
+        post: (p, ...f) => (routes["POST " + p] = f),
+        put: (p, ...f) => (routes["PUT " + p] = f),
+    };
     let isAdmin = false; const admin = (req, res, next) => (isAdmin ? next() : res.status(401).json({ error: "Belum login admin." }));
     registerOrderRoutes(app, { admin, orders: o, ttlMin: 30 });
     const call = (key, { body, headers = {}, params = {} } = {}) => new Promise((resolve) => {
@@ -102,8 +106,8 @@ const throwsMsg = (fn, re, status) => { try { fn(); } catch (e) { assert(e insta
         const next = () => { const fn = chain[i++]; fn(req, res, next); };
         next();
     });
-    const info = await call("GET /api/shop-info"); assert.strictEqual(info.json.packages.length, 2); assert.strictEqual(info.json.packages[0].price, 20000); assert.strictEqual(info.headers["Cache-Control"], "no-store");
-    const bad = await call("POST /api/orders", { body: { type: "autostore", name: "", contact: "" } }); assert.strictEqual(bad.code, 400);
+    const info = await call("GET /api/shop-info"); assert.deepStrictEqual(info.json.packages.map(p => p.price), [15000, 40000, 125000, 250000]); assert.strictEqual(info.headers["Cache-Control"], "no-store");
+    const bad = await call("POST /api/orders", { body: { type: "service" } }); assert.strictEqual(bad.code, 400);
     const mkd = await call("POST /api/orders", { body: { type: "autostore", name: "Budi", contact: "0812" } }); assert.strictEqual(mkd.code, 200);
     const { token, order } = mkd.json;
     assert.strictEqual((await call("GET /api/orders/:id", { params: { id: order.id }, headers: { "x-order-token": "salah" } })).code, 404);

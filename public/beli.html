@@ -5,42 +5,55 @@
 <body class="buy"><main class="buy-main">
 <header class="buy-head">
   <div class="buy-logo"><img src="/logo.png" alt="" width="84" height="84"></div>
-  <div class="buy-intro"><h1>Beli key GevraStore</h1>
-  <p class="mut">Pilih paket, bayar lewat QRIS, lalu key muncul di halaman ini setelah pembayaranmu dikonfirmasi.</p></div>
+  <div class="buy-intro"><p class="plan-kicker">Lisensi GevraStore</p><h1>Pilih paket sesuai kebutuhan tokomu</h1>
+  <p class="mut">Kelola produk, stok, dan pesanan dari panel. Bayar lewat QRIS dan ambil kunci lisensi setelah pembayaran dikonfirmasi.</p></div>
   <a href="/#masuk" class="buy-panel-link">Masuk ke panel</a>
 </header>
 
 <ol id="checkoutProgress" class="checkout-progress" aria-label="Tahap pembelian">
-  <li aria-current="step">Paket</li><li>Data pembeli</li><li>Bayar QRIS</li><li>Terima key</li>
+  <li aria-current="step">Paket</li><li>Tinjau pesanan</li><li>Bayar QRIS</li><li>Terima key</li>
 </ol>
 
-<section id="stForm" class="card buy-card">
-  <ul class="buy-feats" aria-label="Keunggulan">
-    <li><b>Setup lewat web</b><span>Isi token bot dan MongoDB di panel, tanpa coding.</span></li>
-    <li><b>Toko produk di Discord</b><span>Stok, harga, diskon, auto-role, dan saldo user.</span></li>
-    <li><b>Pembayaran QRIS</b><span>Key langsung muncul di halaman ini setelah lunas.</span></li>
-  </ul>
-  <div class="buy-form">
-  <h2>Pilih paket</h2>
+<section id="stForm" class="plan-picker" aria-label="Pilih paket">
   <div id="pkgs" class="buy-pkgs" role="radiogroup" aria-label="Paket" aria-busy="true"><div class="skel skel-card" aria-hidden="true"></div><div class="skel skel-card" aria-hidden="true"></div></div>
-  <button class="pri checkout-next" id="btnDetails" type="button" disabled>Lanjut isi data</button>
+  <button class="pri checkout-next" id="btnDetails" type="button" disabled>Lanjut ke pembayaran</button>
   <p id="pkgMsg" class="msg" role="status"></p>
-  </div>
 </section>
 
-<section id="stDetails" class="card buy-card hide">
-  <h2 tabindex="-1">Data pembeli</h2>
-  <p id="chosenPackage" class="checkout-package"></p>
-  <form id="checkoutDetails">
-  <label class="buy-lbl" for="fName">Nama</label>
-  <input id="fName" maxlength="40" required placeholder="Nama kamu" autocomplete="name">
-  <label class="buy-lbl" for="fContact">Kontak (WhatsApp atau Discord)</label>
-  <input id="fContact" maxlength="60" required placeholder="0812xxxxxxx atau username#1234" autocomplete="off">
-  <p class="mut buy-note">Kontak dipakai kalau ada kendala dengan pesananmu.</p>
-  <div id="tsBox" class="buy-ts hide"></div>
-  <div class="row" style="margin-top:14px"><button class="pri" id="btnOrder" type="submit">Buat pesanan &amp; bayar</button><button id="btnPackages" type="button">Kembali ke paket</button></div>
-  <div id="formMsg" class="msg" role="alert"></div>
+<section id="stDetails" class="card buy-card order-review hide">
+  <div class="review-summary">
+    <h2 tabindex="-1">Tinjau pesanan</h2>
+    <p id="chosenPackage" class="review-plan"></p>
+    <dl>
+      <div><dt>Masa aktif</dt><dd id="chosenDuration"></dd></div>
+      <div><dt>Harga paket</dt><dd id="chosenPrice"></dd></div>
+    </dl>
+  </div>
+  <form id="checkoutDetails" class="review-payment">
+    <fieldset class="review-methods">
+      <legend>Metode pembayaran</legend>
+      <label><input type="radio" name="paymentMethod" value="qris" checked><span><strong>QRIS</strong><small>Konfirmasi otomatis</small></span></label>
+      <label><input type="radio" name="paymentMethod" value="dl"><span><strong>Diamond Lock (DL)</strong><small>Bayar lewat Discord GevraStore</small></span></label>
+    </fieldset>
+    <p id="methodNote" class="mut buy-note" role="status">Pembayaran QRIS terdeteksi otomatis.</p>
+    <button id="btnRetryDL" class="hide" type="button">Coba muat kurs lagi</button>
+    <div id="tsBox" class="buy-ts hide"></div>
+    <button class="pri" id="btnOrder" type="submit">Buat pesanan &amp; bayar</button>
+    <button id="btnPackages" type="button">Kembali ke paket</button>
+    <div id="formMsg" class="msg" role="alert"></div>
   </form>
+</section>
+
+<section id="stDiscordPay" class="card buy-card hide">
+  <h2 tabindex="-1">Bayar DL lewat Discord</h2>
+  <p class="review-plan" id="dlAmount"></p>
+  <p class="mut">Buka Discord GevraStore dan berikan kode pesanan ini ke admin. Kunci lisensi muncul di sini setelah admin mengonfirmasi pembayaran.</p>
+  <div class="buy-meta">Kode pesanan <b id="dlCode"></b> · <span id="dlTimer"></span></div>
+  <div class="row gap mt">
+    <a id="dlInvite" class="landing-btn" target="_blank" rel="noopener noreferrer">Buka Discord GevraStore</a>
+    <button type="button" id="btnCopyDlCode">Salin kode pesanan</button>
+    <button type="button" id="btnDlBack">Kembali ke paket</button>
+  </div>
 </section>
 
 <section id="stPay" class="card buy-card hide">
@@ -49,7 +62,7 @@
   <p class="buy-warn" id="payWarn">Nominal harus <b>persis sama</b> (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.</p>
   <div class="buy-qr"><img id="qrImg" src="/qris.png" alt="QRIS GEVRA STORE" width="320" referrerpolicy="no-referrer"></div>
   <p class="buy-qr-actions"><a id="qrDl" href="/qris.png" download="QRIS-GevraStore.png" rel="noreferrer">Simpan gambar QRIS</a><span class="mut"> · cocok untuk scan dari galeri</span></p>
-  <ol class="buy-steps">
+  <ol class="buy-steps" id="paySteps">
     <li>Buka DANA atau e-wallet/m-banking apa pun yang mendukung QRIS, lalu scan kode di atas.</li>
     <li>Masukkan nominal <b id="payAmount2"></b> dengan tepat, lalu bayar.</li>
     <li id="payStep3">Kembali ke sini dan tekan tombol di bawah.</li>

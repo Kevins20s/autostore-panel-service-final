@@ -26,8 +26,8 @@ function ago(t) { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); r
 function showOrderKey(key, note) { $("orderKeyText").textContent = key; $("orderKeyNote").textContent = note; $("orderKey").classList.remove("hide"); }
 const ADM = { mock: false, pk: "" };
 function pkgCell(o) {
-    const c = td(gsT`${o.packageName} ${o.days} hari`);
-    for (const [on, txt, st] of [[o.auto, gsT("Otomatis"), "ok"], [o.renew, gsT("Perpanjangan"), "warn"]]) if (on) { const sp = document.createElement("span"); sp.className = "adm-pill adm-" + st; sp.textContent = txt; sp.style.marginLeft = "6px"; c.append(sp); }
+    const c = td(o.lifetime ? o.packageName : gsT`${o.packageName} ${o.days} hari`);
+    for (const [on, txt, st] of [[o.auto, gsT("Otomatis"), "ok"], [o.paymentMethod === "dl", "DL / Discord", "warn"], [o.renew, gsT("Perpanjangan"), "warn"]]) if (on) { const sp = document.createElement("span"); sp.className = "adm-pill adm-" + st; sp.textContent = txt; sp.style.marginLeft = "6px"; c.append(sp); }
     return c;
 }
 async function loadPackages() {
@@ -40,7 +40,7 @@ async function loadPackages() {
     ADM.pk = sig; box.replaceChildren();
     for (const p of r.packages) {
         const row = document.createElement("div"); row.className = "adm-pkrow";
-        const name = document.createElement("div"); name.className = "adm-pkname"; const b1 = document.createElement("b"); b1.textContent = p.name; const sm = document.createElement("div"); sm.className = "mut"; sm.textContent = gsT`${p.days} hari, key ${p.type}`; name.append(b1, sm);
+        const name = document.createElement("div"); name.className = "adm-pkname"; const b1 = document.createElement("b"); b1.textContent = p.name; const sm = document.createElement("div"); sm.className = "mut"; sm.textContent = p.lifetime ? gsT("Seumur hidup") : gsT`${p.days} hari, key ${p.type}`; name.append(b1, sm);
         const price = document.createElement("input"); price.type = "number"; price.min = "1000"; price.max = "1000000"; price.step = "500"; price.value = p.price; price.setAttribute("aria-label", gsT("Harga ") + p.name);
         const lab = document.createElement("label"); lab.className = "check-row"; const ck = document.createElement("input"); ck.type = "checkbox"; ck.checked = p.sellable; const sp = document.createElement("span"); sp.textContent = gsT("Dijual"); lab.append(ck, sp);
         const save = btn(gsT("Simpan"), async () => { await api("PUT", "/api/admin/packages/" + p.id, { price: Number(price.value), sellable: ck.checked }); ADM.pk = ""; msg("pkMsg", gsT`${p.name} tersimpan.`, true); }, "pri");
@@ -60,11 +60,12 @@ async function loadOrders() {
         const who = td(""); const b1 = document.createElement("b"); b1.textContent = o.name; const sm = document.createElement("div"); sm.className = "mut"; sm.textContent = o.contact; who.append(b1, sm);
         const [lbl, st] = ORD[o.status] || [o.status, "off"];
         const code = td(""); const c1 = document.createElement("b"); c1.textContent = o.code; const t1 = document.createElement("div"); t1.className = "mut"; t1.textContent = ago(o.claimedAt || o.createdAt); code.append(c1, t1);
-        const amt = td(""); const a1 = document.createElement("b"); a1.textContent = rp(o.amount); amt.append(a1);
+        const amt = td(""); const a1 = document.createElement("b"); a1.textContent = o.paymentMethod === "dl" ? `${Math.floor(o.amountWL / 100)} DL ${o.amountWL % 100} WL` : rp(o.amount); amt.append(a1);
         tr.append(code, pkgCell(o), amt, who, pillTd(lbl, st));
         const act = document.createElement("td"); act.className = "row";
         if (o.status !== "done" && o.status !== "rejected") {
-            const lunas = o.auto ? gsT("Pesanan otomatis seharusnya lunas sendiri. Tetap konfirmasi manual sekarang?") : gsT`Sudah cek mutasi DANA sebesar ${rp(o.amount)} dari ${o.name}?`;
+            const lunas = o.paymentMethod === "dl" ? gsT("Sudah menerima {0} untuk pesanan {1} di Discord?", a1.textContent, o.code) :
+                o.auto ? gsT("Pesanan otomatis seharusnya lunas sendiri. Tetap konfirmasi manual sekarang?") : gsT`Sudah cek mutasi DANA sebesar ${rp(o.amount)} dari ${o.name}?`;
             act.append(
                 btn(gsT("Konfirmasi"), async () => {
                     const what = o.renew ? gsT("Masa aktif key akan ditambah.") : gsT("Key akan dibuat sekarang.");
@@ -136,10 +137,10 @@ async function load() {
         const tr = document.createElement("tr");
         const left = Math.ceil((l.expiresAt - Date.now()) / 86400000);
         tr.append(td(l.buyer + (l.configured ? "" : gsT(" (belum setup)"))), td(l.type === "service" ? "AutoStore Service" : "AutoStore"), td(l.keyPrefix + "…"),
-            l.revoked ? pillTd(gsT("Dicabut"), "bad") : left <= 0 ? pillTd(gsT("Habis"), "bad") : pillTd(gsT`${left} hari lagi`, left <= 7 ? "warn" : "ok"), pillTd(BOT_TXT[l.bot] || l.bot, BOT_STATE[l.bot] || "off"));
+            l.revoked ? pillTd(gsT("Dicabut"), "bad") : l.lifetime ? pillTd(gsT("Seumur hidup"), "ok") : left <= 0 ? pillTd(gsT("Habis"), "bad") : pillTd(gsT`${left} hari lagi`, left <= 7 ? "warn" : "ok"), pillTd(BOT_TXT[l.bot] || l.bot, BOT_STATE[l.bot] || "off"));
         const act = document.createElement("td"); act.className = "row";
         act.append(
-            btn(gsT("+30 hari"), () => api("POST", `/api/admin/licenses/${l.id}/extend`, { days: 30 })),
+            ...(l.lifetime ? [] : [btn(gsT("+30 hari"), () => api("POST", `/api/admin/licenses/${l.id}/extend`, { days: 30 }))]),
             ...(l.type === "service" ? [] : [btn(l.walletFrozen ? gsT("Buka wallet") : gsT("Bekukan wallet"), () => api("POST", `/api/admin/licenses/${l.id}/wallet-freeze`, { frozen: !l.walletFrozen }))]),
             btn(l.revoked ? gsT("Aktifkan") : gsT("Cabut"), () => api("POST", `/api/admin/licenses/${l.id}/revoke`, { revoked: !l.revoked })),
             btn(gsT("Hapus"), async () => { if (await gsConfirm(gsT`Hapus ${l.buyer}? Bot akan dimatikan.`, { danger: true, okText: gsT("Hapus") })) await api("DELETE", `/api/admin/licenses/${l.id}`); }, "bad"));

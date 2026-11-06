@@ -9,6 +9,61 @@ const gsLanguage = (() => {
 const gsLocale = gsLanguage === "en" ? "en-US" : "id-ID";
 
 const gsEnglish = {
+  "/ 1 bulan": "/ 1 month",
+  "/ 3 bulan": "/ 3 months",
+  "/ 1 tahun": "/ 1 year",
+  "Paling hemat": "Best value",
+  "Konfirmasi otomatis": "Automatic confirmation",
+  "Bayar lewat Discord GevraStore": "Pay through GevraStore Discord",
+  "Pembayaran QRIS terdeteksi otomatis.": "QRIS payments are detected automatically.",
+  "Memuat kurs DL…": "Loading the DL rate…",
+  "Estimasi: {0}": "Estimate: {0}",
+  "Kurs DL belum tersedia": "DL rate unavailable",
+  "Coba muat kurs lagi": "Retry loading the rate",
+  "Kurs 1 DL = {0}. Lanjutkan pembayaran di Discord.": "1 DL = {0}. Continue payment on Discord.",
+  "Kurs DL belum tersedia. Coba lagi atau pilih QRIS.": "The DL rate is unavailable. Try again or choose QRIS.",
+  "Kurs DL berubah. Periksa nominal terbaru sebelum lanjut.": "The DL rate changed. Review the updated amount before continuing.",
+  "Bayar DL lewat Discord": "Pay with DL on Discord",
+  "Buka Discord GevraStore dan berikan kode pesanan ini ke admin. Kunci lisensi muncul di sini setelah admin mengonfirmasi pembayaran.": "Open GevraStore Discord and give this order code to an admin. Your license key will appear here after they confirm payment.",
+  "Buka Discord GevraStore": "Open GevraStore Discord",
+  "Salin kode pesanan": "Copy order code",
+  "Sudah menerima {0} untuk pesanan {1} di Discord?": "Have you received {0} for order {1} on Discord?",
+  "QRIS otomatis belum tersedia. Coba lagi nanti.": "Automatic QRIS is unavailable. Try again later.",
+  "Gratis hosting bot 24/7 di server cloud GevraStore": "Free 24/7 bot hosting on GevraStore cloud servers",
+  "Gratis script deposit anti fake donate dengan dukungan Vend": "Free anti-fake-donate deposit script with Vend support",
+  "Metode pembayaran": "Payment method",
+  "Nominal akhir muncul bersama kode QRIS. Setelah pembayaran dikonfirmasi, kunci lisensi tampil di halaman pesanan.": "The final amount appears with the QRIS code. After payment is confirmed, your license key appears on the order page.",
+  "Tinjau pesanan": "Review your order",
+  "Setelah pembayaran dikonfirmasi, kunci lisensi muncul di halaman pesanan.": "Your license key appears on the order page after payment is confirmed.",
+  "Mulai dan kelola toko Discord selama 30 hari.": "Start and manage your Discord store for 30 days.",
+  "Tiga bulan akses panel untuk toko yang sedang berkembang.": "Three months of dashboard access for growing stores.",
+  "Setahun akses panel dengan satu pembayaran.": "A full year of dashboard access in one payment.",
+  "Akses lisensi tanpa masa kedaluwarsa.": "License access with no expiry date.",
+  "Akses panel GevraStore.": "GevraStore dashboard access.",
+  "Paket tahunan": "Annual plan",
+  "1x bayar": "One-time payment",
+  "Seumur hidup": "Lifetime",
+  "Lisensi seumur hidup": "Lifetime license",
+  "Lisensi ini tidak memerlukan perpanjangan.": "This license does not require renewal.",
+  "Lisensi GevraStore": "GevraStore licenses",
+  "Pilih paket sesuai kebutuhan tokomu": "Choose a plan for your store",
+  "Kelola produk, stok, dan pesanan dari panel. Bayar lewat QRIS dan ambil kunci lisensi setelah pembayaran dikonfirmasi.": "Manage products, stock, and orders from your dashboard. Pay with QRIS and receive your license key after payment is confirmed.",
+  "Dashboard pengelolaan toko": "Store management dashboard",
+  "Katalog, stok, dan diskon": "Catalog, inventory, and discounts",
+  "Riwayat pesanan dan saldo": "Order history and balances",
+  "Kustomisasi bot milikmu": "Customize your own bot",
+  "Pilihan bot": "Bot options",
+  "Pilih cara menjalankan tokomu.": "Choose how to run your store.",
+  "Segera hadir": "Coming soon",
+  "Pakai Bot GevraStore": "Use the GevraStore bot",
+  "Rencana untuk toko yang ingin mulai tanpa membuat bot atau memasukkan token sendiri.": "An upcoming option for stores that want to get started without creating a bot or entering a token.",
+  "Pakai bot sendiri": "Use your own bot",
+  "Hubungkan bot Discord milikmu dan kelola katalog serta stok dari panel GevraStore.": "Connect your Discord bot and manage your catalog and inventory in GevraStore.",
+  "Masuk dengan Discord": "Sign in with Discord",
+  "Discord terverifikasi. Masukkan kunci lisensi untuk menautkannya ke akun Discord ini.": "Discord verified. Enter your license key to link it to this Discord account.",
+  "Login Discord gagal. Coba lagi atau masuk dengan kunci lisensi.": "Discord sign-in failed. Try again or sign in with your license key.",
+  "Sesi Discord sudah habis. Masuk dengan Discord lagi.": "Your Discord session expired. Sign in with Discord again.",
+  "Akun Discord atau lisensi sudah ditautkan.": "This Discord account or license is already linked.",
   "Gambar QRIS belum bisa dimuat. Muat ulang halaman untuk mencoba lagi.": "The QRIS image could not load. Reload the page to try again.",
   "Fitur": "Features",
   "Navigasi utama": "Main navigation",
@@ -574,6 +629,7 @@ const gsEnglish = {
   "Pembayaranmu belum bisa diverifikasi. Kalau kamu sudah membayar, hubungi penjual dan sebutkan kode pesanan": "We could not verify your payment. If you paid, contact the seller with order code",
   "Pesanan kedaluwarsa": "Order expired",
   "Bayar sesuai nominal di atas. Pembayaran dikenali otomatis.": "Pay the exact amount above. We will detect the payment automatically.",
+  "Mode simulasi QRIS. Pesanan ini hanya bisa diselesaikan lewat Simulasi bayar di panel admin.": "QRIS simulation mode. Complete this test order with Simulate payment in the admin panel.",
   "Nominal harus persis sama (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.": "Pay the exact amount including the last three digits so we can match your payment.",
   "Verifikasi keamanan gagal dimuat. Muat ulang halaman.": "Could not load security verification. Reload the page.",
   "Selesaikan verifikasi keamanan dulu.": "Complete the security check first.",
@@ -703,6 +759,31 @@ function gsT(value, ...args) {
     const english = gsLanguage === "en" && Object.hasOwn(gsEnglish, key) ? gsEnglish[key] : key;
     const text = source.replace(/\S(?:[\s\S]*\S)?/, () => english);
     return args.length ? text.replace(/\{(\d+)\}/g, (token, index) => index < args.length ? String(args[index]) : token) : text;
+}
+
+function gsPlanPeriod(plan) {
+    const period = { 30: "/ 1 bulan", 90: "/ 3 bulan", 365: "/ 1 tahun" }[plan.days];
+    return gsT(plan.lifetime ? "1x bayar" : (period || "{0} hari"), plan.days);
+}
+
+function gsFormatWL(wl) {
+    const dl = Math.floor(wl / 100);
+    const remainder = wl % 100;
+    return [dl ? `${dl} DL` : "", remainder ? `${remainder} WL` : ""].filter(Boolean).join(" ") || "0 WL";
+}
+
+async function gsFetchDLRate() {
+    const response = await fetch("/api/checkout/dl-rate", { cache: "no-store" });
+    if (!response.ok) throw new Error("DL rate unavailable");
+    const quote = await response.json();
+    if (!Number.isFinite(quote.pricePerDL) || quote.pricePerDL <= 0 || !(quote.expiresAt > Date.now())) {
+        throw new Error("Invalid DL rate");
+    }
+    return quote;
+}
+
+function gsConvertDL(price, quote) {
+    return gsFormatWL(Math.ceil(price * 100 / quote.pricePerDL));
 }
 
 document.documentElement.lang = gsLanguage;

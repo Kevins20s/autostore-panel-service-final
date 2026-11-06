@@ -1,15 +1,17 @@
 /* Halaman beli key. Tanpa inline script (aman untuk CSP). Semua teks pengguna dipasang lewat textContent. */
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var STATES = ["stForm", "stDetails", "stPay", "stWait", "stDone", "stRenewed", "stEnd"];
+  var STATES = ["stForm", "stDetails", "stPay", "stDiscordPay", "stWait", "stDone", "stRenewed", "stEnd"];
   var LS = "gs-order";
   var cur = null;        // { id, token }
   var order = null;      // data pesanan terakhir dari server
   var poll = null, tick = null, packages = [], chosen = "autostore";
   var tsKey = null, tsId = null, tsToken = ""; // Cloudflare Turnstile (hanya kalau diaktifkan penjual)
+  let discordInvite = "", dlQuote = null, loadingQuote = null, methodUpdate = 0;
+  const selectedMethod = () => document.querySelector('input[name="paymentMethod"]:checked').value;
 
   function rp(n) { return "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
-  const CHECKOUT_STEPS = { stForm: 0, stDetails: 1, stPay: 2, stWait: 2, stDone: 3, stRenewed: 3 };
+  const CHECKOUT_STEPS = { stForm: 0, stDetails: 1, stPay: 2, stDiscordPay: 2, stWait: 2, stDone: 3, stRenewed: 3 };
   function show(id, moveFocus = false) {
     STATES.forEach(s => $(s).classList.toggle("hide", s !== id));
     [...$("checkoutProgress").children].forEach((step, index) => {
@@ -42,7 +44,14 @@
 
   function render(o) {
     order = o; stop();
-    if (o.status === "pending") {
+    if (o.status === "pending" && o.paymentMethod === "dl") {
+      $("dlAmount").textContent = gsFormatWL(o.amountWL);
+      $("dlCode").textContent = o.code;
+      $("dlInvite").href = discordInvite;
+      const update = () => { $("dlTimer").textContent = fmtTimer(o.expiresAt - Date.now()); };
+      update(); tick = setInterval(update, 1000); poll = setInterval(refresh, 5000);
+      show("stDiscordPay", true);
+    } else if (o.status === "pending") {
       $("payAmount").textContent = rp(o.amount); $("payAmount2").textContent = rp(o.amount); $("payCode").textContent = o.code + (o.renew ? gsT(" (perpanjangan)") : "");
       payMode(o);
       var upd = function () { var left = o.expiresAt - Date.now(); $("payTimer").textContent = fmtTimer(left); if (left <= 0) refresh(); };
@@ -73,15 +82,28 @@
   // Pesanan QRIS otomatis memakai QR dinamis dengan nominal tepat dan terdeteksi sendiri; manual memakai QRIS statis + tombol "Saya sudah bayar".
   function payMode(o) {
     const auto = !!o.auto;
+    const simulation = !!o.qrisSimulation;
     const image = $("qrImg");
     const download = $("qrDl");
+    image.parentElement.classList.toggle("hide", simulation);
+    download.parentElement.classList.toggle("hide", simulation);
+    $("paySteps").classList.toggle("hide", simulation);
+    $("btnCopyAmt").classList.toggle("hide", simulation);
+    $("btnPaid").classList.toggle("hide", auto);
+    $("payStep3").classList.toggle("hide", auto);
+    $("payAuto").classList.toggle("hide", !auto || simulation);
+    msg("payMsg", "");
+    if (simulation) {
+      image.removeAttribute("src");
+      $("payWarn").textContent = gsT("Mode simulasi QRIS. Pesanan ini hanya bisa diselesaikan lewat Simulasi bayar di panel admin.");
+      return;
+    }
     const source = auto ? (o.qrPng || o.qrImageUrl) : "/qris.png";
     const imageFailed = () => {
       image.classList.add("hide");
       download.classList.add("hide");
       msg("payMsg", gsT("Gambar QRIS belum bisa dimuat. Muat ulang halaman untuk mencoba lagi."));
     };
-    msg("payMsg", "");
     image.onerror = auto ? imageFailed : null;
     image.classList.remove("hide");
     download.classList.remove("hide");
@@ -89,9 +111,6 @@
       image.src = source;
       download.href = source;
     } else imageFailed();
-    $("btnPaid").classList.toggle("hide", auto);
-    $("payStep3").classList.toggle("hide", auto);
-    $("payAuto").classList.toggle("hide", !auto);
     $("payWarn").textContent = auto ? gsT("Bayar sesuai nominal di atas. Pembayaran dikenali otomatis.") : gsT("Nominal harus persis sama (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.");
   }
   function end(title, text) { stop(); $("endTitle").textContent = title; $("endText").textContent = text; show("stEnd"); }
@@ -102,7 +121,29 @@
     catch (e) { if (e.status === 404) { reset(); } }
   }
 
-  function reset() { stop(); cur = null; order = null; lsSet(null); history.replaceState(null, "", location.pathname); show("stForm"); }
+  function reset() { stop(); cur = null; order = null; lsSet(null); history.replaceState(null, "", location.pathname); show("stForm"); loadDLQuote().catch(() => {}); }
+
+  function loadDLQuote() {
+    if (dlQuote?.expiresAt > Date.now()) return Promise.resolve(dlQuote);
+    if (!loadingQuote) {
+      const updateCards = (quote, fallback) => {
+        document.querySelectorAll("[data-dl-price]").forEach(line => {
+          line.textContent = quote ? gsT("Estimasi: {0}", gsConvertDL(Number(line.dataset.dlPrice), quote)) : gsT(fallback);
+        });
+      };
+      updateCards(null, "Memuat kurs DL…");
+      loadingQuote = gsFetchDLRate().then(quote => {
+        dlQuote = quote;
+        updateCards(quote);
+        return quote;
+      }).catch(error => {
+        dlQuote = null;
+        updateCards(null, "Kurs DL belum tersedia");
+        throw error;
+      }).finally(() => { loadingQuote = null; });
+    }
+    return loadingQuote;
+  }
 
   function renderPkgs() {
     var box = $("pkgs"); box.replaceChildren();
@@ -112,10 +153,40 @@
       inp.addEventListener("change", function () { chosen = p.id; });
       var body = document.createElement("span"); body.className = "buy-pkg-body";
       var b = document.createElement("b"); b.textContent = p.name;
-      var s = document.createElement("small"); s.textContent = p.days + gsT(" hari");
-      body.append(b, s);
+      const description = document.createElement("span");
+      description.className = "plan-description";
+      const descriptions = {
+        autostore: "Mulai dan kelola toko Discord selama 30 hari.",
+        autostore90: "Tiga bulan akses panel untuk toko yang sedang berkembang.",
+        autostore365: "Setahun akses panel dengan satu pembayaran.",
+        autostoreLifetime: "Akses lisensi tanpa masa kedaluwarsa.",
+      };
+      description.textContent = gsT(descriptions[p.id] || "Akses panel GevraStore.");
+      var s = document.createElement("small"); s.textContent = gsPlanPeriod(p);
       var price = document.createElement("span"); price.className = "buy-price"; price.textContent = rp(p.price);
-      lab.append(inp, body, price); box.appendChild(lab);
+      const priceRow = document.createElement("span");
+      priceRow.className = "plan-price-row";
+      priceRow.append(price, s);
+      const dlPrice = document.createElement("span");
+      dlPrice.className = "plan-dl-price";
+      dlPrice.dataset.dlPrice = p.price;
+      dlPrice.textContent = gsT("Memuat kurs DL…");
+      if (p.id === "autostore365") {
+        lab.classList.add("plan-featured");
+        const badge = document.createElement("span");
+        badge.className = "plan-badge";
+        badge.textContent = gsT("Paling hemat");
+        body.append(badge);
+      }
+      const features = document.createElement("span");
+      features.className = "plan-features";
+      for (const name of ["Gratis hosting bot 24/7 di server cloud GevraStore", "Dashboard pengelolaan toko", "Katalog, stok, dan diskon", "Riwayat pesanan dan saldo", "Kustomisasi bot milikmu", "Gratis script deposit anti fake donate dengan dukungan Vend"]) {
+        const line = document.createElement("span");
+        line.textContent = gsT(name);
+        features.append(line);
+      }
+      body.append(b, description, priceRow, dlPrice, features);
+      lab.append(inp, body); box.appendChild(lab);
     });
   }
 
@@ -132,11 +203,37 @@
   }
   function resetTurnstile() { tsToken = ""; try { if (window.turnstile && tsId !== null) window.turnstile.reset(tsId); } catch (e) {} }
 
+  async function updateMethod() {
+    const update = ++methodUpdate;
+    const paymentMethod = selectedMethod();
+    const selected = packages.find(p => p.id === chosen);
+    if (!selected) return;
+    $("chosenPrice").textContent = rp(selected.price);
+    $("btnOrder").disabled = paymentMethod === "dl";
+    $("btnRetryDL").classList.add("hide");
+    $("methodNote").textContent = gsT(paymentMethod === "dl" ? "Memuat kurs DL…" : "Pembayaran QRIS terdeteksi otomatis.");
+    if (paymentMethod !== "dl") return;
+    try {
+      const quote = await loadDLQuote();
+      if (update !== methodUpdate) return;
+      $("chosenPrice").textContent = gsConvertDL(selected.price, quote);
+      $("methodNote").textContent = gsT("Kurs 1 DL = {0}. Lanjutkan pembayaran di Discord.", rp(quote.pricePerDL));
+      $("btnOrder").disabled = false;
+    } catch (error) {
+      if (update !== methodUpdate) return;
+      $("methodNote").textContent = gsT("Kurs DL belum tersedia. Coba lagi atau pilih QRIS.");
+      $("btnRetryDL").classList.remove("hide");
+    }
+  }
+  $("btnRetryDL").addEventListener("click", updateMethod);
+  document.querySelectorAll('input[name="paymentMethod"]').forEach(input => input.addEventListener("change", updateMethod));
   $("btnDetails").addEventListener("click", () => {
     const selected = packages.find(p => p.id === chosen);
     if (!selected) return;
-    $("chosenPackage").textContent = selected.name + " · " + selected.days + gsT(" hari · ") + rp(selected.price);
+    $("chosenPackage").textContent = selected.name;
+    $("chosenDuration").textContent = selected.lifetime ? gsT("Seumur hidup") : gsPlanPeriod(selected).replace(/^\/\s*/, "");
     show("stDetails", true);
+    updateMethod();
   });
   $("btnPackages").addEventListener("click", () => {
     show("stForm");
@@ -148,14 +245,27 @@
     if (b.disabled) return;
     msg("formMsg", "");
     if (tsKey && !tsToken) { msg("formMsg", gsT("Selesaikan verifikasi keamanan dulu.")); return; }
+    const method = selectedMethod();
+    const discordTab = method === "dl" ? window.open("about:blank", "_blank") : null;
+    if (discordTab) discordTab.opener = null;
     b.disabled = $("btnPackages").disabled = true;
+    const methodInputs = [...document.querySelectorAll('input[name="paymentMethod"]')];
+    methodInputs.forEach(input => { input.disabled = true; });
     var old = b.textContent; b.textContent = gsT("Memproses...");
     try {
-      var r = await api("POST", "/api/orders", { type: chosen, name: $("fName").value, contact: $("fContact").value, turnstileToken: tsToken });
+      var r = await api("POST", "/api/orders", { type: chosen, paymentMethod: method, pricePerDL: method === "dl" ? dlQuote?.pricePerDL : undefined, turnstileToken: tsToken });
       cur = { id: r.order.id, token: r.token }; lsSet(cur); history.replaceState(null, "", "#" + cur.id + "." + cur.token); render(r.order);
-    } catch (e) { msg("formMsg", e.message); }
+      if (discordTab && !discordTab.closed && discordInvite) discordTab.location.replace(discordInvite);
+      else discordTab?.close();
+    } catch (e) {
+      discordTab?.close();
+      msg("formMsg", e.message);
+      if (method === "dl") dlQuote = null;
+    }
     if (tsKey) resetTurnstile(); /* token Turnstile hanya berlaku sekali */
+    methodInputs.forEach(input => { input.disabled = false; });
     b.disabled = $("btnPackages").disabled = false; b.textContent = old;
+    if (!cur && method === "dl") updateMethod();
   });
   $("btnPaid").addEventListener("click", async function () {
     var b = $("btnPaid"); msg("payMsg", ""); b.disabled = true; var old = b.textContent; b.textContent = gsT("Memproses...");
@@ -165,13 +275,16 @@
   });
   $("btnCancel").addEventListener("click", async function () { if (await gsConfirm(gsT("Batalkan pesanan ini? Kalau sudah terlanjur membayar, jangan dibatalkan."), { danger: true, okText: gsT("Ya, batalkan"), cancelText: gsT("Kembali") })) reset(); });
   $("btnNew").addEventListener("click", reset);
+  $("btnDlBack").addEventListener("click", reset);
+  $("btnCopyDlCode").addEventListener("click", () => { if (order) copy(order.code, $("btnCopyDlCode"), gsT("Salin kode pesanan")); });
   $("btnCopyAmt").addEventListener("click", function () { if (order) copy(String(order.amount), $("btnCopyAmt"), gsT("Salin nominal")); });
   $("btnCopyKey").addEventListener("click", function () { copy($("keyBox").textContent, $("btnCopyKey"), gsT("Salin key")); });
   $("btnCopyLink").addEventListener("click", function () { copy(location.href, $("btnCopyLink"), gsT("Salin link pesanan")); });
 
   (async function init() {
-    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; const requested = new URLSearchParams(location.search).get("paket"); chosen = (packages.find(p => p.id === requested) || packages[0])?.id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("pkgMsg", gsT("Gagal memuat daftar paket. Muat ulang halaman.")); }
+    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; discordInvite = info.discordInvite || ""; const requested = new URLSearchParams(location.search).get("paket"); chosen = (packages.find(p => p.id === requested) || packages[0])?.id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("pkgMsg", gsT("Gagal memuat daftar paket. Muat ulang halaman.")); }
     renderPkgs();
+    if (packages.length) loadDLQuote().catch(() => {});
     $("pkgs").setAttribute("aria-busy", "false");
     $("btnDetails").disabled = !packages.length;
     if (!packages.length && !$("pkgMsg").textContent) msg("pkgMsg", gsT("Belum ada paket yang tersedia."));

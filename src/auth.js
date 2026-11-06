@@ -24,13 +24,14 @@ function verify(token) {
 
 function readCookie(req, name = COOKIE) {
     const m = (req.headers.cookie || "").split(";").map((s) => s.trim()).find((s) => s.startsWith(name + "="));
-    return m ? decodeURIComponent(m.slice(name.length + 1)) : null;
+    try { return m ? decodeURIComponent(m.slice(name.length + 1)) : null; }
+    catch { return null; }
 }
 
 function setSession(res, payload, hours = 12) {
     const token = sign({ ...payload, exp: Date.now() + hours * 3600e3 });
     const secure = process.env.COOKIE_SECURE === "1" ? "; Secure" : "";
-    res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${hours * 3600}${secure}`);
+    res.append("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${hours * 3600}${secure}`);
 }
 
 const clearSession = (res) => res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
@@ -49,4 +50,4 @@ function recordFail(ip) {
 }
 const clearFails = (ip) => fails.delete(ip);
 
-module.exports = { setSession, clearSession, session, tooMany, recordFail, clearFails };
+module.exports = { sign, verify, readCookie, setSession, clearSession, session, tooMany, recordFail, clearFails };

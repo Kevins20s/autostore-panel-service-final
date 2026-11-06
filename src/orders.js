@@ -10,8 +10,10 @@ const crypto = require("crypto");
 // Paket bawaan. Harga dan status jual bisa diubah dari halaman admin (disimpan di data.json), tidak perlu ubah kode.
 // type = jenis key yang dibuat. sellable:false = tidak tampil di /beli (key lama tetap bisa diperpanjang).
 const PACKAGES = {
-    autostore: { id: "autostore", name: "AutoStore", type: "autostore", days: 30, price: 20000, sellable: true },
-    autostore90: { id: "autostore90", name: "AutoStore 3 Bulan", type: "autostore", days: 90, price: 54000, sellable: true },
+    autostore: { id: "autostore", name: "Starter Cloud", type: "autostore", days: 30, price: 15000, sellable: true },
+    autostore90: { id: "autostore90", name: "Pro Cloud", type: "autostore", days: 90, price: 40000, sellable: true },
+    autostore365: { id: "autostore365", name: "Enterprise Cloud", type: "autostore", days: 365, price: 125000, sellable: true },
+    autostoreLifetime: { id: "autostoreLifetime", name: "Lifetime AutoStore", type: "autostore", days: 0, lifetime: true, price: 250000, sellable: true },
     service: { id: "service", name: "AutoStore Service", type: "service", days: 30, price: 20000, sellable: false },
 };
 const PRICE_MIN = 1000, PRICE_MAX = 1000000; // batas nominal QRIS otomatis di gateway
@@ -69,7 +71,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         const price = Number.isInteger(ov.price) && ov.price >= PRICE_MIN && ov.price <= PRICE_MAX ? ov.price : base.price;
         return { ...base, price, sellable: typeof ov.sellable === "boolean" ? ov.sellable : base.sellable };
     }
-    const packages = ({ sellable = false } = {}) => Object.keys(PACKAGES).map(pkgOf).filter((p) => !sellable || p.sellable);
+    const packages = ({ sellable = false } = {}) => Object.keys(PACKAGES).map(pkgOf).filter((p) => !sellable || (p.type !== "service" && p.sellable));
     function setPackage(id, { price, sellable } = {}) {
         if (!PACKAGES[id]) throw new OrderError("Paket tidak dikenal.", 404);
         const ov = { ...(overrides()[id] || {}) };
@@ -87,6 +89,12 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
 
     function view(o, withKey = false) {
         const v = { id: o.id, code: o.code, type: o.type, packageName: PACKAGES[o.type]?.name || o.type, days: o.days, amount: o.amount, status: o.status, createdAt: o.createdAt, expiresAt: o.expiresAt };
+        if (o.lifetime) v.lifetime = true;
+        if (o.paymentMethod === "dl") {
+            v.paymentMethod = "dl";
+            v.amountWL = o.amountWL;
+            v.pricePerDL = o.pricePerDL;
+        }
         if (o.renewLicenseId) { v.renew = true; if (o.renewedUntil) v.renewedUntil = o.renewedUntil; }
         if (o.auto) {
             v.auto = true;
@@ -119,26 +127,36 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
     function create({ type, name, contact, ip = "" }, opts = {}) {
         sweep();
         const pkg = pkgOf(type);
-        if (!pkg || (!pkg.sellable && !opts.renewFor)) throw new OrderError("Paket tidak dikenal.");
+        if (!pkg || ((!pkg.sellable || pkg.type === "service") && !opts.renewFor)) throw new OrderError("Paket tidak dikenal.");
         const nm = clean(name, 40), ct = clean(contact, 60);
-        if (nm.length < 2) throw new OrderError("Nama minimal 2 huruf.");
-        if (ct.length < 3) throw new OrderError("Isi kontak WhatsApp atau Discord supaya kamu bisa dihubungi.");
+        if (nm && nm.length < 2) throw new OrderError("Nama minimal 2 huruf.");
+        if (ct && ct.length < 3) throw new OrderError("Kontak minimal 3 karakter.");
         const t = now();
         while (rate.length && rate[0] <= t - RATE_WINDOW) rate.shift();
         checkIp(ip, t);
         if (rate.length >= RATE_MAX) throw new OrderError("Terlalu banyak pesanan dalam waktu singkat. Coba lagi beberapa menit lagi.", 429);
         const act = all().filter(isActive), pend = act.filter((o) => o.status === "pending");
         if (pend.length >= MAX_PENDING) throw new OrderError("Pesanan sedang ramai. Coba lagi sebentar lagi.", 429);
-        if (pend.filter((o) => o.contact.toLowerCase() === ct.toLowerCase()).length >= MAX_PER_CONTACT)
+        if (ct && pend.filter((o) => String(o.contact || "").toLowerCase() === ct.toLowerCase()).length >= MAX_PER_CONTACT)
             throw new OrderError("Kamu masih punya beberapa pesanan yang belum dibayar. Selesaikan atau tunggu kedaluwarsa dulu.", 429);
-        const used = new Set(act.map((o) => o.amount));
-        let unique = 0;
-        for (let i = 0; i < 80 && !unique; i++) { const u = 1 + crypto.randomInt(MAX_UNIQUE); if (!used.has(pkg.price + u)) unique = u; }
-        if (!unique) throw new OrderError("Sistem sedang penuh. Coba lagi sebentar lagi.", 503);
+        let amount = pkg.price;
+        if (!opts.pricePerDL) {
+            const used = new Set(act.filter(o => o.paymentMethod !== "dl").map(o => o.amount));
+            let unique = 0;
+            for (let i = 0; i < 80 && !unique; i++) { const u = 1 + crypto.randomInt(MAX_UNIQUE); if (!used.has(pkg.price + u)) unique = u; }
+            if (!unique) throw new OrderError("Sistem sedang penuh. Coba lagi sebentar lagi.", 503);
+            amount += unique;
+        }
         rate.push(t); markIp(ip, t);
         const token = crypto.randomBytes(24).toString("hex");
-        const o = { id: crypto.randomBytes(6).toString("hex"), code: newCode(), type: pkg.id, licType: pkg.type, name: nm, contact: ct, days: pkg.days, price: pkg.price, amount: pkg.price + unique,
+        const code = newCode();
+        const o = { id: crypto.randomBytes(6).toString("hex"), code, type: pkg.id, licType: pkg.type, name: nm || code, contact: ct, days: pkg.days, lifetime: !!pkg.lifetime, price: pkg.price, amount,
                     status: "pending", tokenHash: sha(token), createdAt: t, expiresAt: t + ttl };
+        if (opts.pricePerDL) {
+            o.paymentMethod = "dl";
+            o.pricePerDL = opts.pricePerDL;
+            o.amountWL = Math.ceil(pkg.price * 100 / opts.pricePerDL);
+        }
         if (ip) o.ipKey = ip;
         if (opts.renewFor) o.renewLicenseId = opts.renewFor;
         all().push(o); store.save();
@@ -153,7 +171,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         if (o.status === "claimed") return view(o);
         if (o.status === "expired") throw new OrderError("Pesanan sudah kedaluwarsa. Kalau kamu sudah terlanjur membayar, hubungi penjual dan sebutkan kode pesanan " + o.code + ".", 409);
         if (o.status !== "pending") throw new OrderError("Pesanan ini sudah selesai diproses.", 409);
-        if (o.auto) return view(o); // QRIS otomatis terdeteksi sendiri, tidak perlu konfirmasi manual
+        if (o.auto || o.paymentMethod === "dl") return view(o);
         const claimed = all().filter((x) => x.status === "claimed");
         if (claimed.length >= MAX_CLAIMED || (o.ipKey && claimed.filter((x) => x.ipKey === o.ipKey).length >= MAX_CLAIMED_PER_IP))
             throw new OrderError("Masih ada beberapa pesananmu yang sedang diperiksa. Tunggu konfirmasi penjual dulu.", 429);
@@ -196,7 +214,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
             store.save();
             return { order: adminView(o), key: null, renewed: true, expiresAt: until, already: false };
         }
-        const key = issueLicense(o.name, o.licType || o.type, o.days, { save: false });
+        const key = issueLicense(o.name, o.licType || o.type, o.days, { save: false, lifetime: o.lifetime });
         o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.keyEnc = encrypt({ key }); o.keyUntil = t + KEY_VISIBLE_MS; delete o.qrString; delete o.qrImageUrl;
         store.save(); // satu kali simpan: key dan pesanan berubah bersamaan
         return { order: adminView(o), key, already: false };
@@ -216,11 +234,11 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         if (!lic) throw new OrderError("Key tidak ditemukan.", 404);
         if (lic.revoked) throw new OrderError("Key ini dinonaktifkan penjual. Hubungi penjual untuk bantuan.", 403);
         const pkg = pkgOf(packageId || lic.type || "autostore");
-        if (!pkg || pkg.type !== (lic.type || "autostore") || (!pkg.sellable && pkg.id !== (lic.type || "autostore"))) throw new OrderError("Paket perpanjangan tidak tersedia.");
+        if (lic.lifetime || !pkg || pkg.lifetime || pkg.type !== (lic.type || "autostore") || (!pkg.sellable && pkg.id !== (lic.type || "autostore"))) throw new OrderError("Paket perpanjangan tidak tersedia.");
         return create({ type: pkg.id, name: lic.buyer, contact: "perpanjang:" + (lic.keyPrefix || licenseId), ip }, { renewFor: licenseId });
     }
     function renewPackages(licenseType = "autostore") {
-        return packages().filter((p) => p.type === licenseType && (p.sellable || p.id === licenseType)).map(({ id, name, days, price }) => ({ id, name, days, price }));
+        return packages().filter((p) => !p.lifetime && p.type === licenseType && (p.sellable || p.id === licenseType)).map(({ id, name, days, price }) => ({ id, name, days, price }));
     }
 
     // ---------------------------------------------------------------- QRIS otomatis
@@ -228,7 +246,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
     async function upgradeToAuto(id) {
         if (!autoEnabled()) return false;
         const o = all().find((x) => x.id === String(id));
-        if (!o || o.status !== "pending" || o.auto) return false;
+        if (!o || o.status !== "pending" || o.auto || o.paymentMethod === "dl") return false;
         const ref = "KO-" + o.id;
         const q = await autoko.createQris({ orderId: ref, amount: o.price });
         if (!q || (!q.qrString && !q.qrImageUrl)) return false;

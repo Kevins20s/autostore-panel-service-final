@@ -108,11 +108,11 @@ function newKey(type = "autostore") {
 }
 
 // Dipakai pesanan web setelah admin konfirmasi. Isinya sama dengan rute admin "buat key".
-function issueLicense(name, type, days, { save = true } = {}) {
+function issueLicense(name, type, days, { save = true, lifetime = false } = {}) {
     const key = newKey(type);
     licenses().push({
         id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
-        createdAt: Date.now(), expiresAt: Date.now() + days * DAY, revoked: false,
+        createdAt: Date.now(), expiresAt: lifetime ? Date.UTC(9999, 11, 31) : Date.now() + days * DAY, revoked: false, lifetime,
         port: store.data.nextPort++, config: null, desired: "stopped",
     });
     if (save) store.save();
@@ -224,6 +224,7 @@ const orders = createOrders({
 });
 registerOrderRoutes(app, { admin, buyer, orders, ttlMin: ORDER_TTL_MIN, turnstile });
 registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
+const discordLogin = require("./src/discord-login")(app, { licenses });
 console.log("[PANEL] Pembayaran key di /beli:", orders.autoEnabled() ? "QRIS otomatis aktif (cadangan: QRIS statis)" : "QRIS statis + konfirmasi admin", "| CAPTCHA:", turnstile.enabled ? "Turnstile aktif" : "nonaktif");
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 
@@ -232,12 +233,26 @@ app.post("/api/login", (req, res) => {
     const key = String(req.body?.key || "").trim().toUpperCase();
     const l = key && licenses().find((x) => x.keyHash === sha256(key));
     if (!l) { auth.recordFail(req.ip); return res.status(401).json({ error: "Key tidak ditemukan." }); }
+    if (req.body?.linkDiscord === true) {
+        const discordId = discordLogin.pendingId(req);
+        if (!discordId) return res.status(401).json({ error: "Sesi Discord sudah habis. Masuk dengan Discord lagi." });
+        if ((l.discordLoginId && l.discordLoginId !== discordId) ||
+            licenses().some(other => other.id !== l.id && other.discordLoginId === discordId)) {
+            return res.status(409).json({ error: "Akun Discord atau lisensi sudah ditautkan." });
+        }
+        if (!l.discordLoginId) {
+            l.discordLoginId = discordId;
+            try { store.save(); }
+            catch (error) { delete l.discordLoginId; console.error("[AUTH] Gagal menyimpan tautan Discord:", error.code); return res.status(500).json({ error: "Tautan Discord belum bisa disimpan." }); }
+        }
+    }
     auth.clearFails(req.ip);
     auth.setSession(res, { t: "buyer", id: l.id });
+    discordLogin.clear(res);
     res.json({ ok: true, type: l.type || "autostore" });
 });
 
-app.post("/api/logout", (req, res) => { auth.clearSession(res); res.json({ ok: true }); });
+app.post("/api/logout", (req, res) => { auth.clearSession(res); discordLogin.clear(res); res.json({ ok: true }); });
 
 app.get("/api/me", buyer, (req, res) => {
     const l = req.lic;
@@ -245,7 +260,7 @@ app.get("/api/me", buyer, (req, res) => {
     const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
     res.json({
         buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix,
-        expiresAt: l.expiresAt, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
+        expiresAt: l.expiresAt, lifetime: !!l.lifetime, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
         revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
         webhookUrl: `${base}/hook/${l.id}`,
         walletEnabled: !!wallet, autoAvailable: autoko.enabled, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
@@ -434,7 +449,7 @@ app.post("/api/admin/login", (req, res) => {
 });
 
 const row = (l) => ({
-    id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked,
+    id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked, lifetime: !!l.lifetime,
     configured: !!l.config, bot: runner.status(l.id), walletFrozen: !!l.walletFrozen, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
 });
 app.get("/api/admin/licenses", admin, (req, res) => res.json({ licenses: licenses().map(row) }));
@@ -443,7 +458,8 @@ app.post("/api/admin/licenses", admin, (req, res) => {
     const name = String(req.body?.buyer || "").trim().slice(0, 60);
     const days = Math.min(3650, Math.max(1, Math.floor(Number(req.body?.days) || 30)));
     if (!name) return res.status(400).json({ error: "Nama pembeli wajib diisi." });
-    const type = req.body?.type === "service" ? "service" : "autostore";
+    if (req.body?.type === "service") return res.status(400).json({ error: "AutoStore Service tidak lagi tersedia untuk lisensi baru." });
+    const type = "autostore";
     const key = newKey(type);
     licenses().push({
         id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),

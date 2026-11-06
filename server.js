@@ -533,47 +533,6 @@ if (backup.enabled() && walletBackup) {
 }
 licenses().forEach(reconcile);
 
-// Pilot terpisah: perintah toko hanya dipasang di guild tes yang terikat lisensi.
-let catalogPilot;
-if (process.env.DISCORD_CATALOG_PILOT_TOKEN && hostedMongoUrl && licenses().some(l => l.runMode === "central" && valid(l))) {
-    try {
-        const { Client, Events, GatewayIntentBits } = require(require.resolve("discord.js", { paths: [path.join(__dirname, "bot")] }));
-        const { buildTenantRegistry } = require("./src/shared-tenants");
-        const { createCatalogHandler, commands } = require("./src/shared-catalog");
-        const registry = () => buildTenantRegistry(licenses(), "autostore", decrypt, {
-            hostedMongoUrl,
-        });
-        const guildIds = [...registry().keys()];
-        if (!guildIds.length) throw new Error("No test guilds configured");
-        catalogPilot = new Client({ intents: [GatewayIntentBits.Guilds] });
-        const createDeposit = wallet && autoko.enabled && autoko.mode === "live" && process.env.DISCORD_CATALOG_PILOT_QRIS === "1"
-            ? input => wallet.createDeposit(input)
-            : undefined;
-        const handle = createCatalogHandler({ registry, createDeposit });
-        catalogPilot.on(Events.InteractionCreate, interaction => {
-            handle(interaction).catch(() => console.error("[CATALOG PILOT] Gagal menangani interaksi."));
-        });
-        catalogPilot.on(Events.Error, () => console.error("[CATALOG PILOT] Koneksi Discord bermasalah."));
-        catalogPilot.once(Events.ClientReady, async client => {
-            for (const id of guildIds) {
-                try {
-                    const guild = await client.guilds.fetch(id);
-                    for (const command of commands) {
-                        if (command.name !== "isi-saldo" || createDeposit) await guild.commands.create(command);
-                    }
-                } catch {
-                    console.error("[CATALOG PILOT] Gagal mendaftarkan perintah untuk guild tes", id);
-                }
-            }
-        });
-        catalogPilot.login(process.env.DISCORD_CATALOG_PILOT_TOKEN).catch(() => {
-            console.error("[CATALOG PILOT] Gagal masuk ke Discord.");
-        });
-    } catch {
-        console.error("[CATALOG PILOT] Konfigurasi pilot belum lengkap atau tidak valid.");
-    }
-}
-
 const HOST = process.env.PANEL_HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : "0.0.0.0");
 const server = app.listen(PORT, HOST, () => console.log(`[PANEL] jalan di ${HOST}:${PORT}`));
 server.on("error", (e) => {

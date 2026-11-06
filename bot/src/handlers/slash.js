@@ -34,10 +34,11 @@ module.exports = async () => {
     const rest = new REST({ version: '10' })
         .setToken(config.TOKEN);
 
-    await rest.put(
-        Routes.applicationCommands(CLIEND_ID),
-        { body: slash }
-    )
+    const hosted = !!process.env.HOSTED_PILOT_BINDING;
+    const route = hosted
+        ? Routes.applicationGuildCommands(CLIEND_ID, config.serverId)
+        : Routes.applicationCommands(CLIEND_ID);
+    await rest.put(route, { body: slash })
         .then(() => {
             console.log("----------------------------------------".magenta);
             console.log(`[HANDLER - SLASH] Slash commands has been registered successfully to all the guilds`.magenta.bold);

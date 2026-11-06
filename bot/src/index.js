@@ -8,12 +8,36 @@ let {
 let { readdirSync } = require("fs");
 let config = require('./config/config.json');
 let mongoose = require("mongoose");
+const fs = require("node:fs");
+const hostedBinding = process.env.HOSTED_PILOT_BINDING ? JSON.parse(process.env.HOSTED_PILOT_BINDING) : null;
+function hostedActive() {
+    try {
+        const data = JSON.parse(fs.readFileSync(hostedBinding.dataFile, "utf8"));
+        const license = data.licenses.find(item => item.id === hostedBinding.licenseId);
+        return !!(license && !license.revoked && license.expiresAt > Date.now() &&
+            license.discordLoginId === config.Owner && license.hostedBot?.enabled &&
+            license.hostedBot.guildId === config.serverId);
+    } catch {
+        return false;
+    }
+}
+class HostedClient extends Client {
+    emit(event, ...args) {
+        if (event === "interactionCreate" || event === "messageCreate") {
+            if (args[0]?.guildId !== config.serverId || !hostedActive() || mongoose.connection.readyState !== 1) {
+                return false;
+            }
+        }
+        return super.emit(event, ...args);
+    }
+}
 let IncludedIntents = Object.entries(GatewayIntentBits).reduce(
     (t, [, V]) => t | V,
     0
 );
-let client = new Client({
-    intents: IncludedIntents,
+const BotClient = hostedBinding ? HostedClient : Client;
+let client = new BotClient({
+    intents: hostedBinding ? [GatewayIntentBits.Guilds] : IncludedIntents,
     partials: [Partials.Channel, Partials.Message],
 });
 
@@ -34,12 +58,17 @@ client.config = require("./config/config.json")
 
 module.exports = client;
 
-["event", "slash"].forEach(file => {
-    require(`./handlers/${file}`)(client);
+require("./handlers/event")(client);
+let commandsReady = false;
+require("./handlers/slash")(client).then(() => {
+    commandsReady = true;
+}).catch(error => {
+    console.error("[SLASH] Pendaftaran gagal:", error.code || error.name);
+    if (hostedBinding) process.exit(1);
 });
 
 mongoose
-    .connect(config.MongoURL)
+    .connect(config.MongoURL, hostedBinding ? { dbName: hostedBinding.dbName } : {})
     .then(() => {
         console.log("----------------------------------------".white);
         console.log(`[READY] MongoDB Is Ready To Give Data!`.bold);
@@ -52,7 +81,17 @@ mongoose
     });
 
 const { startWebhookServer } = require("./webhookServer.js");
-startWebhookServer(client);
+if (!hostedBinding) startWebhookServer(client);
+
+if (hostedBinding) {
+    const report = () => {
+        if (!hostedActive()) return process.exit(0);
+        const online = commandsReady && mongoose.connection.readyState === 1 &&
+            client.isReady() && !!client.guilds.cache.get(config.serverId)?.available;
+        process.send?.({ online });
+    };
+    setInterval(report, 1000).unref();
+}
 
 client.login(config.TOKEN)
     .catch((err) => {

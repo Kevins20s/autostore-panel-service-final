@@ -146,9 +146,11 @@ function salesChart(daily, days) {
     return h("div", {}, svg, detail);
 }
 
-function ordersDonut(daily, total) {
+function productSalesDonut(products) {
+    const sold = products.filter(product => product.qty > 0);
+    const total = sold.reduce((sum, product) => sum + product.qty, 0);
     const detail = h("p", { class: "mut chart-detail", "aria-live": "polite" },
-        total ? (gsLanguage === "en" ? "Choose a slice to see daily details." : "Pilih irisan untuk melihat detail harian.")
+        total ? (gsLanguage === "en" ? "Choose a slice to see product sales." : "Pilih irisan untuk melihat penjualan produk.")
             : gsT("Belum ada penjualan tercatat"));
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 160 160");
@@ -164,8 +166,8 @@ function ordersDonut(daily, total) {
     ring().setAttribute("class", "donut-track");
     const legend = h("div", { class: "donut-legend" });
     let offset = 0;
-    daily.filter(day => day.orders > 0).forEach((day, index) => {
-        const share = day.orders / total * 100;
+    sold.forEach((product, index) => {
+        const share = product.qty / total * 100;
         const color = `hsl(${(165 + index * 137.5) % 360} 72% 59%)`;
         const slice = ring();
         slice.setAttribute("class", "donut-slice");
@@ -173,11 +175,12 @@ function ordersDonut(daily, total) {
         slice.setAttribute("stroke-dasharray", `${share} ${100 - share}`);
         slice.setAttribute("stroke-dashoffset", -offset);
         offset += share;
-        const date = day.date.slice(8) + "/" + day.date.slice(5, 7);
-        const label = gsT`${day.date}: ${fmt(day.orders)} order, ${fmt(day.qty)} item, ${fmt(day.wl)} WL` + ` · ${fmt(share)}%`;
+        const name = product.name || (gsLanguage === "en" ? "Unnamed product" : "Produk tanpa nama");
+        const percentage = share < 0.01 ? "<0.01%" : fmt(share) + "%";
+        const label = `${name} · ${fmt(product.qty)} item · ${fmt(product.wl)} WL · ${percentage}`;
         const dot = h("span", { class: "donut-dot" });
         dot.style.backgroundColor = color;
-        const button = h("button", { type: "button", "aria-label": label, "aria-pressed": "false" }, dot, date);
+        const button = h("button", { type: "button", "aria-label": label, "aria-pressed": "false" }, dot, name + " · " + percentage);
         const show = () => { detail.textContent = label; };
         const select = () => {
             legend.querySelector('[aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
@@ -193,7 +196,7 @@ function ordersDonut(daily, total) {
         legend.append(button);
     });
     return h("div", {}, h("div", { class: "donut-figure" }, svg,
-        h("div", { class: "donut-total" }, h("strong", {}, fmt(total)), h("span", { class: "mut" }, gsLanguage === "en" ? "orders" : "pesanan"))),
+        h("div", { class: "donut-total" }, h("strong", {}, fmt(total)), h("span", { class: "mut" }, gsLanguage === "en" ? "items sold" : "item terjual"))),
         legend, detail);
 }
 
@@ -208,7 +211,7 @@ async function dashboard() {
     period.value = "14";
     const left = h("div"), right = h("div");
     charts.append(card(h("div", { class: "row sp" }, h("h2", {}, gsLanguage === "en" ? "Sales (WL)" : "Penjualan (WL)"), period), left),
-        card(h("h2", {}, gsLanguage === "en" ? "Order breakdown" : "Distribusi pesanan"), right));
+        card(h("h2", {}, gsLanguage === "en" ? "Sales by product" : "Penjualan per produk"), right));
     function draw(stats) {
         if (!stats) {
             left.replaceChildren(h("p", { class: "mut" }, gsT("Data penjualan belum dapat dimuat.")));
@@ -220,7 +223,7 @@ async function dashboard() {
         const tot = st.daily.reduce((a, d) => ({ orders: a.orders + d.orders, qty: a.qty + d.qty, wl: a.wl + d.wl }), { orders: 0, qty: 0, wl: 0 });
         left.replaceChildren(h("p", { class: "mut" }, gsT`${fmt(tot.orders)} order, ${fmt(tot.qty)} item, ${fmt(tot.wl)} WL`),
             salesChart(st.daily, st.days));
-        right.replaceChildren(ordersDonut(st.daily, tot.orders));
+        right.replaceChildren(productSalesDonut(st.productSales || []));
         const top = st.top.length
             ? h("ol", { class: "rank" }, ...st.top.map((t) => h("li", {}, h("span", {}, h("b", {}, t.name), " ", h("span", { class: "mut" }, t.code)), h("span", { class: "mut" }, gsT`${fmt(t.qty)} terjual`))))
             : h("p", { class: "mut" }, gsT("Belum ada data."));

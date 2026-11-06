@@ -269,7 +269,7 @@ module.exports = function createShopRouter({ valid, decrypt }) {
                 { $sort: { _id: 1 } }]).toArray(),
             col.aggregate([{ $match: { createdAt: { $gte: since } } },
                 { $group: { _id: "$code", name: { $first: "$productName" }, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } },
-                { $sort: { qty: -1 } }, { $limit: 5 }]).toArray(),
+                { $sort: { qty: -1, _id: 1 } }]).toArray(),
             Promise.all([
                 c(req, "list").find({}).project({ code: 1, name: 1 }).toArray(),
                 c(req, "price").find({}).project({ code: 1, price: 1 }).toArray(),
@@ -279,10 +279,12 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         const priced = new Set(prices.filter((p) => p.price).map((p) => p.code));
         const stockBy = Object.fromEntries(stocks.map((s) => [s._id, s.n]));
         const low = lists.filter((p) => priced.has(p.code) && (stockBy[p.code] || 0) <= lowAt).map((p) => ({ code: p.code, name: p.name, stock: stockBy[p.code] || 0 })).sort((a, b) => a.stock - b.stock).slice(0, 8);
+        const productSales = top.map((t) => ({ code: t._id, name: t.name || t._id, qty: t.qty, wl: t.wl }));
         res.json({
             days, lowAt,
             daily: daily.map((d) => ({ date: d._id, orders: d.orders, qty: d.qty, wl: d.wl })),
-            top: top.map((t) => ({ code: t._id, name: t.name || t._id, qty: t.qty, wl: t.wl })),
+            top: productSales.slice(0, 5),
+            productSales,
             low,
         });
     }));

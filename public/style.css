@@ -1246,9 +1246,9 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .donut-total { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
 .donut-total strong { font-size: 26px; }
 .donut-legend { display: flex; flex-wrap: wrap; gap: 5px; max-height: 94px; overflow-y: auto; }
-.donut-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; font-size: 12px; }
+.donut-legend button { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 7px; font-size: 12px; overflow-wrap: anywhere; text-align: left; }
 .donut-legend button[aria-pressed="true"] { border-color: var(--ac); }
-.donut-dot { width: 8px; height: 8px; border-radius: 50%; }
+.donut-dot { flex: 0 0 8px; height: 8px; border-radius: 50%; }
 .desk-sales > .card { height: 100%; margin: 0; }
 .desk-actions { padding: 16px; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; }
 .desk-actions h2 { font-size: 16px; margin: 0 0 8px; }

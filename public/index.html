@@ -1,39 +1,92 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GevraStore Panel</title><meta name="description" content="Panel GevraStore: kelola bot, produk, dan stok tokomu dengan key dari penjual."><meta name="theme-color" content="#101b29"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Masuk dengan key dari penjual untuk mengelola bot dan toko kamu."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/png" href="/logo.png"><link rel="apple-touch-icon" href="/logo.png"><link rel="stylesheet" href="/style.css"><script src="/ui-extras.js"></script></head>
+<title>GevraStore Panel</title><meta name="description" content="Panel GevraStore: kelola bot, produk, dan stok tokomu dengan key dari penjual."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Masuk dengan key dari penjual untuk mengelola bot dan toko kamu."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/png" href="/logo.png"><link rel="apple-touch-icon" href="/logo.png"><link rel="stylesheet" href="/style.css"><script src="/ui-extras.js"></script></head>
 <body>
-<section id="login" class="login hide">
-  <div class="entry-intro">
-    <div class="entry-brand"><img src="/logo.png" alt="" width="44" height="44"> GevraStore</div>
-    <h1>Toko Discord kamu, dalam satu panel.</h1>
-    <p>Jalankan bot, atur stok, dan pantau pesanan dari satu tempat.</p>
-    <ul class="entry-index" aria-label="Fitur panel">
-      <li><span>01</span> Bot &amp; server</li>
-      <li><span>02</span> Produk &amp; stok</li>
-      <li><span>03</span> Pesanan &amp; saldo</li>
-    </ul>
-  </div>
-  <div class="entry-access">
-  <div class="card">
-    <h2>Masuk ke panel</h2>
-    <p class="mut">Gunakan key yang kamu terima dari penjual.</p>
-    <label for="key">Key lisensi</label>
-    <div class="key-wrap"><input id="key" type="password" placeholder="AS-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"></div>
-    <div class="row" style="margin-top:12px"><button class="pri" id="btnLogin">Masuk</button></div>
-    <div id="loginMsg" class="msg"></div>
-  </div>
-  <p class="login-help">Belum punya key? <a href="/beli.html">Beli key di sini</a><br><span id="contactSlot">Hubungi penjual.</span></p>
-  </div>
-</section>
+<div id="login" class="landing hide">
+  <header class="landing-nav landing-shell">
+    <a class="landing-brand" href="/"><img src="/logo.png" alt="" width="34" height="34">GevraStore</a>
+    <nav aria-label="Navigasi utama"><a href="#fitur">Fitur</a><a href="#showcase">Showcase</a><a href="#paket">Harga</a></nav>
+    <a class="landing-btn landing-outline" href="#masuk">Masuk</a>
+  </header>
+  <main class="landing-shell">
+    <section class="landing-hero">
+      <div>
+        <p class="landing-tag landing-kicker">GevraStore / Panel toko Discord</p>
+        <h1>Jualan di Discord. <em>Kelola dari GevraStore.</em></h1>
+        <p>Isi stok, ubah harga, dan pantau pesanan dari satu dashboard. Pilih lisensi dan siapkan toko lewat web.</p>
+        <div class="landing-actions"><a class="landing-btn" href="#paket">Pilih lisensi <span aria-hidden="true">↗</span></a><a class="landing-btn landing-outline" href="#showcase">Jelajahi showcase</a></div>
+      </div>
+      <div class="landing-preview" aria-label="Cuplikan dashboard dengan data contoh">
+        <div class="landing-preview-top"><strong>GevraStore <span>/</span> Dashboard</strong><span>Data contoh</span></div>
+        <div class="landing-preview-body">
+          <p class="landing-tag">Ringkasan toko</p>
+          <div class="landing-metrics"><div><span>Produk</span><strong>08</strong></div><div><span>Stok tersedia</span><strong>124</strong></div><div><span>Terjual</span><strong>56</strong></div></div>
+          <div class="landing-trend" aria-hidden="true">
+            <span>Contoh aktivitas penjualan</span>
+            <svg viewBox="0 0 300 66" preserveAspectRatio="none"><path d="M0 54 L35 48 L65 51 L94 35 L126 43 L157 22 L186 33 L216 15 L250 23 L278 10 L300 4 L300 66 L0 66 Z"/><polyline points="0,54 35,48 65,51 94,35 126,43 157,22 186,33 216,15 250,23 278,10 300,4"/></svg>
+          </div>
+          <div class="landing-preview-row"><b>Voucher Digital</b><span>42 unit</span></div>
+          <div class="landing-preview-row"><b>Paket Premium</b><span>18 unit</span></div>
+        </div>
+      </div>
+    </section>
+    <section class="landing-section" id="fitur">
+      <p class="landing-tag">01 / Fitur</p><h2>Semua yang kamu kelola sehari-hari.</h2>
+      <div class="landing-grid">
+        <article><span>01</span><h3>Produk &amp; stok</h3><p>Susun katalog, atur harga dan diskon, lalu tambah persediaan dari panel.</p></article>
+        <article><span>02</span><h3>Pesanan &amp; pelanggan</h3><p>Lihat riwayat penjualan, cari pelanggan, dan kelola saldo toko.</p></article>
+        <article><span>03</span><h3>Bot &amp; pengaturan</h3><p>Hubungkan bot dan database, atur kurs, serta sesuaikan emoji dan banner toko.</p></article>
+      </div>
+    </section>
+    <section class="landing-section landing-showcase" id="showcase">
+      <div><p class="landing-tag">02 / Showcase</p><h2>Lihat alur toko dalam satu pesanan.</h2><p>Contoh pembelian voucher dari produk dipilih sampai stok berkurang.</p></div>
+      <div class="landing-story">
+        <details open><summary>01 · Produk tersedia</summary><p>Voucher Digital tampil dengan harga dan 42 unit stok.</p></details>
+        <details><summary>02 · Pesanan tercatat</summary><p>Pelanggan membeli satu voucher. Pesanan muncul di riwayat toko.</p></details>
+        <details><summary>03 · Produk terkirim</summary><p>Voucher dikirim lewat DM Discord dan stok tersisa 41 unit.</p></details>
+      </div>
+    </section>
+    <section class="landing-section" id="paket">
+      <p class="landing-tag">03 / Lisensi</p><h2>Pilih paket untuk tokomu.</h2>
+      <p>Bayar lewat QRIS. Kunci lisensi muncul setelah pembayaran dikonfirmasi.</p>
+      <p id="landingPlanStatus" class="landing-loading" role="status">Memuat paket…</p>
+      <div class="landing-grid landing-plans" id="landingPlans" aria-busy="true">
+        <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
+        <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
+      </div>
+      <a class="landing-btn landing-outline" href="/beli.html">Buka halaman pembelian</a>
+    </section>
+    <section class="landing-section landing-showcase" id="bantuan">
+      <div><p class="landing-tag">04 / Bantuan</p><h2>Sebelum mulai.</h2></div>
+      <div class="landing-story">
+        <details><summary>Apa yang perlu disiapkan?</summary><p>Siapkan server Discord, bot, dan database MongoDB. Panduan setup tersedia di panel.</p></details>
+        <details><summary>Bagaimana cara memperpanjang lisensi?</summary><p>Buka menu Langganan di panel, pilih paket perpanjangan, dan ikuti langkah pembayaran.</p></details>
+      </div>
+    </section>
+    <section class="landing-section landing-access" id="masuk">
+      <div><p class="landing-tag">Akses pelanggan</p><h2>Masuk ke GevraStore.</h2><p>Gunakan kunci lisensi untuk membuka panel tokomu.</p></div>
+      <div class="landing-login">
+        <label class="login-key-label" for="key">Kunci lisensi</label>
+        <div class="key-wrap"><input id="key" type="password" placeholder="AS-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"></div>
+        <button class="landing-btn" id="btnLogin" type="button">Masuk</button>
+        <div id="loginMsg" class="msg" role="status"></div>
+        <p><a href="/beli.html">Beli lisensi</a> · <span id="contactSlot">Hubungi penjual</span></p>
+      </div>
+    </section>
+  </main>
+  <footer class="landing-footer landing-shell"><strong>GevraStore</strong><a href="#bantuan">Bantuan</a><a href="#masuk">Masuk</a></footer>
+</div>
 <div id="app" class="app hide">
   <aside class="side">
     <div class="brand"><img src="/logo.png" alt="" width="32" height="32">GevraStore</div>
-    <nav id="nav"></nav>
+    <nav id="nav" aria-label="Menu panel pelanggan"></nav>
     <div class="sidefoot"><span id="botState" class="badge"></span><button id="btnOut">Keluar</button></div>
   </aside>
   <main class="content"><div id="view"></div></main>
 </div>
 <div id="toast"></div>
-<script src="/i18n.js"></script><script src="/app.js"></script>
+<script src="/i18n.js"></script>
+<script src="/app.js"></script>
 <script src="/login-extras.js"></script>
+<script src="/landing.js"></script>
 </body></html>

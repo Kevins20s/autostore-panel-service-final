@@ -84,10 +84,12 @@ async function call(method, url, body, ck) {
         // stok
         btn("Stok").click();
         const sm = await until(() => d.querySelector(".modal"), "modal stok");
-        setVal(sm.querySelector("textarea"), "a:1\nb:2\nc:3"); btn("Tambah", sm).click();
+        setVal(sm.querySelector("textarea"), "a:1\nb:2\nc:3"); btn("Tambah stok", sm).click();
         await until(() => sm.textContent.includes("Total stok: 3"), "stok bertambah jadi 3");
         assert.strictEqual(sm.querySelectorAll("tbody .ck").length, 3);
         sm.querySelector("tbody .ck").checked = true; btn("Hapus terpilih", sm).click();
+        const confirmDelete = await until(() => btn("Hapus stok", d.querySelector(".gs-dlg") || sm), "konfirmasi hapus stok");
+        confirmDelete.click();
         await until(() => sm.textContent.includes("Total stok: 2"), "hapus terpilih");
         sm.parentElement.querySelector("button").click();
         await until(() => txt().includes("Siap jual") && txt().includes("2 / 0"), "tabel produk ikut update");

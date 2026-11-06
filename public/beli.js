@@ -156,8 +156,9 @@
   $("btnCopyLink").addEventListener("click", function () { copy(location.href, $("btnCopyLink"), gsT("Salin link pesanan")); });
 
   (async function init() {
-    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; if (packages.length) chosen = packages[0].id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("pkgMsg", gsT("Gagal memuat daftar paket. Muat ulang halaman.")); }
+    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; const requested = new URLSearchParams(location.search).get("paket"); chosen = (packages.find(p => p.id === requested) || packages[0])?.id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("pkgMsg", gsT("Gagal memuat daftar paket. Muat ulang halaman.")); }
     renderPkgs();
+    $("pkgs").setAttribute("aria-busy", "false");
     $("btnDetails").disabled = !packages.length;
     if (!packages.length && !$("pkgMsg").textContent) msg("pkgMsg", gsT("Belum ada paket yang tersedia."));
     var m = /^#([0-9a-f]{12})\.([0-9a-f]{48})$/.exec(location.hash), saved = lsGet();

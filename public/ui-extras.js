@@ -3,7 +3,12 @@
   var KEY = "gs-theme", root = document.documentElement;
   function read() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
   function write(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
-  function apply(t) { if (t === "light") root.setAttribute("data-theme", "light"); else root.removeAttribute("data-theme"); }
+  function apply(t) {
+    var theme = t === "light" ? "light" : "dark";
+    root.setAttribute("data-theme", theme);
+    var themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = theme === "light" ? "#f7f7f7" : "#08161c";
+  }
   apply(read()); /* diterapkan sedini mungkin supaya tidak berkedip */
 
   document.addEventListener("DOMContentLoaded", function () {

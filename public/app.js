@@ -144,8 +144,8 @@ async function dashboard() {
         navIcon(icon), h("span", {}, h("strong", {}, title), h("small", {}, detail)));
     const [sales, insights] = cards;
     return h("div", { class: "store-overview" },
-        h("section", { class: "desk-header" },
-            h("div", {}, h("h1", {}, gsT("Pusat kendali toko")),
+        h("section", { class: "desk-header head" },
+            h("div", {}, h("h1", {}, gsT("Ringkasan toko")),
                 h("p", { class: "mut" }, gsT("Penjualan, inventaris, dan bot Discord."))),
             h("a", { class: "desk-bot-link", href: "#/bot" }, botPill(),
                 h("span", { class: "mut" }, me.valid ? gsT`Lisensi aktif · ${me.daysLeft} hari lagi` : gsT("Lisensi tidak aktif")))),
@@ -760,7 +760,7 @@ async function customEmojiEditor({ title, subtitle, fields, endpoint, resetEndpo
     const select = h("select", { style: "width:100%;max-width:520px" });
     fields.forEach(([key, label]) => select.append(h("option", { value: key }, `${label} — ${key}`)));
     const input = h("input", { autocomplete: "off", spellcheck: "false", style: "width:100%", placeholder: includeBanner ? "https://.../banner.png" : gsT("Emoji Unicode atau <:nama:id>") });
-    const previewBox = h("div", { style: "width:110px;height:110px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.045);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none" });
+    const previewBox = h("div", { class: "store-media-preview" });
     const previewName = h("b", {});
     const previewValue = h("div", { class: "mut", style: "font-family:monospace;font-size:12px;word-break:break-all;margin-top:6px" });
     const msg = h("div", { class: "mut", style: "margin-top:10px" });
@@ -1033,8 +1033,8 @@ function setupNavToggle() {
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
-    $("nav").replaceChildren(...nav.map(([group, links]) => h("div", { class: "nav-group", role: "group", "aria-label": group },
-        h("span", { class: "nav-group-label", "aria-hidden": "true" }, group),
+    $("nav").replaceChildren(...nav.map(([group, links]) => h("div", { class: "panel-nav-group", role: "group", "aria-label": group },
+        h("span", { class: "panel-nav-caption", "aria-hidden": "true" }, group),
         ...links.map(([k, label, icon]) => h("a", { class: k === cur ? "on" : "", href: "#/" + k, "aria-current": k === cur ? "page" : null },
             navIcon(icon), h("span", { class: "nav-label" }, label))))));
 }
@@ -1055,12 +1055,25 @@ async function render() {
             e.status === 409 || e.status === 502 ? h("button", { class: "pri", onclick: () => (location.hash = "#/bot") }, gsT("Buka Bot & Server")) : null));
     }
 }
-function showLogin() { $("app").classList.add("hide"); $("login").classList.remove("hide"); }
+function landingSection() {
+    return document.getElementById(location.hash.slice(1))?.closest(".landing-section");
+}
+function showLogin() {
+    $("app").classList.add("hide");
+    $("login").classList.remove("hide");
+    landingSection()?.scrollIntoView?.();
+}
 async function boot() {
     try { me = await api("GET", "/api/me"); } catch { return showLogin(); }
+    if (landingSection()) {
+        history.replaceState(null, "", location.pathname + location.search);
+        window.scrollTo(0, 0);
+    }
     $("login").classList.add("hide"); $("app").classList.remove("hide"); setupNavToggle(); updateSide(); render();
 }
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", () => {
+    if (!$("app").classList.contains("hide")) render();
+});
 $("btnLogin").onclick = async () => {
     const m = $("loginMsg");
     try { await api("POST", "/api/login", { key: $("key").value }); boot(); } catch (e) { m.textContent = e.message; m.className = "msg err"; m.style.display = "block"; }

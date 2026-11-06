@@ -258,6 +258,7 @@ app.get("/api/me", buyer, (req, res) => {
         expiresAt: l.expiresAt, lifetime: !!l.lifetime, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
         revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
         discordInstallEnabled: discordLogin.eligible(l),
+        hostedBotConfigured: discordLogin.eligible(l) && !!l.hostedBot,
         webhookUrl: `${base}/hook/${l.id}`,
         walletEnabled: !!wallet, autoAvailable: autoko.enabled, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
         config: {

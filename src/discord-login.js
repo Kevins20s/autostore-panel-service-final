@@ -35,38 +35,75 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
     const noStore = (_req, res, next) => { res.set("Cache-Control", "no-store"); next(); };
     const installOptions = { ...options, path: "/api/discord-install" };
     const clearInstall = (res) => res.clearCookie(INSTALL, installOptions);
-
-    app.get("/api/discord-install/servers", noStore, buyer, async (req, res) => {
-        if (!eligible(req.lic)) return res.sendStatus(403);
+    const botToken = process.env.DISCORD_CATALOG_PILOT_TOKEN;
+    async function manageableServers(req) {
         let session;
         try { session = decrypt(auth.readCookie(req, INSTALL)); } catch { /* Belum login atau cookie rusak. */ }
         if (!session || session.exp <= Date.now() || session.licenseId !== req.lic.id || session.id !== req.lic.discordLoginId) {
-            return res.json({ reconnect: true });
+            return null;
         }
-        try {
-            const response = await fetch(API + "/users/@me/guilds?limit=200", {
-                headers: { Authorization: "Bearer " + session.accessToken },
-                signal: AbortSignal.timeout(8000),
-            });
-            if (response.status === 401 || response.status === 403) {
-                clearInstall(res);
-                return res.json({ reconnect: true });
-            }
-            if (!response.ok) throw new Error("Discord guild lookup failed");
-            const servers = (await response.json()).filter(guild =>
+        const response = await fetch(API + "/users/@me/guilds?limit=200", {
+            headers: { Authorization: "Bearer " + session.accessToken },
+            signal: AbortSignal.timeout(8000),
+        });
+        if (response.status === 401 || response.status === 403) return null;
+        if (!response.ok) throw new Error("Discord guild lookup failed");
+        return (await response.json()).filter(guild =>
                 DISCORD_ID.test(guild.id) &&
                 (!pilotLicense || pilotGuilds.has(guild.id)) &&
                 (guild.owner === true || (/^\d+$/.test(guild.permissions) && (BigInt(guild.permissions) & CAN_INSTALL) !== 0n))
-            ).map(({ id, name }) => {
+        );
+    }
+    const canActivate = !!(pilotLicense && botToken);
+    async function installed(id) {
+        const response = await fetch(API + "/guilds/" + id, {
+            headers: { Authorization: "Bot " + botToken },
+            signal: AbortSignal.timeout(5000),
+        });
+        if (response.status === 403 || response.status === 404) return false;
+        if (!response.ok) throw new Error("Bot membership lookup failed");
+        return true;
+    }
+    app.get("/api/discord-install/servers", noStore, buyer, async (req, res) => {
+        if (!eligible(req.lic)) return res.sendStatus(403);
+        try {
+            const guilds = await manageableServers(req);
+            if (!guilds) { clearInstall(res); return res.json({ reconnect: true }); }
+            const servers = await Promise.all(guilds.map(async ({ id, name }) => {
                 const params = new URLSearchParams({
                     client_id: botId, scope: "bot applications.commands", permissions: botPermissions,
                     integration_type: "0", guild_id: id, disable_guild_select: "true",
                 });
-                return { id, name, invite: "https://discord.com/oauth2/authorize?" + params };
-            });
-            res.json({ servers });
+                return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: canActivate && await installed(id) };
+            }));
+            res.json({ servers, canActivate, setup: req.lic.hostedBot || null });
         } catch {
             res.status(502).json({ error: "Daftar server Discord belum bisa dimuat. Coba lagi." });
+        }
+    });
+
+    app.put("/api/discord-install/setup", noStore, buyer, async (req, res) => {
+        if (!canActivate || !eligible(req.lic)) return res.sendStatus(403);
+        const { guildId, enabled: running } = req.body || {};
+        if (!DISCORD_ID.test(guildId) || typeof running !== "boolean") return res.sendStatus(400);
+        const license = req.lic;
+        try {
+            if (running) {
+                const guilds = await manageableServers(req);
+                if (!guilds) return res.status(401).json({ error: "Hubungkan kembali akun Discord." });
+                if (!guilds.some(guild => guild.id === guildId)) return res.sendStatus(403);
+                if (!await installed(guildId)) return res.status(409).json({ error: "Undang bot ke server ini terlebih dahulu." });
+            } else if (license.hostedBot?.guildId !== guildId) {
+                return res.sendStatus(409);
+            }
+            if (!eligible(license)) return res.sendStatus(403);
+            const previous = license.hostedBot;
+            license.hostedBot = { guildId, enabled: running };
+            try { save(); }
+            catch (error) { license.hostedBot = previous; throw error; }
+            res.json({ setup: license.hostedBot });
+        } catch {
+            res.status(502).json({ error: "Pengaturan bot belum bisa disimpan. Coba lagi." });
         }
     });
 

@@ -41,14 +41,17 @@ a{color:inherit}
 .hide{display:none!important}
 .bot-mode-options { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
 .bot-mode-options legend { margin-bottom: 10px; font-weight: 700; }
-.bot-mode-options label { display: flex; align-items: start; gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--line2); border-radius: 10px; cursor: pointer; }
-.bot-mode-options input[type="radio"] { width: auto; margin: 4px 0 0; accent-color: var(--ac); }
+.bot-mode-options label { position: relative; display: flex; align-items: start; gap: 10px; margin: 0; padding: 16px; border: 1px solid var(--line2); border-radius: 10px; cursor: pointer; }
+.bot-mode-options input[type="radio"] { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
 .bot-mode-options small { display: block; margin-top: 4px; font-weight: 400; }
-.bot-mode-options label:has(input:checked) { border-color: var(--ac); }
+.bot-mode-options label:has(input:checked) { border-color: var(--ac); background: color-mix(in srgb, var(--ac) 10%, transparent); }
 .bot-mode-options label:focus-within { outline: 2px solid var(--ac); outline-offset: 3px; }
 .bot-mode-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 14px; border: 1px solid var(--ac); border-radius: 9px; color: var(--ac); font-weight: 700; text-decoration: none; }
 .bot-mode-cta:hover { background: var(--line2); text-decoration: none; }
 .bot-mode-status { display: inline-block; margin-bottom: 4px; color: var(--ac); font-size: .85rem; font-weight: 650; }
+.hosted-bot-setup { display: grid; gap: 14px; margin-top: 18px; }
+.hosted-bot-setup > :is(p, label, span) { margin: 0; }
+.hosted-bot-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 @media (min-width: 800px) {
   .bot-mode-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

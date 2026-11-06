@@ -448,12 +448,14 @@ const BOT_FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "
 const SECRETS = ["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"];
 
 function hostedBotCard(outcome) {
-    const content = h("div", {});
+    const content = h("div", { class: "hosted-bot-setup" });
     const load = h("button", { type: "button" }, gsT("Tampilkan server Discord"));
     load.onclick = guard(async () => {
         load.disabled = true;
         try {
-            const { reconnect, servers } = await api("GET", "/api/discord-install/servers");
+            const result = await api("GET", "/api/discord-install/servers");
+            const { reconnect, servers, canActivate } = result;
+            let { setup } = result;
             if (reconnect) {
                 content.replaceChildren(h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord")));
                 return;
@@ -463,17 +465,45 @@ function hostedBotCard(outcome) {
                 return;
             }
             const select = h("select", {}, ...servers.map(server => h("option", { value: server.id }, server.name)));
-            const invite = h("a", { class: "bot-mode-cta", href: servers[0].invite, target: "_blank", rel: "noopener" }, gsT("Lanjutkan di Discord"));
-            select.onchange = () => { invite.href = servers.find(server => server.id === select.value).invite; };
+            if (servers.some(server => server.id === setup?.guildId)) select.value = setup.guildId;
+            const actions = h("div", { class: "hosted-bot-actions" });
+            const status = h("p", { class: "mut", role: "status" });
+            const draw = () => {
+                const server = servers.find(item => item.id === select.value);
+                const active = setup?.guildId === server.id && setup.enabled;
+                status.textContent = gsT(active ? "Bot aktif di server ini." : server.installed
+                    ? "Bot sudah terpasang. Simpan pilihan untuk mengaktifkannya."
+                    : "Undang bot terlebih dahulu agar bisa dipakai di server ini.");
+                if (!server.installed) {
+                    actions.replaceChildren(h("a", { class: "bot-mode-cta", href: server.invite, target: "_blank", rel: "noopener" }, gsT("Undang bot ke server")),
+                        load);
+                    return;
+                }
+                if (!canActivate) { actions.replaceChildren(); return; }
+                const button = h("button", { type: "button", class: active ? "" : "pri" },
+                    gsT(active ? "Nonaktifkan bot" : "Simpan & aktifkan bot"));
+                button.onclick = guard(async () => {
+                    button.disabled = select.disabled = true;
+                    try {
+                        ({ setup } = await api("PUT", "/api/discord-install/setup", { guildId: server.id, enabled: !active }));
+                        draw();
+                    } finally {
+                        button.disabled = select.disabled = false;
+                    }
+                });
+                actions.replaceChildren(button);
+            };
+            select.onchange = draw;
             content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
-                field(gsT("Pilih server Discord"), select), invite);
+                field(gsT("Pilih server Discord"), select), status, actions);
+            draw();
         } finally {
             load.disabled = false;
         }
     });
     const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
-    content.append(h("div", { class: "row gap" }, connect, load));
-    if (outcome === "connected") load.click();
+    content.append(h("div", { class: "hosted-bot-actions" }, connect, load));
+    if (outcome === "connected" || me.hostedBotConfigured) load.click();
     const notice = {
         error: "Discord gagal terhubung. Coba lagi.",
         conflict: "Lisensi ini sudah terhubung ke akun Discord lain.",
@@ -559,7 +589,7 @@ async function bot() {
         card(h("h2", {}, gsT("Log bot")), pre));
     return h("div", {},
         head(isService ? "Service Bot & Server" : "Bot & Server", isService ? gsT("Hubungkan bot AutoStore Service dan database kamu.") : gsT("Pilih bot untuk server tokomu.")),
-        isService ? ownBot : botModePicker(ownBot, me.discordInstallEnabled ? hostedBotCard(outcome) : null, !!outcome));
+        isService ? ownBot : botModePicker(ownBot, me.discordInstallEnabled ? hostedBotCard(outcome) : null, !!outcome || me.hostedBotConfigured));
 }
 
 

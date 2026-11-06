@@ -104,7 +104,7 @@ const rpText = (wl, rate) => (rate ? "Rp " + fmt(wl * rate) : "-");
 
 // ---------- Dashboard ----------
 // Grafik batang penjualan (WL per hari). SVG dibuat lewat DOM, tanpa library.
-function salesChart(daily, days, metric) {
+function salesChart(daily, days) {
     const ns = "http://www.w3.org/2000/svg", W = 640, H = 190, pl = 8, pr = 8, pt = 14, pb = 26;
     const byDate = new Map(daily.map((d) => [d.date, d]));
     const pts = [];
@@ -112,16 +112,15 @@ function salesChart(daily, days, metric) {
         const key = new Date(Date.now() - i * 864e5 + 7 * 3600e3).toISOString().slice(0, 10);
         pts.push({ key, ...(byDate.get(key) || { orders: 0, qty: 0, wl: 0 }) });
     }
-    const max = Math.max(1, ...pts.map((x) => x[metric])), bw = (W - pl - pr) / pts.length;
-    const unit = metric === "wl" ? "WL" : gsLanguage === "en" ? "orders" : "pesanan";
+    const max = Math.max(1, ...pts.map((x) => x.wl)), bw = (W - pl - pr) / pts.length;
     const detail = h("p", { class: "mut chart-detail", "aria-live": "polite" }, gsLanguage === "en" ? "Select a bar to see daily details." : "Pilih batang untuk melihat detail harian.");
     const svg = document.createElementNS(ns, "svg");
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "chart"); svg.setAttribute("role", "group");
-    svg.setAttribute("aria-label", `${unit} · ${days}`);
+    svg.setAttribute("aria-label", `WL · ${days}`);
     const mk = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
     svg.append(mk("line", { x1: pl, x2: W - pr, y1: H - pb, y2: H - pb, class: "ch-axis" }));
     pts.forEach((x, i) => {
-        const bh = Math.max(2, (x[metric] / max) * (H - pt - pb)), w = Math.min(64, bw * 0.72);
+        const bh = Math.max(2, (x.wl / max) * (H - pt - pb)), w = Math.min(64, bw * 0.72);
         const bx = pl + i * bw + (bw - w) / 2;
         const label = gsT`${x.key}: ${fmt(x.orders)} order, ${fmt(x.qty)} item, ${fmt(x.wl)} WL`;
         const g = mk("g", { tabindex: 0, role: "button", "aria-label": label, "aria-pressed": "false" });
@@ -143,8 +142,59 @@ function salesChart(daily, days, metric) {
         svg.append(g);
         if (i % Math.ceil(pts.length / 7) === 0 || i === pts.length - 1) svg.append(mk("text", { x: pl + i * bw + bw / 2, y: H - 8, "text-anchor": "middle", class: "ch-txt" }, x.key.slice(8) + "/" + x.key.slice(5, 7)));
     });
-    svg.append(mk("text", { x: pl, y: 10, class: "ch-txt" }, fmt(max) + " " + unit));
+    svg.append(mk("text", { x: pl, y: 10, class: "ch-txt" }, fmt(max) + " WL"));
     return h("div", {}, svg, detail);
+}
+
+function ordersDonut(daily, total) {
+    const detail = h("p", { class: "mut chart-detail", "aria-live": "polite" },
+        total ? (gsLanguage === "en" ? "Choose a slice to see daily details." : "Pilih irisan untuk melihat detail harian.")
+            : gsT("Belum ada penjualan tercatat"));
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 160 160");
+    svg.setAttribute("aria-hidden", "true");
+    const ring = () => {
+        const circle = document.createElementNS(svg.namespaceURI, "circle");
+        for (const [key, value] of Object.entries({ cx: 80, cy: 80, r: 62, pathLength: 100, fill: "none" })) {
+            circle.setAttribute(key, value);
+        }
+        svg.append(circle);
+        return circle;
+    };
+    ring().setAttribute("class", "donut-track");
+    const legend = h("div", { class: "donut-legend" });
+    let offset = 0;
+    daily.filter(day => day.orders > 0).forEach((day, index) => {
+        const share = day.orders / total * 100;
+        const color = `hsl(${(165 + index * 137.5) % 360} 72% 59%)`;
+        const slice = ring();
+        slice.setAttribute("class", "donut-slice");
+        slice.setAttribute("stroke", color);
+        slice.setAttribute("stroke-dasharray", `${share} ${100 - share}`);
+        slice.setAttribute("stroke-dashoffset", -offset);
+        offset += share;
+        const date = day.date.slice(8) + "/" + day.date.slice(5, 7);
+        const label = gsT`${day.date}: ${fmt(day.orders)} order, ${fmt(day.qty)} item, ${fmt(day.wl)} WL` + ` · ${fmt(share)}%`;
+        const dot = h("span", { class: "donut-dot" });
+        dot.style.backgroundColor = color;
+        const button = h("button", { type: "button", "aria-label": label, "aria-pressed": "false" }, dot, date);
+        const show = () => { detail.textContent = label; };
+        const select = () => {
+            legend.querySelector('[aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
+            svg.querySelector(".selected")?.classList.remove("selected");
+            button.setAttribute("aria-pressed", "true");
+            slice.classList.add("selected");
+            show();
+        };
+        slice.addEventListener("pointerenter", show);
+        slice.addEventListener("click", select);
+        button.addEventListener("focus", show);
+        button.addEventListener("click", select);
+        legend.append(button);
+    });
+    return h("div", {}, h("div", { class: "donut-figure" }, svg,
+        h("div", { class: "donut-total" }, h("strong", {}, fmt(total)), h("span", { class: "mut" }, gsLanguage === "en" ? "orders" : "pesanan"))),
+        legend, detail);
 }
 
 async function dashboard() {
@@ -158,7 +208,7 @@ async function dashboard() {
     period.value = "14";
     const left = h("div"), right = h("div");
     charts.append(card(h("div", { class: "row sp" }, h("h2", {}, gsLanguage === "en" ? "Sales (WL)" : "Penjualan (WL)"), period), left),
-        card(h("h2", {}, gsLanguage === "en" ? "Orders per day" : "Pesanan per hari"), right));
+        card(h("h2", {}, gsLanguage === "en" ? "Order breakdown" : "Distribusi pesanan"), right));
     function draw(stats) {
         if (!stats) {
             left.replaceChildren(h("p", { class: "mut" }, gsT("Data penjualan belum dapat dimuat.")));
@@ -169,9 +219,8 @@ async function dashboard() {
         const st = stats;
         const tot = st.daily.reduce((a, d) => ({ orders: a.orders + d.orders, qty: a.qty + d.qty, wl: a.wl + d.wl }), { orders: 0, qty: 0, wl: 0 });
         left.replaceChildren(h("p", { class: "mut" }, gsT`${fmt(tot.orders)} order, ${fmt(tot.qty)} item, ${fmt(tot.wl)} WL`),
-            salesChart(st.daily, st.days, "wl"));
-        right.replaceChildren(h("p", { class: "mut" }, gsLanguage === "en" ? `${fmt(tot.orders)} orders` : `${fmt(tot.orders)} pesanan`),
-            salesChart(st.daily, st.days, "orders"));
+            salesChart(st.daily, st.days));
+        right.replaceChildren(ordersDonut(st.daily, tot.orders));
         const top = st.top.length
             ? h("ol", { class: "rank" }, ...st.top.map((t) => h("li", {}, h("span", {}, h("b", {}, t.name), " ", h("span", { class: "mut" }, t.code)), h("span", { class: "mut" }, gsT`${fmt(t.qty)} terjual`))))
             : h("p", { class: "mut" }, gsT("Belum ada data."));

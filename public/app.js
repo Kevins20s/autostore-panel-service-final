@@ -449,13 +449,13 @@ const SECRETS = ["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"];
 
 function hostedBotCard(outcome) {
     const content = h("div", {});
-    const load = h("button", { class: "pri" }, gsT("Tampilkan server Discord"));
+    const load = h("button", { type: "button" }, gsT("Tampilkan server Discord"));
     load.onclick = guard(async () => {
         load.disabled = true;
         try {
             const { reconnect, servers } = await api("GET", "/api/discord-install/servers");
             if (reconnect) {
-                content.replaceChildren(h("a", { href: "/api/auth/discord" }, gsT("Hubungkan akun Discord")));
+                content.replaceChildren(h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord")));
                 return;
             }
             if (!servers.length) {
@@ -463,14 +463,15 @@ function hostedBotCard(outcome) {
                 return;
             }
             const select = h("select", {}, ...servers.map(server => h("option", { value: server.id }, server.name)));
-            const invite = h("a", { href: servers[0].invite, target: "_blank", rel: "noopener" }, gsT("Lanjutkan di Discord"));
+            const invite = h("a", { class: "bot-mode-cta", href: servers[0].invite, target: "_blank", rel: "noopener" }, gsT("Lanjutkan di Discord"));
             select.onchange = () => { invite.href = servers.find(server => server.id === select.value).invite; };
-            content.replaceChildren(field(gsT("Pilih server Discord"), select), invite);
+            content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
+                field(gsT("Pilih server Discord"), select), invite);
         } finally {
             load.disabled = false;
         }
     });
-    const connect = h("a", { href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
+    const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
     content.append(h("div", { class: "row gap" }, connect, load));
     if (outcome === "connected") load.click();
     const notice = {
@@ -479,7 +480,7 @@ function hostedBotCard(outcome) {
         unavailable: "Bot GevraStore belum tersedia untuk lisensi ini.",
     }[outcome];
     return card(h("h2", {}, gsT("Undang bot GevraStore")),
-        h("p", { class: "mut" }, gsT("Hubungkan Discord, pilih server yang kamu kelola, lalu konfirmasi undangan.")),
+        h("p", { class: "mut" }, gsT("Pilih server yang kamu kelola dan konfirmasi undangan di Discord.")),
         notice ? h("p", { class: "mut", role: "status" }, gsT(notice)) : null, content);
 }
 

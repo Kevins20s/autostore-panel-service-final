@@ -71,6 +71,8 @@ const gsEnglish = {
   "Bot sendiri": "Your own bot",
   "Bot GevraStore": "GevraStore bot",
   "Hubungkan akun Discord": "Connect Discord account",
+  "Discord terhubung": "Discord connected",
+  "Pilih server yang kamu kelola dan konfirmasi undangan di Discord.": "Choose a server you manage and confirm the invite in Discord.",
   "Hubungkan Discord, pilih server yang kamu kelola, lalu konfirmasi undangan.": "Connect Discord, choose a server you manage, and confirm the invite.",
   "Discord gagal terhubung. Coba lagi.": "Could not connect Discord. Try again.",
   "Lisensi ini sudah terhubung ke akun Discord lain.": "This license is already connected to another Discord account.",

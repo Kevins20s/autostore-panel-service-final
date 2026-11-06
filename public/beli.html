@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Beli key - GevraStore</title><meta name="theme-color" content="#080b12"><meta name="description" content="Beli key GevraStore Panel. Bayar lewat QRIS, key dikirim setelah pembayaran dikonfirmasi.">
+<title>Beli key - GevraStore</title><meta name="theme-color" content="#101b29"><meta name="description" content="Beli key GevraStore Panel. Bayar lewat QRIS, key dikirim setelah pembayaran dikonfirmasi.">
 <link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css"><script src="/ui-extras.js"></script></head>
 <body class="buy"><main class="buy-main">
 <header class="buy-head">
   <div class="buy-logo"><img src="/logo.png" alt="" width="84" height="84"></div>
-  <h1>Beli key GevraStore</h1>
-  <p class="mut">Pilih paket, bayar lewat QRIS, lalu key muncul di halaman ini setelah pembayaranmu dikonfirmasi.</p>
+  <div class="buy-intro"><h1>Beli key GevraStore</h1>
+  <p class="mut">Pilih paket, bayar lewat QRIS, lalu key muncul di halaman ini setelah pembayaranmu dikonfirmasi.</p></div>
+  <a href="/" class="buy-panel-link">Masuk ke panel</a>
 </header>
 
 <section id="stForm" class="card buy-card">
@@ -15,7 +16,8 @@
     <li><b>Toko produk di Discord</b><span>Stok, harga, diskon, auto-role, dan saldo user.</span></li>
     <li><b>Pembayaran QRIS</b><span>Key langsung muncul di halaman ini setelah lunas.</span></li>
   </ul>
-  <h2>1. Pilih paket</h2>
+  <div class="buy-form">
+  <h2>Pilih paket</h2>
   <div id="pkgs" class="buy-pkgs" role="radiogroup" aria-label="Paket"></div>
   <label class="buy-lbl" for="fName">Nama</label>
   <input id="fName" maxlength="40" placeholder="Nama kamu" autocomplete="name">
@@ -25,6 +27,7 @@
   <div id="tsBox" class="buy-ts hide"></div>
   <div class="row" style="margin-top:14px"><button class="pri" id="btnOrder" type="button">Lanjut ke pembayaran</button></div>
   <div id="formMsg" class="msg"></div>
+  </div>
 </section>
 
 <section id="stPay" class="card buy-card hide">

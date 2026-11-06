@@ -140,8 +140,12 @@ async function dashboard() {
         cards.push(h("div", { class: "split" }, card(h("h2", {}, "Produk terlaris"), top),
             card(h("div", { class: "row sp" }, h("h2", { class: "m0" }, "Stok menipis"), st.low.length ? h("a", { href: "#/products" }, "Isi stok") : null), low)));
     }
-    return h("div", {}, head("Dashboard", "Ringkasan toko kamu"),
-        h("div", { class: "statusbar" }, botPill(), h("span", { class: "mut" }, me.valid ? `Sisa langganan ${me.daysLeft} hari` : "Key tidak aktif")),
+    return h("div", { class: "store-overview" },
+        h("section", { class: "overview-hero" },
+            h("div", {}, h("h1", {}, "Ringkasan toko"),
+                h("p", {}, "Pantau stok, pesanan, dan aktivitas bot Discord kamu.")),
+            h("div", { class: "overview-status" }, botPill(),
+                h("span", { class: "mut" }, me.valid ? `Sisa langganan ${me.daysLeft} hari` : "Key tidak aktif"))),
         h("div", { class: "grid" }, stat("Produk", fmt(s.products)), stat("Stok tersedia", fmt(s.stock)), stat("Terjual", fmt(s.sold)),
             stat("User", fmt(s.users)), stat("Total saldo user (WL)", fmt(s.balance)), stat("Mode toko", s.maintenance ? "Maintenance" : "Normal")),
         ...cards,

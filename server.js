@@ -212,7 +212,7 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
     res.json({ ok: true, count: licenses().length });
 }));
 
-app.use("/api/shop", buyer, ownBotOnly, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
+app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
 app.use(express.json({ limit: "20kb" }));
 
 // ---- Pesanan key lewat web (QRIS manual) ----

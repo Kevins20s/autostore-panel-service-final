@@ -68,4 +68,17 @@ function tenantForGuild(registry, guildId) {
     return registry.get(id) || null;
 }
 
-module.exports = { buildTenantRegistry, tenantForGuild, productOf, hostedDbName };
+// Keep the databases created by the original two-server pilot.
+function pilotTenant(license, env = process.env) {
+    const guildId = license?.hostedBot?.guildId;
+    const index = (env.DISCORD_HOSTED_PILOT_GUILD_IDS || "").split(",").indexOf(guildId);
+    const namespace = env.DISCORD_HOSTED_PILOT_DB_NAMESPACE;
+    const mongoUrl = env.DISCORD_CATALOG_PILOT_MONGO_URL;
+    if (!license?.hostedBot?.enabled || license.type === "service" || license.revoked ||
+        !(license.expiresAt > Date.now()) || license.id !== env.DISCORD_HOSTED_PILOT_LICENSE_ID ||
+        !DISCORD_ID.test(guildId) || index < 0 || !namespace || !mongoUrl) return null;
+    const licenseId = namespace + "-" + index;
+    return { licenseId, guildId, dbName: hostedDbName("autostore", licenseId), config: { mongoUrl } };
+}
+
+module.exports = { buildTenantRegistry, tenantForGuild, productOf, hostedDbName, pilotTenant };

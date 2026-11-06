@@ -132,8 +132,7 @@ function salesChart(daily, days) {
 }
 
 async function dashboard() {
-    const summary = me.hostedBot?.enabled ? Promise.resolve(null) : api("GET", "/api/shop/summary");
-    const [s, st] = await Promise.all([summary, me.hostedBot?.enabled ? null : api("GET", "/api/shop/stats?days=14").catch(() => null)]);
+    const [s, st] = await Promise.all([api("GET", "/api/shop/summary"), api("GET", "/api/shop/stats?days=14").catch(() => null)]);
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
     const cards = [];
     if (st) {
@@ -162,7 +161,7 @@ async function dashboard() {
             stat(gsT("Terjual"), fmt(s.sold)), stat(gsT("Stok tersedia"), fmt(s.stock)),
             stat(gsT("Produk"), fmt(s.products)), stat(gsT("Pelanggan"), fmt(s.users)),
             stat(gsT("Saldo pelanggan (WL)"), fmt(s.balance)), stat(gsT("Mode toko"), s.maintenance ? "Maintenance" : "Normal"))
-            : card(h("p", { class: "mut" }, gsT("Ringkasan penjualan Bot GevraStore belum tersedia di panel."))),
+            : null,
         s ? h("div", { class: "desk-columns" },
             h("section", { class: "desk-sales", "aria-label": gsT("Aktivitas penjualan") },
                 sales || card(h("h2", {}, gsT("Penjualan 14 hari")), h("p", { class: "mut" }, gsT("Data penjualan belum dapat dimuat.")))),

@@ -4,6 +4,17 @@ const { tenantForGuild } = require("./shared-tenants");
 const { getDb, COL } = require("./shopdb");
 const { purchaseOne, PurchaseError } = require("./shared-purchase");
 
+const projectCommands = [
+    { name: "help", description: "Lihat perintah toko yang tersedia" },
+    { name: "leaderboard", description: "Lihat lima saldo WL tertinggi di toko ini" },
+    { name: "checkstock", description: "Lihat jumlah stok suatu produk", defaultMemberPermissions: "32", options: [
+        { type: 3, name: "code", description: "Kode produk", required: true, maxLength: 32 },
+    ] },
+    { name: "checkuser", description: "Lihat saldo pelanggan di toko ini", defaultMemberPermissions: "32", options: [
+        { type: 6, name: "user", description: "Pelanggan Discord", required: true },
+    ] },
+];
+
 const commands = [
     { name: "katalog", description: "Lihat katalog toko GevraStore" },
     { name: "beli", description: "Beli satu stok dengan saldo WL", options: [
@@ -13,6 +24,7 @@ const commands = [
     { name: "isi-saldo", description: "Isi saldo WL dengan QRIS", options: [
         { type: 4, name: "rupiah", description: "Nominal pembayaran dalam rupiah", required: true, minValue: 1 },
     ] },
+    ...projectCommands,
 ];
 
 // Pilot commands use the guild binding. No legacy bot handlers run on this client.
@@ -25,6 +37,11 @@ function createCatalogHandler({ registry, openDb = getDb, createDeposit }) {
             await interaction.reply({ content: "Server ini belum terhubung ke lisensi GevraStore yang aktif.", flags: 64 });
             return;
         }
+        if (projectCommands.some(item => item.name === command && item.defaultMemberPermissions) &&
+            !interaction.memberPermissions?.has(32n)) {
+            await interaction.reply({ content: "Perintah ini memerlukan izin Kelola Server.", flags: 64 });
+            return;
+        }
         await interaction.deferReply({ flags: 64 });
         const isActive = () => {
             const current = tenantForGuild(registry(), interaction.guildId);
@@ -32,6 +49,32 @@ function createCatalogHandler({ registry, openDb = getDb, createDeposit }) {
         };
         try {
             const db = await openDb("hosted:" + tenant.licenseId, tenant.config.mongoUrl, tenant.dbName);
+            if (projectCommands.some(item => item.name === command)) {
+                let content;
+                if (command === "help") {
+                    content = "Perintah toko: " + commands.filter(item => item.name !== "isi-saldo" || createDeposit)
+                        .filter(item => !item.defaultMemberPermissions || interaction.memberPermissions?.has(32n))
+                        .map(item => "/" + item.name).join(", ");
+                } else if (command === "leaderboard") {
+                    const users = await db.collection(COL.bal).find({ Balance: { $gt: 0 } })
+                        .sort({ Balance: -1, _id: 1 }).limit(5).toArray();
+                    content = users.map((user, index) => `${index + 1}. <@${user.DiscordID}> · ${user.Balance} WL`).join("\n") ||
+                        "Belum ada pelanggan dengan saldo WL.";
+                } else if (command === "checkstock") {
+                    const code = interaction.options.getString("code", true).trim();
+                    const product = await db.collection(COL.list).findOne({ code });
+                    if (!product) throw new PurchaseError("Produk tidak ditemukan.");
+                    const stock = await db.collection(COL.shop).countDocuments({ code });
+                    content = `${product.name} · ${stock} stok`;
+                } else {
+                    const user = interaction.options.getUser("user", true);
+                    const account = await db.collection(COL.bal).findOne({ DiscordID: user.id });
+                    content = account ? `<@${user.id}> · ${account.Balance || 0} WL` : "Pelanggan belum terdaftar di toko ini.";
+                }
+                if (!isActive()) throw new PurchaseError("Lisensi server ini sudah berubah.");
+                await interaction.editReply({ content, allowedMentions: { parse: [] } });
+                return;
+            }
             if (command === "isi-saldo") {
                 if (!createDeposit) throw new PurchaseError("QRIS untuk bot GevraStore belum aktif.");
                 const amount = interaction.options.getInteger("rupiah", true);
@@ -88,7 +131,8 @@ function createCatalogHandler({ registry, openDb = getDb, createDeposit }) {
             const fallback = {
                 katalog: "Katalog belum bisa dimuat. Coba lagi.",
                 "isi-saldo": "QRIS belum bisa ditampilkan. Coba lagi nanti.",
-            }[command] || "Pesanan belum bisa ditampilkan. Gunakan /ambil untuk memeriksa hasil pembelian terakhir.";
+                beli: "Pesanan belum bisa ditampilkan. Gunakan /ambil untuk memeriksa hasil pembelian terakhir.",
+            }[command] || "Data belum bisa ditampilkan. Coba lagi.";
             await interaction.editReply(error instanceof PurchaseError ? error.message : fallback);
         }
     };

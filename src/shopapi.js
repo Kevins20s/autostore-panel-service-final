@@ -2,6 +2,7 @@
 const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
+const { pilotTenant } = require("./shared-tenants");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -21,8 +22,19 @@ module.exports = function createShopRouter({ valid, decrypt }) {
     r.use(async (req, res, next) => {
         const l = req.lic;
         if (!valid(l)) return fail(res, "Key sudah habis atau dicabut.", 403);
-        if (!l.config) return fail(res, "Isi pengaturan bot dulu di menu Bot & Server.", 409);
-        try { req.db = await getDb(l.id, decrypt(l.config).mongoUrl); }
+        const hosted = pilotTenant(l);
+        if (!hosted && (l.hostedBot?.enabled || l.runMode === "central")) {
+            return fail(res, "Database Bot GevraStore belum tersedia untuk server ini.", 503);
+        }
+        if (!hosted && !l.config) return fail(res, "Isi pengaturan bot dulu di menu Bot & Server.", 409);
+        try {
+            req.db = hosted
+                ? await getDb("hosted:" + hosted.licenseId, hosted.config.mongoUrl, hosted.dbName)
+                : await getDb(l.id, decrypt(l.config).mongoUrl);
+            if (hosted && pilotTenant(l)?.dbName !== hosted.dbName) {
+                return fail(res, "Server toko berubah. Muat ulang halaman.", 409);
+            }
+        }
         catch { return fail(res, "Tidak bisa terhubung ke MongoDB toko. Cek pengaturan database.", 502); }
         next();
     });
@@ -150,7 +162,7 @@ module.exports = function createShopRouter({ valid, decrypt }) {
             c(req, "shop").countDocuments({ code }),
             c(req, "shop").find({ code }).sort({ _id: 1 }).limit(100).toArray(),
         ]);
-        res.json({ total, items: items.map((i) => ({ id: String(i._id), data: String(i.data).slice(0, 120), len: String(i.data).length })) });
+        res.json({ total, items: items.map((i) => ({ id: typeof i._id === "string" ? "str:" + i._id : String(i._id), data: String(i.data).slice(0, 120), len: String(i.data).length })) });
     }));
 
     r.post("/products/:code/stock", wrap(async (req, res) => {
@@ -184,7 +196,8 @@ module.exports = function createShopRouter({ valid, decrypt }) {
         const code = req.params.code, col = c(req, "shop");
         let removed = 0;
         if (Array.isArray(req.body?.ids)) {
-            const ids = req.body.ids.filter((x) => /^[0-9a-f]{24}$/i.test(x)).map((x) => new ObjectId(x));
+            const ids = req.body.ids.filter(x => typeof x === "string" && /^(?:[0-9a-f]{24}|str:.+)$/i.test(x))
+                .map(x => x.startsWith("str:") ? x.slice(4) : new ObjectId(x));
             removed = (await col.deleteMany({ code, _id: { $in: ids } })).deletedCount;
         } else if (req.body?.all === true) {
             removed = (await col.deleteMany({ code })).deletedCount;

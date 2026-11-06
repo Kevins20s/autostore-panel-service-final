@@ -1110,7 +1110,9 @@ const STORE_NAV = [
         ["bot", "Bot & server", "server"], ["settings", gsT("Pengaturan toko"), "settings"],
         ["emojis", "Emoji", "palette"], ["banner", "Banner", "image"]
     ]],
-    [gsT("Akun"), [["subscription", gsT("Langganan"), "credit-card"], ["tutorial", gsT("Panduan setup"), "book"]]]
+    [gsT("Panduan"), [["tutorial", gsT("Panduan setup"), "book"], ["commands", "Slash Command List", "terminal"],
+        ["deposit-script", gsT("Script Deposit"), "script"]]],
+    [gsT("Akun"), [["subscription", gsT("Langganan"), "credit-card"]]]
 ];
 const SERVICE_NAV = [
     [gsT("Operasional"), [
@@ -1128,6 +1130,8 @@ const NAV_ICON_PATHS = {
     image: ['M4 4h16v16H4z','m4 15 4-4 4 4 3-3 5 5','M9 8h.01'],
     server: ['M4 4h16v6H4z','M4 14h16v6H4z','M8 7h.01','M8 17h.01','M12 7h4','M12 17h4'],
     book: ['M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22z','M4 4.5v15A2.5 2.5 0 0 1 6.5 17H20','M8 6h8'],
+    terminal: ['M3 5h18v14H3z','m7 9 3 3-3 3','M13 15h4'],
+    script: ['M6 3h9l3 3v15H6z','M9 10h6','M9 14h6','M9 17h4'],
     'credit-card': ['M3 5h18v14H3z','M3 10h18','M7 15h4'],
     sliders: ['M4 21v-7','M4 10V3','M12 21v-9','M12 8V3','M20 21v-5','M20 12V3','M2 14h4','M10 8h4','M18 16h4'],
     'shopping-bag': ['M5 8h14l1 13H4L5 8Z','M9 8V6a3 3 0 0 1 6 0v2'],
@@ -1143,7 +1147,7 @@ function navIcon(name) {
     });
     return h("span", { class: "nav-icon nav-icon-" + name }, svg);
 }
-const VIEWS = { dashboard, products, users, sales: storeOrders, payments, settings, bot, tutorial, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
+const VIEWS = { dashboard, products, users, sales: storeOrders, payments, settings, bot, tutorial, commands: commandGuide, "deposit-script": depositScript, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
 // Menu HP: sidebar jadi header ringkas dengan tombol buka/tutup menu.
 function syncNavToggle() { const b = $("navToggle"); if (b) b.setAttribute("aria-expanded", String(!!document.querySelector(".side")?.classList.contains("open"))); }
 function setupNavToggle() {

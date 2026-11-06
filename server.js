@@ -178,6 +178,13 @@ const ownBotOnly = (req, res, next) => {
     }
     next();
 };
+app.get("/api/deposit-template", buyer, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!valid(req.lic) || req.lic.type === "service") {
+        return res.status(403).json({ error: "Script deposit tersedia untuk lisensi AutoStore aktif." });
+    }
+    res.type("text/plain").sendFile(path.join(__dirname, "src", "deposit-template.lua"));
+});
 const admin = (req, res, next) =>
     auth.session(req)?.t === "admin" ? next() : res.status(401).json({ error: "Belum login admin." });
 

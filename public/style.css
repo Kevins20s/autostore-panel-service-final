@@ -1365,3 +1365,22 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .desk-header.head { margin-bottom: 0; }
 .landing-nav { padding-right: 150px; }
 @media (max-width: 760px) { .landing-nav { padding-right: 0; } }
+
+.guide-toolbar { margin-bottom: 16px; }
+.guide-toolbar input { width: min(100%, 420px); }
+.guide-grid, .deposit-layout { display: grid; gap: 16px; align-items: start; }
+.guide-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.guide-grid .card, .deposit-layout .card { margin: 0; min-width: 0; }
+.guide-grid .card { align-self: stretch; }
+.guide-command { color: var(--ac); font-weight: 750; }
+.deposit-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+.deposit-form { display: grid; gap: 10px; }
+.deposit-code {
+  width: 100%;
+  min-height: 420px;
+  resize: vertical;
+  font: 13px/1.55 ui-monospace, Consolas, monospace;
+  white-space: pre;
+  overflow: auto;
+}
+@media (max-width: 900px) { .deposit-layout { grid-template-columns: minmax(0, 1fr); } }

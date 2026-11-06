@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const fs = require("node:fs");
 const auth = require("./auth");
 const { encrypt, decrypt } = require("./crypto");
 
@@ -55,6 +56,19 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
         );
     }
     const canActivate = !!(pilotLicense && botToken);
+    const statusFile = process.env.DISCORD_HOSTED_PILOT_STATUS_FILE;
+    function statusFor(license) {
+        const setup = license.hostedBot;
+        if (!setup) return null;
+        const status = { ...setup, state: "stopped" };
+        if (!setup.enabled || !eligible(license)) return status;
+        try {
+            const heartbeat = JSON.parse(fs.readFileSync(statusFile, "utf8"));
+            const age = Date.now() - heartbeat.at;
+            if (age >= 0 && age < 20000 && heartbeat.guilds.includes(setup.guildId)) status.state = "running";
+        } catch { /* Missing or stale pilot status is offline. */ }
+        return status;
+    }
     async function installed(id) {
         const response = await fetch(API + "/guilds/" + id, {
             headers: { Authorization: "Bot " + botToken },
@@ -76,7 +90,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
                 });
                 return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: canActivate && await installed(id) };
             }));
-            res.json({ servers, canActivate, setup: req.lic.hostedBot || null });
+            res.json({ servers, canActivate, setup: statusFor(req.lic) });
         } catch {
             res.status(502).json({ error: "Daftar server Discord belum bisa dimuat. Coba lagi." });
         }
@@ -101,7 +115,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
             license.hostedBot = { guildId, enabled: running };
             try { save(); }
             catch (error) { license.hostedBot = previous; throw error; }
-            res.json({ setup: license.hostedBot });
+            res.json({ setup: statusFor(license) });
         } catch {
             res.status(502).json({ error: "Pengaturan bot belum bisa disimpan. Coba lagi." });
         }
@@ -163,5 +177,5 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
         }
     });
 
-    return { clearInstall, eligible };
+    return { clearInstall, eligible, statusFor };
 };

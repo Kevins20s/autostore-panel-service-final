@@ -27,7 +27,15 @@ const empty = (kind, title, sub) => h("div", { class: "empty" }, h("div", { clas
 const copyText = async (t) => { try { await navigator.clipboard.writeText(String(t)); toast(gsT("Tersalin.")); } catch { toast(gsT("Gagal menyalin. Salin manual ya."), false); } };
 const copyBtn = (t, label = gsT("Salin")) => h("button", { type: "button", class: "copy-btn", title: gsT("Salin ke clipboard"), onclick: (e) => { e.stopPropagation(); copyText(t); } }, label);
 const BOT_LABEL = { running: "Online", stopped: "Offline", crashed: "Error", starting: gsT("Memulai"), restarting: "Restart" };
-const botPill = () => h("span", { class: "badge " + (me.bot || "stopped") }, "Bot " + (BOT_LABEL[me.bot] || me.bot || "Offline"));
+function botIndicator() {
+    if (me.hostedBot?.enabled) return { label: gsT("Bot GevraStore"), state: me.hostedBot.state };
+    if (me.hostedBot && me.bot === "stopped") return { label: gsT("Bot GevraStore"), state: "stopped" };
+    return { label: me.type === "service" ? "Bot Service" : gsT("Bot sendiri"), state: me.bot || "stopped" };
+}
+const botPill = () => {
+    const { label, state } = botIndicator();
+    return h("span", { class: "badge " + state }, label + ": " + (BOT_LABEL[state] || state));
+};
 const skeleton = () => h("div", { class: "skel-wrap", "aria-busy": "true", "aria-label": gsT("Memuat") }, h("div", { class: "skel skel-title" }), h("div", { class: "skel skel-line" }),
     h("div", { class: "skel-grid" }, h("div", { class: "skel skel-card" }), h("div", { class: "skel skel-card" }), h("div", { class: "skel skel-card" })), h("div", { class: "skel skel-block" }));
 function renewBanner() {
@@ -124,7 +132,8 @@ function salesChart(daily, days) {
 }
 
 async function dashboard() {
-    const [s, st] = await Promise.all([api("GET", "/api/shop/summary"), api("GET", "/api/shop/stats?days=14").catch(() => null)]);
+    const summary = me.hostedBot?.enabled ? Promise.resolve(null) : api("GET", "/api/shop/summary");
+    const [s, st] = await Promise.all([summary, me.hostedBot?.enabled ? null : api("GET", "/api/shop/stats?days=14").catch(() => null)]);
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
     const cards = [];
     if (st) {
@@ -149,18 +158,19 @@ async function dashboard() {
                 h("p", { class: "mut" }, gsT("Penjualan, inventaris, dan bot Discord."))),
             h("a", { class: "desk-bot-link", href: "#/bot" }, botPill(),
                 h("span", { class: "mut" }, me.valid ? (me.lifetime ? gsT("Lisensi seumur hidup") : gsT`Lisensi aktif · ${me.daysLeft} hari lagi`) : gsT("Lisensi tidak aktif")))),
-        h("section", { class: "desk-metrics", "aria-label": gsT("Ringkasan toko") },
+        s ? h("section", { class: "desk-metrics", "aria-label": gsT("Ringkasan toko") },
             stat(gsT("Terjual"), fmt(s.sold)), stat(gsT("Stok tersedia"), fmt(s.stock)),
             stat(gsT("Produk"), fmt(s.products)), stat(gsT("Pelanggan"), fmt(s.users)),
-            stat(gsT("Saldo pelanggan (WL)"), fmt(s.balance)), stat(gsT("Mode toko"), s.maintenance ? "Maintenance" : "Normal")),
-        h("div", { class: "desk-columns" },
+            stat(gsT("Saldo pelanggan (WL)"), fmt(s.balance)), stat(gsT("Mode toko"), s.maintenance ? "Maintenance" : "Normal"))
+            : card(h("p", { class: "mut" }, gsT("Ringkasan penjualan Bot GevraStore belum tersedia di panel."))),
+        s ? h("div", { class: "desk-columns" },
             h("section", { class: "desk-sales", "aria-label": gsT("Aktivitas penjualan") },
                 sales || card(h("h2", {}, gsT("Penjualan 14 hari")), h("p", { class: "mut" }, gsT("Data penjualan belum dapat dimuat.")))),
             h("section", { class: "desk-actions", "aria-label": gsT("Tindakan cepat") },
                 h("h2", {}, gsT("Kerjakan sekarang")),
                 action("products", "package", gsT("Kelola produk & stok"), gsT("Ubah harga atau isi inventaris.")),
                 action("sales", "shopping-bag", gsT("Buka riwayat pesanan"), gsT("Cari transaksi dari Discord.")),
-                action("payments", "wallet", gsT("Lihat pembayaran"), gsT("Cek QRIS, saldo, dan penarikan.")))),
+                action("payments", "wallet", gsT("Lihat pembayaran"), gsT("Cek QRIS, saldo, dan penarikan.")))) : null,
         insights);
 }
 
@@ -468,12 +478,17 @@ function hostedBotCard(outcome) {
             if (servers.some(server => server.id === setup?.guildId)) select.value = setup.guildId;
             const actions = h("div", { class: "hosted-bot-actions" });
             const status = h("p", { class: "mut", role: "status" });
-            const draw = () => {
+            const updateStatus = () => {
                 const server = servers.find(item => item.id === select.value);
                 const active = setup?.guildId === server.id && setup.enabled;
-                status.textContent = gsT(active ? "Bot aktif di server ini." : server.installed
+                const state = me.hostedBot?.guildId === setup?.guildId ? me.hostedBot?.state : setup?.state;
+                status.textContent = gsT(active ? (state === "running" ? "Bot aktif di server ini." : "Server tersimpan. Bot GevraStore sedang offline.") : server.installed
                     ? "Bot sudah terpasang. Simpan pilihan untuk mengaktifkannya."
                     : "Undang bot terlebih dahulu agar bisa dipakai di server ini.");
+                return { server, active };
+            };
+            const draw = () => {
+                const { server, active } = updateStatus();
                 if (!server.installed) {
                     actions.replaceChildren(h("a", { class: "bot-mode-cta", href: server.invite, target: "_blank", rel: "noopener" }, gsT("Undang bot ke server")),
                         load);
@@ -486,6 +501,8 @@ function hostedBotCard(outcome) {
                     button.disabled = select.disabled = true;
                     try {
                         ({ setup } = await api("PUT", "/api/discord-install/setup", { guildId: server.id, enabled: !active }));
+                        me.hostedBot = setup;
+                        updateSide();
                         draw();
                     } finally {
                         button.disabled = select.disabled = false;
@@ -497,6 +514,7 @@ function hostedBotCard(outcome) {
             content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
                 field(gsT("Pilih server Discord"), select), status, actions);
             draw();
+            content.addEventListener("hosted-status", updateStatus);
         } finally {
             load.disabled = false;
         }
@@ -560,6 +578,8 @@ async function bot() {
         if (!pre.isConnected) { clearInterval(logTimer); return; }
         try {
             me = await api("GET", "/api/me"); drawState();
+            const hostedSetup = $("view").querySelector(".hosted-bot-setup");
+            hostedSetup?.dispatchEvent(new Event("hosted-status"));
             const { lines } = await api("GET", "/api/logs"), end = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 20;
             pre.textContent = lines.length ? lines.join("\n") : "-"; if (end) pre.scrollTop = pre.scrollHeight;
         } catch {}
@@ -567,7 +587,7 @@ async function bot() {
     clearInterval(logTimer); logTimer = setInterval(refreshLogs, 5000); setTimeout(refreshLogs, 50);
     const isService = me.type === "service";
     const ownBot = h("div", {},
-        card(h("div", { class: "row sp" }, h("div", { class: "row" }, h("b", {}, gsT("Status bot")), state),
+        card(h("div", { class: "row sp" }, h("div", { class: "row" }, h("b", {}, gsT(isService ? "Status bot" : "Status bot sendiri")), state),
             h("div", { class: "row gap" }, h("button", { class: "pri", onclick: act("start") }, "Start"), h("button", { onclick: act("restart") }, "Restart"), h("button", { class: "bad", onclick: act("stop") }, "Stop"))),
             invite ? h("p", { class: "mut" }, gsT("Belum masuk ke server? "), h("a", { href: invite, target: "_blank", rel: "noopener" }, gsT("Undang bot ke server")), " ", copyBtn(invite, gsT("Salin link"))) : null),
         card(h("h2", {}, gsT("Pengaturan bot")), h("p", { class: "mut" }, gsT("Kolom rahasia yang sudah tersimpan tidak ditampilkan. Kosongkan jika tidak ingin mengubahnya.")),
@@ -1134,7 +1154,12 @@ function setupNavToggle() {
         h("span", { class: "nav-toggle-bars", "aria-hidden": "true" }), h("span", { class: "nav-toggle-txt" }, "Menu"));
     side.append(b);
 }
-function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
+function updateSide() {
+    if (!me) return;
+    const pill = botPill();
+    $("botState").textContent = pill.textContent;
+    $("botState").className = pill.className;
+}
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
     $("nav").replaceChildren(...nav.map(([group, links]) => h("div", { class: "panel-nav-group", role: "group", "aria-label": group },

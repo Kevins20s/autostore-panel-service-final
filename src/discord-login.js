@@ -102,17 +102,20 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
         if (!DISCORD_ID.test(guildId) || typeof running !== "boolean") return res.sendStatus(400);
         const license = req.lic;
         try {
+            let name = license.hostedBot?.name;
             if (running) {
                 const guilds = await manageableServers(req);
                 if (!guilds) return res.status(401).json({ error: "Hubungkan kembali akun Discord." });
-                if (!guilds.some(guild => guild.id === guildId)) return res.sendStatus(403);
+                const guild = guilds.find(item => item.id === guildId);
+                if (!guild) return res.sendStatus(403);
+                name = guild.name;
                 if (!await installed(guildId)) return res.status(409).json({ error: "Undang bot ke server ini terlebih dahulu." });
             } else if (license.hostedBot?.guildId !== guildId) {
                 return res.sendStatus(409);
             }
             if (!eligible(license)) return res.sendStatus(403);
             const previous = license.hostedBot;
-            license.hostedBot = { guildId, enabled: running };
+            license.hostedBot = { guildId, enabled: running, ...(name ? { name } : {}) };
             try { save(); }
             catch (error) { license.hostedBot = previous; throw error; }
             res.json({ setup: statusFor(license) });

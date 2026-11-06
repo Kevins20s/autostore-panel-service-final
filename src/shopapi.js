@@ -258,7 +258,10 @@ module.exports = function createShopRouter({ valid, decrypt }) {
     r.get("/stats", wrap(async (req, res) => {
         const days = Math.min(90, Math.max(1, Math.floor(Number(req.query.days)) || 14));
         const lowAt = Math.min(1000, Math.max(0, Math.floor(Number(req.query.lowAt)) || 3));
-        const since = new Date(Date.now() - days * 86400000);
+        const wibOffset = 7 * 3600000;
+        const dayMs = 86400000;
+        const today = Math.floor((Date.now() + wibOffset) / dayMs) * dayMs - wibOffset;
+        const since = new Date(today - (days - 1) * dayMs);
         const col = c(req, "orderlog");
         const [daily, top, [lists, prices, stocks]] = await Promise.all([
             col.aggregate([{ $match: { createdAt: { $gte: since } } },

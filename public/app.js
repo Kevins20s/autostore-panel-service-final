@@ -104,7 +104,7 @@ const rpText = (wl, rate) => (rate ? "Rp " + fmt(wl * rate) : "-");
 
 // ---------- Dashboard ----------
 // Grafik batang penjualan (WL per hari). SVG dibuat lewat DOM, tanpa library.
-function salesChart(daily, days) {
+function salesChart(daily, days, metric) {
     const ns = "http://www.w3.org/2000/svg", W = 640, H = 190, pl = 8, pr = 8, pt = 14, pb = 26;
     const byDate = new Map(daily.map((d) => [d.date, d]));
     const pts = [];
@@ -112,45 +112,82 @@ function salesChart(daily, days) {
         const key = new Date(Date.now() - i * 864e5 + 7 * 3600e3).toISOString().slice(0, 10);
         pts.push({ key, ...(byDate.get(key) || { orders: 0, qty: 0, wl: 0 }) });
     }
-    const max = Math.max(1, ...pts.map((x) => x.wl)), bw = (W - pl - pr) / pts.length;
+    const max = Math.max(1, ...pts.map((x) => x[metric])), bw = (W - pl - pr) / pts.length;
+    const unit = metric === "wl" ? "WL" : gsLanguage === "en" ? "orders" : "pesanan";
+    const detail = h("p", { class: "mut chart-detail", "aria-live": "polite" }, gsLanguage === "en" ? "Select a bar to see daily details." : "Pilih batang untuk melihat detail harian.");
     const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "chart"); svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", gsT`Grafik penjualan ${days} hari terakhir, puncak ${fmt(max)} WL`);
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "chart"); svg.setAttribute("role", "group");
+    svg.setAttribute("aria-label", `${unit} · ${days}`);
     const mk = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
     svg.append(mk("line", { x1: pl, x2: W - pr, y1: H - pb, y2: H - pb, class: "ch-axis" }));
     pts.forEach((x, i) => {
-        const bh = x.wl ? Math.max(3, (x.wl / max) * (H - pt - pb)) : 0, bx = pl + i * bw + bw * 0.14, w = bw * 0.72;
-        const g = mk("g", {});
-        g.append(mk("title", {}, gsT`${x.key}: ${fmt(x.orders)} order, ${fmt(x.qty)} item, ${fmt(x.wl)} WL`));
+        const bh = Math.max(2, (x[metric] / max) * (H - pt - pb)), w = Math.min(64, bw * 0.72);
+        const bx = pl + i * bw + (bw - w) / 2;
+        const label = gsT`${x.key}: ${fmt(x.orders)} order, ${fmt(x.qty)} item, ${fmt(x.wl)} WL`;
+        const g = mk("g", { tabindex: 0, role: "button", "aria-label": label, "aria-pressed": "false" });
+        const select = () => {
+            svg.querySelector('[aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
+            g.setAttribute("aria-pressed", "true");
+            detail.textContent = label;
+        };
+        g.addEventListener("click", select);
+        g.addEventListener("keydown", event => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            select();
+        });
+        g.addEventListener("pointerenter", () => { detail.textContent = label; });
+        g.addEventListener("focus", () => { detail.textContent = label; });
         g.append(mk("rect", { x: bx, y: H - pb - bh, width: w, height: Math.max(bh, 0), rx: 3, class: "ch-bar" }));
         g.append(mk("rect", { x: pl + i * bw, y: pt, width: bw, height: H - pt - pb, class: "ch-hit" })); // area sentuh untuk tooltip
         svg.append(g);
         if (i % Math.ceil(pts.length / 7) === 0 || i === pts.length - 1) svg.append(mk("text", { x: pl + i * bw + bw / 2, y: H - 8, "text-anchor": "middle", class: "ch-txt" }, x.key.slice(8) + "/" + x.key.slice(5, 7)));
     });
-    svg.append(mk("text", { x: pl, y: 10, class: "ch-txt" }, fmt(max) + " WL"));
-    return svg;
+    svg.append(mk("text", { x: pl, y: 10, class: "ch-txt" }, fmt(max) + " " + unit));
+    return h("div", {}, svg, detail);
 }
 
 async function dashboard() {
     const [s, st] = await Promise.all([api("GET", "/api/shop/summary"), api("GET", "/api/shop/stats?days=14").catch(() => null)]);
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
-    const cards = [];
-    if (st) {
+    const charts = h("div", { class: "desk-columns sales-charts" });
+    const insights = h("div");
+    const periodLabel = gsLanguage === "en" ? "Sales period" : "Periode penjualan";
+    const period = h("select", { "aria-label": periodLabel }, ...[1, 3, 7, 14, 30].map(days =>
+        h("option", { value: days }, gsT`${days} hari`)));
+    period.value = "14";
+    const left = h("div"), right = h("div");
+    charts.append(card(h("div", { class: "row sp" }, h("h2", {}, gsLanguage === "en" ? "Sales (WL)" : "Penjualan (WL)"), period), left),
+        card(h("h2", {}, gsLanguage === "en" ? "Orders per day" : "Pesanan per hari"), right));
+    function draw(stats) {
+        if (!stats) {
+            left.replaceChildren(h("p", { class: "mut" }, gsT("Data penjualan belum dapat dimuat.")));
+            right.replaceChildren();
+            insights.replaceChildren();
+            return;
+        }
+        const st = stats;
         const tot = st.daily.reduce((a, d) => ({ orders: a.orders + d.orders, qty: a.qty + d.qty, wl: a.wl + d.wl }), { orders: 0, qty: 0, wl: 0 });
-        cards.push(card(h("div", { class: "row sp" }, h("h2", { class: "m0" }, gsT("Penjualan 14 hari")), h("span", { class: "mut" }, gsT`${fmt(tot.orders)} order, ${fmt(tot.qty)} item, ${fmt(tot.wl)} WL`)),
-            tot.orders ? salesChart(st.daily, st.days) : empty("clipboard", gsT("Belum ada penjualan tercatat"), gsT("Riwayat mulai tercatat sejak bot diperbarui ke versi ini. Pembelian lama tidak ikut terhitung."))));
+        left.replaceChildren(h("p", { class: "mut" }, gsT`${fmt(tot.orders)} order, ${fmt(tot.qty)} item, ${fmt(tot.wl)} WL`),
+            salesChart(st.daily, st.days, "wl"));
+        right.replaceChildren(h("p", { class: "mut" }, gsLanguage === "en" ? `${fmt(tot.orders)} orders` : `${fmt(tot.orders)} pesanan`),
+            salesChart(st.daily, st.days, "orders"));
         const top = st.top.length
             ? h("ol", { class: "rank" }, ...st.top.map((t) => h("li", {}, h("span", {}, h("b", {}, t.name), " ", h("span", { class: "mut" }, t.code)), h("span", { class: "mut" }, gsT`${fmt(t.qty)} terjual`))))
             : h("p", { class: "mut" }, gsT("Belum ada data."));
         const low = st.low.length
             ? h("ul", { class: "rank" }, ...st.low.map((p) => h("li", {}, h("span", {}, h("b", {}, p.name), " ", h("span", { class: "mut" }, p.code)), h("span", { class: "pill " + (p.stock ? "no" : "bad") }, p.stock ? gsT`sisa ${p.stock}` : gsT("habis")))))
             : h("p", { class: "mut" }, gsT`Semua produk berharga punya stok lebih dari ${st.lowAt}.`);
-        cards.push(h("div", { class: "desk-insights" }, card(h("h2", {}, gsT("Produk terlaris")), top),
+        insights.replaceChildren(h("div", { class: "desk-insights" }, card(h("h2", {}, gsT("Produk terlaris")), top),
             card(h("div", { class: "row sp" }, h("h2", { class: "m0" }, gsT("Stok menipis")), st.low.length ? h("a", { href: "#/products" }, gsT("Isi stok")) : null), low)));
     }
-    const action = (page, icon, title, detail) => h("a", { href: "#/" + page, class: "desk-action" },
-        navIcon(icon), h("span", {}, h("strong", {}, title), h("small", {}, detail)));
-    const [sales, insights] = cards;
+    draw(st);
+    let request = 0;
+    period.addEventListener("change", async () => {
+        const version = ++request;
+        const next = await api("GET", "/api/shop/stats?days=" + period.value).catch(() => null);
+        if (version === request) draw(next);
+    });
     return h("div", { class: "store-overview" },
         h("section", { class: "desk-header head" },
             h("div", {}, h("h1", {}, gsT("Ringkasan toko")),
@@ -162,14 +199,7 @@ async function dashboard() {
             stat(gsT("Produk"), fmt(s.products)), stat(gsT("Pelanggan"), fmt(s.users)),
             stat(gsT("Saldo pelanggan (WL)"), fmt(s.balance)), stat(gsT("Mode toko"), s.maintenance ? "Maintenance" : "Normal"))
             : null,
-        s ? h("div", { class: "desk-columns" },
-            h("section", { class: "desk-sales", "aria-label": gsT("Aktivitas penjualan") },
-                sales || card(h("h2", {}, gsT("Penjualan 14 hari")), h("p", { class: "mut" }, gsT("Data penjualan belum dapat dimuat.")))),
-            h("section", { class: "desk-actions", "aria-label": gsT("Tindakan cepat") },
-                h("h2", {}, gsT("Kerjakan sekarang")),
-                action("products", "package", gsT("Kelola produk & stok"), gsT("Ubah harga atau isi inventaris.")),
-                action("sales", "shopping-bag", gsT("Buka riwayat pesanan"), gsT("Cari transaksi dari Discord.")),
-                action("payments", "wallet", gsT("Lihat pembayaran"), gsT("Cek QRIS, saldo, dan penarikan.")))) : null,
+        charts,
         insights);
 }
 
@@ -458,6 +488,30 @@ const SECRETS = ["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"];
 
 function hostedBotCard(outcome) {
     const content = h("div", { class: "hosted-bot-setup" });
+    const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
+    function showSaved(setup) {
+        const status = h("p", { class: "mut", role: "status" });
+        const update = () => {
+            const current = me.hostedBot || setup;
+            status.textContent = gsT(current.enabled ? (current.state === "running" ? "Bot aktif di server ini." : "Server tersimpan. Bot GevraStore sedang offline.") : "Bot dinonaktifkan.");
+        };
+        content.onhostedstatus = update;
+        const manage = h("a", { class: "bot-mode-cta", href: connect.href }, gsLanguage === "en" ? "Manage Discord servers" : "Kelola server Discord");
+        const stop = setup.enabled ? h("button", { type: "button", onclick: guard(async event => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            try {
+                ({ setup: me.hostedBot } = await api("PUT", "/api/discord-install/setup", { guildId: setup.guildId, enabled: false }));
+                updateSide();
+                showSaved(me.hostedBot);
+            } finally { button.disabled = false; }
+        }) }, gsT("Nonaktifkan bot")) : null;
+        content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
+            h("strong", {}, setup.name || (gsLanguage === "en" ? "Saved server" : "Server tersimpan") + " · " + setup.guildId),
+            status, h("div", { class: "hosted-bot-actions" }, manage, stop));
+        update();
+    }
+    content.addEventListener("hosted-status", () => content.onhostedstatus?.());
     const load = h("button", { type: "button" }, gsT("Tampilkan server Discord"));
     load.onclick = guard(async () => {
         load.disabled = true;
@@ -466,6 +520,7 @@ function hostedBotCard(outcome) {
             const { reconnect, servers, canActivate } = result;
             let { setup } = result;
             if (reconnect) {
+                if (me.hostedBot?.guildId) return showSaved(me.hostedBot);
                 content.replaceChildren(h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord")));
                 return;
             }
@@ -513,14 +568,14 @@ function hostedBotCard(outcome) {
             content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
                 field(gsT("Pilih server Discord"), select), status, actions);
             draw();
-            content.addEventListener("hosted-status", updateStatus);
+            content.onhostedstatus = updateStatus;
         } finally {
             load.disabled = false;
         }
     });
-    const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
     content.append(h("div", { class: "hosted-bot-actions" }, connect, load));
-    if (outcome === "connected" || me.hostedBotConfigured) load.click();
+    if (outcome === "connected") load.click();
+    else if (me.hostedBot?.guildId) showSaved(me.hostedBot);
     const notice = {
         error: "Discord gagal terhubung. Coba lagi.",
         conflict: "Lisensi ini sudah terhubung ke akun Discord lain.",

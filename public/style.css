@@ -781,6 +781,9 @@ ol.rank li>span:first-child:before{counter-increment:rk;content:counter(rk) ". "
 .ch-bar{fill:var(--ac)}
 .ch-hit{fill:transparent}
 .chart g:hover .ch-bar{fill:var(--ac2)}
+.chart g[role="button"] { cursor: pointer; }
+.chart g[aria-pressed="true"] .ch-bar, .chart g:focus-visible .ch-bar { fill: var(--ac2); }
+.chart-detail { min-height: 1.5em; margin-bottom: 0; }
 .ch-txt{fill:var(--mut);font-size:11px;font-family:inherit}
 
 /* Halaman /beli */
@@ -1232,6 +1235,9 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .desk-metrics .stat + .stat { border-left: 1px solid var(--line); }
 .desk-metrics .stat b { font-size: clamp(16px, 2vw, 26px); margin-top: 5px; }
 .desk-columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 16px; }
+.sales-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sales-charts .card { min-width: 0; }
+.sales-charts select { width: auto; }
 .desk-sales > .card { height: 100%; margin: 0; }
 .desk-actions { padding: 16px; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; }
 .desk-actions h2 { font-size: 16px; margin: 0 0 8px; }

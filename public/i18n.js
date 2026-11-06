@@ -833,14 +833,13 @@ if (gsLanguage === "en") {
     document.title = gsT(document.title);
 }
 
-const gsLanguageSelect = document.createElement("select");
+const gsLanguageSelect = document.createElement("div");
 gsLanguageSelect.className = "language-select";
 gsLanguageSelect.id = "languageSelect";
+gsLanguageSelect.setAttribute("role", "group");
 gsLanguageSelect.setAttribute("aria-label", gsLanguage === "en" ? "Language" : "Bahasa");
-gsLanguageSelect.append(new Option("ID", "id"), new Option("EN", "en"));
-gsLanguageSelect.value = gsLanguage;
-gsLanguageSelect.addEventListener("change", () => {
-    const language = gsLanguageSelect.value;
+function gsSetLanguage(language) {
+    if (language === gsLanguage) return;
     const url = new URL(location.href);
     try {
         localStorage.setItem("gs-language", language);
@@ -850,5 +849,14 @@ gsLanguageSelect.addEventListener("change", () => {
     }
     if (url.href === location.href) location.reload();
     else location.replace(url.href);
-});
+}
+for (const [language, name] of [["id", "Bahasa Indonesia"], ["en", "English"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = language.toUpperCase();
+    button.setAttribute("aria-label", name);
+    button.setAttribute("aria-pressed", String(language === gsLanguage));
+    button.addEventListener("click", () => gsSetLanguage(language));
+    gsLanguageSelect.append(button);
+}
 document.body.append(gsLanguageSelect);

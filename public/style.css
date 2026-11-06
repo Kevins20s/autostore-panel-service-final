@@ -1263,15 +1263,30 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
   top: 14px;
   right: 62px;
   z-index: 60;
-  width: auto;
-  min-height: 40px;
-  margin: 0;
-  padding: 6px 9px;
-  color: var(--tx);
+  display: flex;
+  gap: 2px;
+  padding: 2px;
   background: var(--panel);
-  border-color: var(--line2);
+  border: 1px solid var(--line2);
   border-radius: 10px;
 }
+.language-select button {
+  min-width: 38px;
+  min-height: 34px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tx);
+  font-size: 12px;
+  font-weight: 700;
+}
+.language-select button[aria-pressed="true"] {
+  border-color: var(--line2);
+  background: var(--bg);
+  color: var(--ac);
+}
+.language-select button:focus-visible { outline: 2px solid var(--ac); outline-offset: 1px; }
 .buy {
   background-color: var(--bg);
   background-image: linear-gradient(rgb(255 255 255 / .025) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / .025) 1px, transparent 1px),
@@ -1348,5 +1363,5 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 }
 
 .desk-header.head { margin-bottom: 0; }
-.landing-nav { padding-right: 110px; }
+.landing-nav { padding-right: 150px; }
 @media (max-width: 760px) { .landing-nav { padding-right: 0; } }

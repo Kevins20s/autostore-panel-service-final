@@ -10,6 +10,10 @@
   <a href="/" class="buy-panel-link">Masuk ke panel</a>
 </header>
 
+<ol id="checkoutProgress" class="checkout-progress" aria-label="Tahap pembelian">
+  <li aria-current="step">Paket</li><li>Data pembeli</li><li>Bayar QRIS</li><li>Terima key</li>
+</ol>
+
 <section id="stForm" class="card buy-card">
   <ul class="buy-feats" aria-label="Keunggulan">
     <li><b>Setup lewat web</b><span>Isi token bot dan MongoDB di panel, tanpa coding.</span></li>
@@ -19,19 +23,28 @@
   <div class="buy-form">
   <h2>Pilih paket</h2>
   <div id="pkgs" class="buy-pkgs" role="radiogroup" aria-label="Paket"></div>
-  <label class="buy-lbl" for="fName">Nama</label>
-  <input id="fName" maxlength="40" placeholder="Nama kamu" autocomplete="name">
-  <label class="buy-lbl" for="fContact">Kontak (WhatsApp atau Discord)</label>
-  <input id="fContact" maxlength="60" placeholder="0812xxxxxxx atau username#1234" autocomplete="off">
-  <p class="mut buy-note">Kontak dipakai kalau ada kendala dengan pesananmu.</p>
-  <div id="tsBox" class="buy-ts hide"></div>
-  <div class="row" style="margin-top:14px"><button class="pri" id="btnOrder" type="button">Lanjut ke pembayaran</button></div>
-  <div id="formMsg" class="msg"></div>
+  <button class="pri checkout-next" id="btnDetails" type="button" disabled>Lanjut isi data</button>
+  <p id="pkgMsg" class="msg" role="status"></p>
   </div>
 </section>
 
+<section id="stDetails" class="card buy-card hide">
+  <h2 tabindex="-1">Data pembeli</h2>
+  <p id="chosenPackage" class="checkout-package"></p>
+  <form id="checkoutDetails">
+  <label class="buy-lbl" for="fName">Nama</label>
+  <input id="fName" maxlength="40" required placeholder="Nama kamu" autocomplete="name">
+  <label class="buy-lbl" for="fContact">Kontak (WhatsApp atau Discord)</label>
+  <input id="fContact" maxlength="60" required placeholder="0812xxxxxxx atau username#1234" autocomplete="off">
+  <p class="mut buy-note">Kontak dipakai kalau ada kendala dengan pesananmu.</p>
+  <div id="tsBox" class="buy-ts hide"></div>
+  <div class="row" style="margin-top:14px"><button class="pri" id="btnOrder" type="submit">Buat pesanan &amp; bayar</button><button id="btnPackages" type="button">Kembali ke paket</button></div>
+  <div id="formMsg" class="msg" role="alert"></div>
+  </form>
+</section>
+
 <section id="stPay" class="card buy-card hide">
-  <h2>2. Bayar lewat QRIS</h2>
+  <h2 tabindex="-1">Bayar lewat QRIS</h2>
   <div class="buy-amount"><span class="mut">Bayar tepat sebesar</span><b id="payAmount">Rp0</b><button type="button" class="copy-btn" id="btnCopyAmt">Salin nominal</button></div>
   <p class="buy-warn" id="payWarn">Nominal harus <b>persis sama</b> (termasuk 3 angka terakhir) supaya pembayaranmu dikenali.</p>
   <div class="buy-qr"><img id="qrImg" src="/qris.png" alt="QRIS GEVRA STORE" width="320"></div>

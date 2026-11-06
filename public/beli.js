@@ -1,7 +1,7 @@
 /* Halaman beli key. Tanpa inline script (aman untuk CSP). Semua teks pengguna dipasang lewat textContent. */
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var STATES = ["stForm", "stPay", "stWait", "stDone", "stRenewed", "stEnd"];
+  var STATES = ["stForm", "stDetails", "stPay", "stWait", "stDone", "stRenewed", "stEnd"];
   var LS = "gs-order";
   var cur = null;        // { id, token }
   var order = null;      // data pesanan terakhir dari server
@@ -9,7 +9,16 @@
   var tsKey = null, tsId = null, tsToken = ""; // Cloudflare Turnstile (hanya kalau diaktifkan penjual)
 
   function rp(n) { return "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
-  function show(id) { STATES.forEach(function (s) { $(s).classList.toggle("hide", s !== id); }); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  const CHECKOUT_STEPS = { stForm: 0, stDetails: 1, stPay: 2, stWait: 2, stDone: 3, stRenewed: 3 };
+  function show(id, moveFocus = false) {
+    STATES.forEach(s => $(s).classList.toggle("hide", s !== id));
+    [...$("checkoutProgress").children].forEach((step, index) => {
+      if (CHECKOUT_STEPS[id] === index) step.setAttribute("aria-current", "step");
+      else step.removeAttribute("aria-current");
+    });
+    if (moveFocus) $(id).querySelector("h2").focus();
+    window.scrollTo(0, 0);
+  }
   function msg(id, t) { var e = $(id); e.textContent = t || ""; e.className = "msg err"; e.style.display = t ? "block" : "none"; }
   function lsGet() { try { return JSON.parse(localStorage.getItem(LS) || "null"); } catch (e) { return null; } }
   function lsSet(v) { try { if (v) localStorage.setItem(LS, JSON.stringify(v)); else localStorage.removeItem(LS); } catch (e) {} }
@@ -38,7 +47,7 @@
       payMode(o);
       var upd = function () { var left = o.expiresAt - Date.now(); $("payTimer").textContent = fmtTimer(left); if (left <= 0) refresh(); };
       upd(); tick = setInterval(upd, 1000); poll = setInterval(refresh, o.auto ? 4000 : 10000);
-      show("stPay");
+      show("stPay", true);
     } else if (o.status === "claimed") {
       $("waitCode").textContent = o.code; $("waitAmount").textContent = rp(o.amount);
       poll = setInterval(refresh, 6000); show("stWait");
@@ -109,16 +118,30 @@
   }
   function resetTurnstile() { tsToken = ""; try { if (window.turnstile && tsId !== null) window.turnstile.reset(tsId); } catch (e) {} }
 
-  $("btnOrder").addEventListener("click", async function () {
-    var b = $("btnOrder"); msg("formMsg", "");
+  $("btnDetails").addEventListener("click", () => {
+    const selected = packages.find(p => p.id === chosen);
+    if (!selected) return;
+    $("chosenPackage").textContent = selected.name + " · " + selected.days + " hari · " + rp(selected.price);
+    show("stDetails", true);
+  });
+  $("btnPackages").addEventListener("click", () => {
+    show("stForm");
+    $("pkgs").querySelector("input:checked")?.focus();
+  });
+  $("checkoutDetails").addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var b = $("btnOrder");
+    if (b.disabled) return;
+    msg("formMsg", "");
     if (tsKey && !tsToken) { msg("formMsg", "Selesaikan verifikasi keamanan dulu."); return; }
-    b.disabled = true; var old = b.textContent; b.textContent = "Memproses...";
+    b.disabled = $("btnPackages").disabled = true;
+    var old = b.textContent; b.textContent = "Memproses...";
     try {
       var r = await api("POST", "/api/orders", { type: chosen, name: $("fName").value, contact: $("fContact").value, turnstileToken: tsToken });
       cur = { id: r.order.id, token: r.token }; lsSet(cur); history.replaceState(null, "", "#" + cur.id + "." + cur.token); render(r.order);
     } catch (e) { msg("formMsg", e.message); }
     if (tsKey) resetTurnstile(); /* token Turnstile hanya berlaku sekali */
-    b.disabled = false; b.textContent = old;
+    b.disabled = $("btnPackages").disabled = false; b.textContent = old;
   });
   $("btnPaid").addEventListener("click", async function () {
     var b = $("btnPaid"); msg("payMsg", ""); b.disabled = true; var old = b.textContent; b.textContent = "Memproses...";
@@ -133,8 +156,10 @@
   $("btnCopyLink").addEventListener("click", function () { copy(location.href, $("btnCopyLink"), "Salin link pesanan"); });
 
   (async function init() {
-    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; if (packages.length) chosen = packages[0].id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("formMsg", "Gagal memuat daftar paket. Muat ulang halaman."); }
+    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; if (packages.length) chosen = packages[0].id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("pkgMsg", "Gagal memuat daftar paket. Muat ulang halaman."); }
     renderPkgs();
+    $("btnDetails").disabled = !packages.length;
+    if (!packages.length && !$("pkgMsg").textContent) msg("pkgMsg", "Belum ada paket yang tersedia.");
     var m = /^#([0-9a-f]{12})\.([0-9a-f]{48})$/.exec(location.hash), saved = lsGet();
     cur = m ? { id: m[1], token: m[2] } : (saved && saved.id && saved.token ? saved : null);
     if (cur) {

@@ -137,19 +137,31 @@ async function dashboard() {
         const low = st.low.length
             ? h("ul", { class: "rank" }, ...st.low.map((p) => h("li", {}, h("span", {}, h("b", {}, p.name), " ", h("span", { class: "mut" }, p.code)), h("span", { class: "pill " + (p.stock ? "no" : "bad") }, p.stock ? `sisa ${p.stock}` : "habis"))))
             : h("p", { class: "mut" }, `Semua produk berharga punya stok lebih dari ${st.lowAt}.`);
-        cards.push(h("div", { class: "split" }, card(h("h2", {}, "Produk terlaris"), top),
+        cards.push(h("div", { class: "desk-insights" }, card(h("h2", {}, "Produk terlaris"), top),
             card(h("div", { class: "row sp" }, h("h2", { class: "m0" }, "Stok menipis"), st.low.length ? h("a", { href: "#/products" }, "Isi stok") : null), low)));
     }
+    const action = (page, icon, title, detail) => h("a", { href: "#/" + page, class: "desk-action" },
+        navIcon(icon), h("span", {}, h("strong", {}, title), h("small", {}, detail)));
+    const [sales, insights] = cards;
     return h("div", { class: "store-overview" },
-        h("section", { class: "overview-hero" },
-            h("div", {}, h("h1", {}, "Ringkasan toko"),
-                h("p", {}, "Pantau stok, pesanan, dan aktivitas bot Discord kamu.")),
-            h("div", { class: "overview-status" }, botPill(),
-                h("span", { class: "mut" }, me.valid ? `Sisa langganan ${me.daysLeft} hari` : "Key tidak aktif"))),
-        h("div", { class: "grid" }, stat("Produk", fmt(s.products)), stat("Stok tersedia", fmt(s.stock)), stat("Terjual", fmt(s.sold)),
-            stat("User", fmt(s.users)), stat("Total saldo user (WL)", fmt(s.balance)), stat("Mode toko", s.maintenance ? "Maintenance" : "Normal")),
-        ...cards,
-        card(h("h2", {}, "Langganan"), h("p", { class: "mut" }, me.valid ? `Key aktif, sisa ${me.daysLeft} hari. Bot: ${me.bot}.` : "Key tidak aktif.")));
+        h("section", { class: "desk-header" },
+            h("div", {}, h("h1", {}, "Pusat kendali toko"),
+                h("p", { class: "mut" }, "Penjualan, inventaris, dan bot Discord.")),
+            h("a", { class: "desk-bot-link", href: "#/bot" }, botPill(),
+                h("span", { class: "mut" }, me.valid ? `Lisensi aktif · ${me.daysLeft} hari lagi` : "Lisensi tidak aktif"))),
+        h("section", { class: "desk-metrics", "aria-label": "Ringkasan toko" },
+            stat("Terjual", fmt(s.sold)), stat("Stok tersedia", fmt(s.stock)),
+            stat("Produk", fmt(s.products)), stat("Pelanggan", fmt(s.users)),
+            stat("Saldo pelanggan (WL)", fmt(s.balance)), stat("Mode toko", s.maintenance ? "Maintenance" : "Normal")),
+        h("div", { class: "desk-columns" },
+            h("section", { class: "desk-sales", "aria-label": "Aktivitas penjualan" },
+                sales || card(h("h2", {}, "Penjualan 14 hari"), h("p", { class: "mut" }, "Data penjualan belum dapat dimuat."))),
+            h("section", { class: "desk-actions", "aria-label": "Tindakan cepat" },
+                h("h2", {}, "Kerjakan sekarang"),
+                action("products", "package", "Kelola produk & stok", "Ubah harga atau isi inventaris."),
+                action("sales", "shopping-bag", "Buka riwayat pesanan", "Cari transaksi dari Discord."),
+                action("payments", "wallet", "Lihat pembayaran", "Cek QRIS, saldo, dan penarikan."))),
+        insights);
 }
 
 // ---------- Orders (riwayat pembelian di Discord) ----------
@@ -967,16 +979,22 @@ async function payments() {
 
 // ---------- router ----------
 const STORE_NAV = [
-    ["dashboard", "Dashboard", "dashboard"], ["products", "Products", "package"],
-    ["users", "Users", "users"], ["sales", "Orders", "shopping-bag"], ["payments", "Pembayaran", "wallet"], ["settings", "Settings", "settings"],
-    ["emojis", "Custom Emoji", "palette"], ["banner", "Custom Banner", "image"],
-    ["bot", "Bot & Server", "server"], ["tutorial", "Tutorial Setup", "book"],
-    ["subscription", "Subscription", "credit-card"]
+    ["Operasional", [
+        ["dashboard", "Ringkasan", "dashboard"], ["sales", "Pesanan", "shopping-bag"],
+        ["products", "Produk & stok", "package"], ["users", "Pelanggan", "users"], ["payments", "Pembayaran", "wallet"]
+    ]],
+    ["Konfigurasi", [
+        ["bot", "Bot & server", "server"], ["settings", "Pengaturan toko", "settings"],
+        ["emojis", "Emoji", "palette"], ["banner", "Banner", "image"]
+    ]],
+    ["Akun", [["subscription", "Langganan", "credit-card"], ["tutorial", "Panduan setup", "book"]]]
 ];
 const SERVICE_NAV = [
-    ["service", "Dashboard", "dashboard"], ["service-settings", "Harga & Status", "sliders"],
-    ["service-emojis", "Custom Emoji", "palette"], ["orders", "Orders", "shopping-bag"],
-    ["bot", "Bot & Server", "server"], ["subscription", "Subscription", "credit-card"]
+    ["Operasional", [
+        ["service", "Ringkasan", "dashboard"], ["orders", "Pesanan", "shopping-bag"], ["service-settings", "Harga & status", "sliders"]
+    ]],
+    ["Konfigurasi", [["bot", "Bot & server", "server"], ["service-emojis", "Emoji", "palette"]]],
+    ["Akun", [["subscription", "Langganan", "credit-card"]]]
 ];
 const NAV_ICON_PATHS = {
     dashboard: ['M3 3h7v7H3z','M14 3h7v4h-7z','M14 10h7v11h-7z','M3 14h7v7H3z'],
@@ -1015,7 +1033,10 @@ function setupNavToggle() {
 function updateSide() { if (me) { $("botState").textContent = "Bot: " + me.bot; $("botState").className = "badge " + me.bot; } }
 function drawNav(cur) {
     const nav = me?.type === "service" ? SERVICE_NAV : STORE_NAV;
-    $("nav").replaceChildren(...nav.map(([k, label, icon]) => h("a", { class: k === cur ? "on" : "", href: "#/" + k, "aria-label": label, "aria-current": k === cur ? "page" : null }, navIcon(icon), h("span", { class: "nav-label" }, label))));
+    $("nav").replaceChildren(...nav.map(([group, links]) => h("div", { class: "nav-group", role: "group", "aria-label": group },
+        h("span", { class: "nav-group-label", "aria-hidden": "true" }, group),
+        ...links.map(([k, label, icon]) => h("a", { class: k === cur ? "on" : "", href: "#/" + k, "aria-current": k === cur ? "page" : null },
+            navIcon(icon), h("span", { class: "nav-label" }, label))))));
 }
 async function render() {
     const defaultView = me?.type === "service" ? "service" : "dashboard";

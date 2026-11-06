@@ -109,6 +109,19 @@ async function loadWallet() {
         tr.append(act); body.append(tr);
     }
 }
+const workspaces = [...document.querySelectorAll(".adm-workspace")];
+const workspaceLinks = [...document.querySelectorAll(".adm-jump a")];
+function showWorkspace() {
+    const active = workspaces.find(section => "#" + section.id === location.hash) || workspaces[0];
+    for (const section of workspaces) section.classList.toggle("hide", section !== active);
+    for (const link of workspaceLinks) {
+        if (link.hash === "#" + active.id) link.setAttribute("aria-current", "page");
+        else link.removeAttribute("aria-current");
+    }
+}
+window.addEventListener("hashchange", showWorkspace);
+showWorkspace();
+
 async function load() {
     let data;
     try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("login").classList.remove("hide"); return; }

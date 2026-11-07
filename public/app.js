@@ -583,7 +583,7 @@ function storefrontSettings(storefront) {
         const compact = model.value === "model1";
         const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
             : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
-        preview.replaceChildren(
+        preview.replaceChildren(...[
             compact ? null : h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
                 h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
             h("div", { class: "storefront-preview-select" },
@@ -598,7 +598,8 @@ function storefrontSettings(storefront) {
                     h("div", { class: "storefront-preview-actions" },
                         h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
                         h("span", {}, "👤 Profile"), h("span", {}, "💰 Balance"), h("span", {}, "📜 History"))))
-                : null);
+                : null,
+        ].filter(Boolean));
     };
     draw();
     model.addEventListener("change", draw);

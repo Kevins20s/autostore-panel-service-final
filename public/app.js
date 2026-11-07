@@ -40,12 +40,25 @@ const skeleton = () => h("div", { class: "skel-wrap", "aria-busy": "true", "aria
     h("div", { class: "skel-grid" }, h("div", { class: "skel skel-card" }), h("div", { class: "skel skel-card" }), h("div", { class: "skel skel-card" })), h("div", { class: "skel skel-block" }));
 function renewBanner() {
     if (!me) return null;
-    const contact = (typeof CONTACT_URL === "string" && /^https:\/\//i.test(CONTACT_URL)) ? h("a", { href: CONTACT_URL, target: "_blank", rel: "noopener noreferrer" }, gsT("Hubungi penjual")) : gsT("Hubungi penjual");
-    const renewBtn = h("button", { type: "button", class: "pri sm", onclick: () => renewDialog() }, gsT("Perpanjang sekarang"));
-    if (me.revoked) return h("div", { class: "notice bad", role: "alert" }, h("b", {}, gsT("Key dinonaktifkan.")), " ", contact, gsT(" untuk bantuan."));
-    if (!me.valid || me.daysLeft <= 0) return h("div", { class: "notice bad", role: "alert" }, h("b", {}, gsT("Langganan sudah berakhir.")), " ", renewBtn, gsT(" atau "), contact, ".");
-    if (me.daysLeft <= 7) return h("div", { class: "notice warn", role: "status" }, h("b", {}, gsT`Langganan berakhir dalam ${me.daysLeft} hari.`), " ", renewBtn, gsT(" atau "), contact, gsT(" sebelum bot berhenti."));
-    return null;
+    const expired = !me.valid || me.daysLeft <= 0;
+    const blocked = me.revoked || expired;
+    if (!blocked && (me.lifetime || me.daysLeft > 7)) return null;
+
+    const title = me.revoked ? gsT("Lisensi dinonaktifkan")
+        : expired ? gsT("Langganan sudah berakhir.")
+        : me.daysLeft === 1 ? gsT("Langganan berakhir dalam 1 hari")
+        : gsT("Langganan berakhir dalam {0} hari", me.daysLeft);
+    const message = me.revoked ? gsT("Akses ke fitur toko dihentikan.")
+        : expired ? gsT("Perpanjang lisensi untuk membuka kembali akses toko.")
+        : gsT("Perpanjang lisensi untuk menjaga akses toko dan bot tetap aktif.");
+    const contact = typeof CONTACT_URL === "string" && /^https:\/\//i.test(CONTACT_URL)
+        ? h("a", { class: "renew-contact", href: CONTACT_URL, target: "_blank", rel: "noopener noreferrer" }, gsT("Hubungi penjual"))
+        : h("span", { class: "mut" }, gsT("Hubungi penjual untuk bantuan."));
+    const renew = !me.revoked && h("button", { type: "button", class: "pri", onclick: renewDialog }, gsT("Perpanjang sekarang"));
+    return h("div", { class: "notice renew-banner " + (blocked ? "bad" : "warn"), role: blocked ? "alert" : "status" },
+        navIcon("clock"),
+        h("div", { class: "renew-copy" }, h("strong", {}, title), h("p", {}, message)),
+        h("div", { class: "renew-actions" }, renew, contact));
 }
 
 // Perpanjang dari panel: pilih paket, buat pesanan perpanjangan, lalu lanjut bayar di halaman /beli.
@@ -204,16 +217,13 @@ function shopSetupChecklist(summary) {
     const { config, hostedBot } = me;
     const ownConfigured = !!(config.has.botToken && config.has.mongoUrl && config.clientId);
     const useHosted = hostedBot?.enabled || (me.discordInstallEnabled && !ownConfigured);
-    let demoComplete = false;
-    try { demoComplete = localStorage.getItem("gs-order-demo-complete") === "1"; } catch {}
-
     const steps = [
         [useHosted ? "Hubungkan akun Discord" : "Hubungkan bot dan database", useHosted ? me.discordLinked : ownConfigured, "#/bot", "Buka Bot & Server"],
         ["Pilih server & aktifkan bot", useHosted ? !!hostedBot?.guildId && hostedBot.state === "running"
             : !!config.guildId && me.bot === "running", "#/bot", "Buka Bot & Server"],
         ["Tambah produk", summary ? summary.products > 0 : null, "#/products", "Buka produk"],
         ["Isi stok", summary ? summary.stock > 0 : null, "#/products", "Isi stok"],
-        ["Uji alur pesanan", demoComplete || (summary ? summary.sold > 0 : null), "/demo.html?from=panel", "Coba demo toko"],
+        ["Cek pesanan pertama", summary ? summary.sold > 0 : null, "#/sales", "Lihat pesanan"],
     ];
     const completed = steps.filter(([, done]) => done).length;
     if (completed === steps.length) return null;
@@ -1371,6 +1381,7 @@ const NAV_ICON_PATHS = {
     script: ['M6 3h9l3 3v15H6z','M9 10h6','M9 14h6','M9 17h4'],
     'credit-card': ['M3 5h18v14H3z','M3 10h18','M7 15h4'],
     sliders: ['M4 21v-7','M4 10V3','M12 21v-9','M12 8V3','M20 21v-5','M20 12V3','M2 14h4','M10 8h4','M18 16h4'],
+    clock: ['M22 12a10 10 0 1 1-20 0 10 10 0 1 1 20 0Z','M12 6v6l4 2'],
     'shopping-bag': ['M5 8h14l1 13H4L5 8Z','M9 8V6a3 3 0 0 1 6 0v2'],
     wallet: ['M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z','M3 7l2-3h12v3','M16 13h2']
 };
@@ -1417,12 +1428,14 @@ async function render() {
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");
     view.replaceChildren(skeleton());
-    try { view.replaceChildren(await VIEWS[name]()); const nb = renewBanner(); if (nb) view.prepend(nb); }
+    try { view.replaceChildren(await VIEWS[name]()); }
     catch (e) {
         if (e.status === 401) return showLogin();
         view.replaceChildren(card(h("h2", {}, gsT("Tidak bisa membuka halaman ini")), h("p", {}, e.message),
             e.status === 409 || e.status === 502 ? h("button", { class: "pri", onclick: () => (location.hash = "#/bot") }, gsT("Buka Bot & Server")) : null));
     }
+    const notice = renewBanner();
+    if (notice) view.prepend(notice);
 }
 function landingSection() {
     return document.getElementById(location.hash.slice(1))?.closest(".landing-section");

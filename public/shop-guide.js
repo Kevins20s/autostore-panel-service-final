@@ -125,12 +125,13 @@ function commandGuide() {
     search.addEventListener("input", renderCommands);
     renderCommands();
     return h("div", { class: "guide-page" },
-        card(h("div", { class: "guide-intro" },
-            head("Slash Command List", guideText("Cari command berdasarkan fungsi, lalu buka contoh untuk melihat cara mengisi kolomnya di Discord.", "Find a command by function, then open its examples to see how to fill in the fields in Discord.")),
+        h("section", { class: "card guide-intro" },
+            h("h1", {}, "Slash Command List"),
+            h("p", { class: "guide-intro-description" }, guideText("Cari command berdasarkan fungsi, lalu buka contoh untuk melihat cara mengisi kolomnya di Discord.", "Find a command by function, then open its examples to see how to fill in the fields in Discord.")),
             h("div", { class: "row sp gap guide-toolbar" }, search, count),
             h("p", { class: "guide-access mut" },
                 h("code", {}, guideText("<wajib>", "<required>")), " ", h("code", {}, guideText("[opsional]", "[optional]")), " · ",
-                guideText("Command Admin tersedia untuk Owner dan Admin bot.", "Admin commands are available to the bot owner and bot admins.")))),
+                guideText("Command Admin tersedia untuk Owner dan Admin bot.", "Admin commands are available to the bot owner and bot admins."))),
         results);
 }
 

@@ -1466,9 +1466,10 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
   .setup-checklist li > a { grid-column: 2; justify-self: start; }
 }
 
-.guide-intro .head { margin-bottom: 14px; padding-bottom: 0; }
+.guide-intro h1 { margin: 0; font-size: clamp(23px, 3vw, 31px); }
+.guide-intro-description { margin: 4px 0 14px; color: var(--mut); }
 .guide-toolbar input { width: min(100%, 420px); }
-.guide-sections { display: grid; gap: 16px; }
+.guide-sections { display: grid; gap: 16px; margin-top: 16px; }
 .guide-sections > .card, .deposit-layout .card { margin: 0; min-width: 0; }
 .guide-section > h2 { margin-bottom: 14px; color: var(--workspace-accent); font-size: 17px; }
 .guide-section > h2::before { display: none; }

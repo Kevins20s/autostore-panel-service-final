@@ -587,9 +587,18 @@ function hostedBotCard(outcome) {
                 return;
             }
             if (!servers.length) {
-                content.replaceChildren(h("p", { class: "mut" }, gsT("Tidak ada server yang bisa kamu kelola dengan akun ini.")));
+                const hint = {
+                    no_available_membership: "Akun Discord ini belum menjadi anggota server yang tersedia untuk lisensimu. Masuk ke server uji, lalu cek ulang.",
+                    missing_permission: "Akun Discord ini sudah masuk server, tetapi belum punya izin Kelola Server. Minta izin dari pemilik server, lalu cek ulang.",
+                    already_claimed: "Server yang bisa kamu kelola sudah terhubung ke lisensi lain.",
+                }[result.emptyReason] || "Tidak ada server yang bisa kamu kelola dengan akun ini.";
+                load.textContent = gsT("Cek ulang daftar server");
+                content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
+                    h("p", { class: "mut", role: "status" }, gsT(hint)),
+                    h("div", { class: "hosted-bot-actions" }, load));
                 return;
             }
+            load.textContent = gsT("Cek pemasangan bot");
             const select = h("select", {}, ...servers.map(server => h("option", { value: server.id }, server.name)));
             const preferred = selectedGuildId || setup?.guildId;
             if (servers.some(server => server.id === preferred)) select.value = preferred;

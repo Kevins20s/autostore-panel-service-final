@@ -47,19 +47,28 @@ async function testRouting() {
     const { app, invoke } = captureRoutes();
     require("../src/discord-login")(app, { buyer() {}, valid, save() {}, licenses });
     const originalFetch = global.fetch;
+    const managedGuilds = [
+        { id: guildA, name: "Guild A", owner: true }, { id: guildB, name: "Guild B", owner: true },
+    ];
+    let discordGuilds = managedGuilds;
     global.fetch = async url => ({
         ok: true,
-        json: async () => String(url).includes("/users/@me/guilds") ? [
-            { id: guildA, name: "Guild A", owner: true }, { id: guildB, name: "Guild B", owner: true },
-        ] : {},
+        json: async () => String(url).includes("/users/@me/guilds") ? discordGuilds : {},
     });
-    const bind = (lic, guildId) => invoke("put", "/api/discord-install/setup", {
-        lic, body: { guildId, enabled: true },
+    const authenticated = (lic, body) => ({
+        lic, body,
         headers: { cookie: "gs_discord_install=" + encodeURIComponent(encrypt({
             id: owner, accessToken: "synthetic", licenseId: lic.id, exp: Date.now() + 10000,
         })) },
     });
+    const bind = (lic, guildId) => invoke("put", "/api/discord-install/setup", authenticated(lic, { guildId, enabled: true }));
+    const list = lic => invoke("get", "/api/discord-install/servers", authenticated(lic));
     try {
+        discordGuilds = [{ id: "100000000000000010", owner: true }];
+        assert.equal((await list(b)).value.emptyReason, "no_available_membership");
+        discordGuilds = [{ id: guildB, permissions: "0" }];
+        assert.equal((await list(b)).value.emptyReason, "missing_permission");
+        discordGuilds = managedGuilds;
         const responses = await Promise.all([bind(a, guildA), bind(b, guildA)]);
         assert.deepEqual(responses.map(r => r.statusCode).sort(), [200, 409]);
         const winner = responses[0].statusCode === 200 ? a : b;
@@ -68,6 +77,8 @@ async function testRouting() {
         // Reassign the synthetic fixtures for the legacy-data test.
         a.hostedBot.guildId = guildA;
         b.hostedBot.guildId = guildB;
+        discordGuilds = [managedGuilds[0]];
+        assert.equal((await list(b)).value.emptyReason, "already_claimed");
     } finally { global.fetch = originalFetch; }
 
     const ta = hostedTenant(a, licenses()), tb = hostedTenant(b, licenses());

@@ -49,12 +49,14 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
         });
         if (response.status === 401 || response.status === 403) return null;
         if (!response.ok) throw new Error("Discord guild lookup failed");
-        return (await response.json()).filter(guild =>
-                DISCORD_ID.test(guild.id) &&
-                (!hostingConfigured || eligibleHostedGuild(guild.id)) &&
-                !hostedGuildClaimed(guild.id, req.lic.id, licenses()) &&
-                (guild.owner === true || (/^\d+$/.test(guild.permissions) && (BigInt(guild.permissions) & CAN_INSTALL) !== 0n))
-        );
+        const candidates = (await response.json()).filter(guild => DISCORD_ID.test(guild.id) &&
+            (!hostingConfigured || eligibleHostedGuild(guild.id)));
+        const managed = candidates.filter(guild =>
+            guild.owner === true || (/^\d+$/.test(guild.permissions) && (BigInt(guild.permissions) & CAN_INSTALL) !== 0n));
+        const guilds = managed.filter(guild => !hostedGuildClaimed(guild.id, req.lic.id, licenses()));
+        const emptyReason = guilds.length ? undefined
+            : !candidates.length ? "no_available_membership" : !managed.length ? "missing_permission" : "already_claimed";
+        return { guilds, emptyReason };
     }
     const canActivate = hostingConfigured && !!botToken;
     const statusFile = process.env.DISCORD_HOSTED_PILOT_STATUS_FILE;
@@ -82,8 +84,9 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
     app.get("/api/discord-install/servers", noStore, buyer, async (req, res) => {
         if (!eligible(req.lic)) return res.sendStatus(403);
         try {
-            const guilds = await manageableServers(req);
-            if (!guilds) { clearInstall(res); return res.json({ reconnect: true }); }
+            const listing = await manageableServers(req);
+            if (!listing) { clearInstall(res); return res.json({ reconnect: true }); }
+            const { guilds, emptyReason } = listing;
             const servers = await Promise.all(guilds.map(async ({ id, name }) => {
                 const params = new URLSearchParams({
                     client_id: botId, scope: "bot applications.commands", permissions: botPermissions,
@@ -91,7 +94,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
                 });
                 return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: canActivate && await installed(id) };
             }));
-            res.json({ servers, canActivate, setup: statusFor(req.lic) });
+            res.json({ servers, canActivate, setup: statusFor(req.lic), emptyReason });
         } catch {
             res.status(502).json({ error: "Daftar server Discord belum bisa dimuat. Coba lagi." });
         }
@@ -106,9 +109,9 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
             let name = license.hostedBot?.name;
             if (running) {
                 if (hostedGuildClaimed(guildId, license.id, licenses())) return res.status(409).json({ error: "Server Discord ini sudah dipakai lisensi lain." });
-                const guilds = await manageableServers(req);
-                if (!guilds) return res.status(401).json({ error: "Hubungkan kembali akun Discord." });
-                const guild = guilds.find(item => item.id === guildId);
+                const listing = await manageableServers(req);
+                if (!listing) return res.status(401).json({ error: "Hubungkan kembali akun Discord." });
+                const guild = listing.guilds.find(item => item.id === guildId);
                 if (!guild) return res.sendStatus(403);
                 name = guild.name;
                 if (!await installed(guildId)) return res.status(409).json({ error: "Undang bot ke server ini terlebih dahulu." });

@@ -75,7 +75,7 @@ require("./handlers/slash")(client).then(() => {
 });
 
 mongoose
-    .connect(config.MongoURL, hostedBinding ? { dbName: hostedBinding.dbName } : {})
+    .connect(config.MongoURL, hostedBinding ? { dbName: hostedBinding.dbName, maxPoolSize: 5 } : {})
     .then(() => {
         console.log("----------------------------------------".white);
         console.log(`[READY] MongoDB Is Ready To Give Data!`.bold);

@@ -50,6 +50,8 @@ const waitBot = async (ck, want, ms = 6000) => {
         assert.strictEqual(bad.status, 400);
         const start0 = await call("POST", "/api/bot/start", null, ck); assert.strictEqual(start0.status, 400, "belum setup tidak boleh start");
         const cfg = { botToken: "TOKEN-RAHASIA-123", clientId: "123456789012345678", mongoUrl: "mongodb://user:PASSMONGO99@host/db", ownerId: "987654321098765432" };
+        const hostedCfg = await call("PUT", "/api/config", { ...cfg, clientId: "223456789012345678" }, ck);
+        assert.strictEqual(hostedCfg.status, 400, "bot hosting tidak boleh didaftarkan sebagai bot sendiri");
         assert.strictEqual((await call("PUT", "/api/config", cfg, ck)).status, 200);
         const me = (await call("GET", "/api/me", null, ck)).json;
         assert.ok(me.config.has.botToken && !JSON.stringify(me).includes("TOKEN-RAHASIA"), "secret tidak boleh bocor ke browser");

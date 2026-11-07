@@ -112,6 +112,9 @@ async function main() {
             assert.equal(r.status, 200, endpoint);
             return r.json();
         };
+        const firstReads = await Promise.all(Array.from({ length: 40 }, (_, i) =>
+            request(i % tenants.length, "GET", "/shop/products")));
+        assert.ok(firstReads.every(result => result.products.length === 0));
         await Promise.all(tenants.map(async (tenant, i) => {
             await request(i, "POST", "/shop/products", { code, name: "Store " + i, type: "yes", role, price: 10 });
             await request(i, "POST", "/shop/products/" + code + "/stock", { text: "STOCK-" + i });
@@ -154,7 +157,7 @@ async function main() {
             assert.equal(await db.collection("hostedcredits").countDocuments({ _id: deposits[1-i].orderId }), 0);
             assert.equal(await db.collection("worlddepositreceipts").countDocuments(), 1);
         }));
-        console.log("OK: two simultaneous isolated stores, same SKU and customer ID; no mixed stock, balance, QRIS, world credit, or panel reports");
+        console.log("OK: 40 concurrent panel reads and two simultaneous isolated stores; no mixed stock, balance, QRIS, world credit, or reports");
     } finally {
         for (const child of children) if (child.connected) child.kill();
         http.close();

@@ -90,8 +90,9 @@ function createWallet(opts) {
         const dep = await c.deposits.findOne({ orderId });
         if (!dep) return { ok: false, reason: "unknown_order" };
         if (amount != null && Number(amount) !== dep.amount) {
-            await c.deposits.updateOne({ orderId }, { $set: { status: "mismatch", mismatchAmount: Number(amount) } });
-            await tell("⚠️ Nominal pembayaran tidak cocok", [`Order: ${orderId}`, `Seharusnya: ${rp(dep.amount)}`, `Diterima: ${rp(Number(amount))}`, "Tidak dikreditkan. Cek manual di Autoko."]);
+            const updated = await c.deposits.updateOne({ orderId, status: { $ne: "paid" } },
+                { $set: { status: "mismatch", mismatchAmount: Number(amount) } });
+            if (updated.matchedCount) await tell("⚠️ Nominal pembayaran tidak cocok", [`Order: ${orderId}`, `Seharusnya: ${rp(dep.amount)}`, `Diterima: ${rp(Number(amount))}`, "Tidak dikreditkan. Cek manual di Autoko."]);
             return { ok: false, reason: "amount_mismatch" };
         }
         if (dep.status === "mismatch") return { ok: false, reason: "needs_review" };

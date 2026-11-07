@@ -49,6 +49,9 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
       await w.handlePaid({ orderId: d2.orderId, amount: 29999 });
       assert.strictEqual((await cols.deposits.findOne({ orderId: d2.orderId })).status, "mismatch");
       assert.strictEqual((await w.summary(L)).pending, 20000, "nominal tidak cocok tidak mengkredit");
+      await w.handlePaid({ orderId: d.orderId, amount: 1 });
+      assert.strictEqual((await cols.deposits.findOne({ orderId: d.orderId })).status, "paid",
+          "notifikasi nominal salah tidak boleh menimpa deposit yang sudah lunas");
       await w.handlePaid({ orderId: "DP-TIDAKADA", amount: 1 }).catch(() => {});
       console.log("ok  webhook paralel, nominal tidak cocok, order tak dikenal"); await close(); }
 

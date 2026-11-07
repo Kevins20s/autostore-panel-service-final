@@ -121,11 +121,21 @@ function issueLicense(name, type, days, { save = true, lifetime = false } = {}) 
     return key;
 }
 
+function usesHostedBotIdentity(config) {
+    return !!((process.env.DISCORD_HOSTED_BOT_CLIENT_ID && config.clientId === process.env.DISCORD_HOSTED_BOT_CLIENT_ID) ||
+        (process.env.DISCORD_CATALOG_PILOT_TOKEN && config.botToken === process.env.DISCORD_CATALOG_PILOT_TOKEN));
+}
+
 function reconcile(l) {
-    const shouldRun = l.runMode !== "central" && l.desired === "running" && valid(l) && !!l.config;
+    let config;
+    if (l.runMode !== "central" && l.desired === "running" && valid(l) && l.config) {
+        try { config = decrypt(l.config); }
+        catch { console.error("[PANEL] Konfigurasi bot tidak bisa dibaca."); }
+    }
     const st = runner.status(l.id);
-    if (shouldRun && st === "stopped") runner.start(l.id, decrypt(l.config), l.port, l.type || "autostore");
-    else if (!shouldRun && st !== "stopped") runner.stop(l.id);
+    if (config && !usesHostedBotIdentity(config)) {
+        if (st === "stopped") runner.start(l.id, config, l.port, l.type || "autostore");
+    } else if (st !== "stopped") runner.stop(l.id);
 }
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -292,6 +302,7 @@ app.put("/api/config", buyer, ownBotOnly, wrap(async (req, res) => {
     for (const [k, label] of [["botToken", "Bot token"], ["clientId", "Client ID"], ["mongoUrl", "MongoDB URL"], ["ownerId", "Owner ID"]])
         if (!next[k]) return err(`${label} wajib diisi.`);
     if (!isId(next.clientId)) return err("Client ID harus berupa angka (ID Discord).");
+    if (usesHostedBotIdentity(next)) return err("Pilih Bot GevraStore untuk memakai bot hosting.");
     if (!isId(next.ownerId)) return err("Owner ID harus berupa angka (ID Discord).");
     if (next.guildId && !isId(next.guildId)) return err("ID server harus berupa angka.");
     if (next.adminIds && !next.adminIds.split(",").every((x) => isId(x.trim()))) return err("Admin ID harus angka dipisah koma.");
@@ -310,6 +321,7 @@ const botAction = (action) => wrap(async (req, res) => {
     if (action !== "stop") {
         if (!valid(l)) return res.status(403).json({ error: "Key sudah habis atau dicabut." });
         if (!l.config) return res.status(400).json({ error: "Isi pengaturan dulu sebelum menjalankan bot." });
+        if (usesHostedBotIdentity(decrypt(l.config))) return res.status(400).json({ error: "Pilih Bot GevraStore untuk memakai bot hosting." });
     }
     if (action === "stop") { l.desired = "stopped"; await runner.stop(l.id); }
     if (action === "restart" || runner.status(l.id) === "crashed") { await runner.stop(l.id); }

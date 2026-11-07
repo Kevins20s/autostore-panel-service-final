@@ -11,20 +11,30 @@ const COL = {
 
 async function getDb(id, url, dbName) {
     let c = conns.get(id);
-    if (c && c.url !== url) { await c.client.close().catch(() => {}); conns.delete(id); c = null; }
+    if (c && c.url !== url) { closeConn(id); c = null; }
     if (!c) {
         const client = new MongoClient(url, { serverSelectionTimeoutMS: 6000, maxPoolSize: 5 });
-        await client.connect();
-        c = { url, client, last: 0 };
+        c = { url, client, last: Date.now(), ready: client.connect() };
         conns.set(id, c);
+        const entry = c;
+        entry.ready = entry.ready.catch(async error => {
+            if (conns.get(id) === entry) conns.delete(id);
+            await client.close().catch(() => {});
+            throw error;
+        });
     }
     c.last = Date.now();
+    await c.ready;
+    if (conns.get(id) !== c) throw new Error("Koneksi toko sudah berubah.");
     return c.client.db(dbName);
 }
 
 function closeConn(id) {
     const c = conns.get(id);
-    if (c) { c.client.close().catch(() => {}); conns.delete(id); }
+    if (c) {
+        conns.delete(id);
+        c.ready.then(() => c.client.close()).catch(() => {});
+    }
 }
 
 setInterval(() => {

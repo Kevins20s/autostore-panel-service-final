@@ -6,7 +6,16 @@ const shopdb = require("../src/shopdb");
 const inserted = []; let lastFind = null;
 const cur = (rows) => { const c = { sort: () => c, skip: () => c, limit: () => c, project: () => c, toArray: async () => rows }; return c; };
 const now = Date.now();
+const storefronts = new Map();
+const guildA = "123456789012345678", guildB = "223456789012345678";
 const cols = {
+    mts: { findOne: async () => null },
+    wlrates: { findOne: async () => null },
+    apisettings: { findOne: async () => null },
+    storefronts: {
+        findOne: async ({ _id }) => storefronts.get(_id),
+        updateOne: async ({ _id }, { $set }) => storefronts.set(_id, $set),
+    },
     lists: { findOne: async (f) => ({ code: f.code }), find: () => cur([{ code: "P1", name: "Akun A" }, { code: "P2", name: "Akun B" }, { code: "P3", name: "Akun C" }]) },
     prices: { find: () => cur([{ code: "P1", price: 1000 }, { code: "P2", price: 2000 }]) }, // P3 belum ada harga
     shops: {
@@ -29,10 +38,14 @@ shopdb.getDb = async () => ({ collection: (n) => cols[n] });
 const createShopRouter = require("../src/shopapi");
 
 const app = express(); app.use(express.json());
-app.use("/api/shop", (req, res, next) => { req.lic = { id: "L1", config: { x: 1 } }; next(); }, createShopRouter({ valid: () => true, decrypt: () => ({ mongoUrl: "mongodb://tiruan" }) }));
+app.use("/api/shop", (req, res, next) => {
+    const guildId = req.get("X-Test-Store") === "B" ? guildB : guildA;
+    req.lic = { id: guildId, config: { guildId, mongoUrl: "mongodb://tiruan" } };
+    next();
+}, createShopRouter({ valid: () => true, decrypt: config => config }));
 const srv = http.createServer(app).listen(0, async () => {
     const base = `http://127.0.0.1:${srv.address().port}/api/shop`;
-    const j = async (m, u, b) => { const r = await fetch(base + u, { method: m, headers: { "Content-Type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); return { s: r.status, j: await r.json() }; };
+    const j = async (m, u, b, store = "A") => { const r = await fetch(base + u, { method: m, headers: { "Content-Type": "application/json", "X-Test-Store": store }, body: b ? JSON.stringify(b) : undefined }); return { s: r.status, j: await r.json() }; };
     try {
         const o = await j("GET", "/orders?q=" + encodeURIComponent("a.b(")); // karakter regex harus di-escape
         assert.strictEqual(o.s, 200); assert.strictEqual(o.j.total, 2); assert.strictEqual(o.j.wl, 4900); assert.strictEqual(o.j.qty, 3);
@@ -55,6 +68,14 @@ const srv = http.createServer(app).listen(0, async () => {
         const c = await j("POST", "/products/P2/stock", { text: "sudah-ada", dedupe: true });
         assert.strictEqual(c.s, 400); assert.match(c.j.error, /duplikat/i);
         console.log("ok  stok: opsi buang duplikat (dan tanpa opsi = perilaku lama)");
+
+        assert.deepStrictEqual((await j("GET", "/settings")).j.storefront, { guildId: guildA, model: "classic" });
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "model1" })).s, 200);
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "invalid" })).s, 400);
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "classic" }, "B")).s, 409);
+        assert.deepStrictEqual((await j("GET", "/settings")).j.storefront, { guildId: guildA, model: "model1" });
+        assert.deepStrictEqual((await j("GET", "/settings", null, "B")).j.storefront, { guildId: guildB, model: "classic" });
+        console.log("ok  /settings/storefront: default klasik, simpan, validasi, dan isolasi server");
         console.log("\nSemua tes shopapi (tiruan) lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }
     srv.close();

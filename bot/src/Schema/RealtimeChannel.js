@@ -8,6 +8,7 @@ const schema = new Schema({
     },
     channelId: String,
     messageId: String,
+    intervalSeconds: Number,
 });
 
 module.exports = model("realtimechannel", schema);

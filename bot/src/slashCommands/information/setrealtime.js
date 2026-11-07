@@ -53,7 +53,7 @@ module.exports = {
 
             await RealtimeChannel.findOneAndUpdate(
                 { kategori },
-                { $set: { channelId: data1.id, messageId: guya.id } },
+                { $set: { channelId: data1.id, messageId: guya.id }, $unset: { intervalSeconds: "" } },
                 { upsert: true, new: true }
             )
                 .then(async (res) => {

@@ -3,6 +3,7 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
+const { collection: storefrontCollection, models: storefrontModels } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -28,9 +29,11 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         }
         if (!hosted && !l.config) return fail(res, "Isi pengaturan bot dulu di menu Bot & Server.", 409);
         try {
+            const config = hosted ? hosted.config : decrypt(l.config);
+            req.shopGuildId = hosted?.guildId || config.guildId || "";
             req.db = hosted
-                ? await getDb("hosted:" + hosted.tenantId, hosted.config.mongoUrl, hosted.dbName)
-                : await getDb(l.id, decrypt(l.config).mongoUrl);
+                ? await getDb("hosted:" + hosted.tenantId, config.mongoUrl, hosted.dbName)
+                : await getDb(l.id, config.mongoUrl);
             if (hosted && hostedTenant(l, licenses())?.dbName !== hosted.dbName) {
                 return fail(res, "Server toko berubah. Muat ulang halaman.", 409);
             }
@@ -291,10 +294,26 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
 
     // ---------- pengaturan toko ----------
     r.get("/settings", wrap(async (req, res) => {
-        const [mt, rate, api] = await Promise.all([c(req, "mt").findOne({}), c(req, "wlrate").findOne({}), c(req, "api").findOne({})]);
+        const [mt, rate, api, storefront] = await Promise.all([
+            c(req, "mt").findOne({}), c(req, "wlrate").findOne({}), c(req, "api").findOne({}),
+            req.shopGuildId ? req.db.collection(storefrontCollection).findOne({ _id: req.shopGuildId }) : null,
+        ]);
         const channels = req.lic.hostedBot?.enabled ? await req.db.collection("setchannels").findOne({}) : null;
         res.json({ maintenance: !!mt?.mt, pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true,
-            donationWebhookId: channels?.DonationWebhookId || "" });
+            donationWebhookId: channels?.DonationWebhookId || "",
+            storefront: {
+                guildId: req.shopGuildId,
+                model: storefront?.model === storefrontModels.model1 ? storefrontModels.model1 : storefrontModels.classic,
+            } });
+    }));
+    r.put("/settings/storefront", wrap(async (req, res) => {
+        const { guildId, model } = req.body || {};
+        if (!ID_RE.test(req.shopGuildId) || guildId !== req.shopGuildId) {
+            return fail(res, "Server toko belum diatur atau sudah berubah. Muat ulang halaman.", 409);
+        }
+        if (typeof model !== "string" || !Object.hasOwn(storefrontModels, model)) return fail(res, "Model toko tidak dikenal.");
+        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { model } }, { upsert: true });
+        res.json({ model });
     }));
     r.put("/settings/donation-webhook", wrap(async (req, res) => {
         if (!hostedTenant(req.lic, licenses())) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);

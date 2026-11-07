@@ -1,6 +1,6 @@
-let { Owner } = require("../../config/config.json");
+const mongoose = require("mongoose");
+const { serverId } = require("../../config/config.json");
 let {
-    ActivityType,
     ButtonStyle,
     ActionRowBuilder,
     EmbedBuilder,
@@ -15,9 +15,75 @@ let list = require("../../Schema/list.js");
 let disc = require("../../Schema/discount.js");
 let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
-let WLRate = require("../../Schema/wlrate.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
-let { Warning, Benar, Salah, Megaphone, WL, CROWN, Dolar, EARTH, BOT, Buy, BALANCE, imageUrl, imageUrl2, COLOR, ARROW } = require("../../config/configemoji.json");
+let { Warning, Benar, Salah, WL, CROWN, Buy, imageUrl2, COLOR, ARROW } = require("../../config/configemoji.json");
+const { collection, models, buttons } = require("../../config/storefront");
+
+const jobs = new Map();
+const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
+
+async function catalogMessage(client, guildId, target) {
+    const channel = await client.channels.fetch(target.channelId).catch(() => null);
+    if (channel?.guildId !== guildId || !channel.messages) return null;
+    const message = await channel.messages.fetch(target.messageId).catch(() => null);
+    return message?.author?.id === client.user.id ? message : null;
+}
+
+function scheduleCatalog(client, guildId, kategori, target, delay) {
+    const key = guildId + ":" + kategori;
+    clearTimeout(jobs.get(key)?.timer);
+    const job = {};
+    jobs.set(key, job);
+    async function refresh() {
+        try {
+            const current = await RealtimeChannel.findOne({ kategori }).lean();
+            if (jobs.get(key) !== job) return;
+            if (current?.messageId !== target.messageId) {
+                jobs.delete(key);
+                return;
+            }
+            const message = await catalogMessage(client, guildId, target);
+            if (message && jobs.get(key) === job) await renderCatalog(message, guildId, kategori);
+        } catch (error) {
+            console.error("[STOREFRONT] Gagal memperbarui katalog:", error.code || error.name);
+        } finally {
+            if (jobs.get(key) === job) {
+                job.timer = setTimeout(refresh, delay * 1000);
+                job.timer.unref();
+            }
+        }
+    }
+    void refresh();
+}
+
+async function resumeRealtime(client) {
+    if (!/^\d{17,20}$/.test(serverId)) return;
+    const catalogs = await RealtimeChannel.find({ messageId: { $type: "string" } }).lean();
+    for (const target of catalogs) {
+        const message = await catalogMessage(client, serverId, target);
+        const published = message?.components.some(row => row.components.some(item => item.customId === "Howmanys"));
+        // Legacy catalogs did not save an interval. Resume only if they were already published.
+        if (message && (validDelay(target.intervalSeconds) || published) && !jobs.has(serverId + ":" + target.kategori)) {
+            scheduleCatalog(client, serverId, target.kategori, target, validDelay(target.intervalSeconds) ? target.intervalSeconds : 60);
+        }
+    }
+}
+
+function compactRows(options, maintenance) {
+    const select = new StringSelectMenuBuilder().setCustomId("Howmanys")
+        .setPlaceholder(maintenance ? "Under Maintenance" : "🛒 Select product to buy...")
+        .setDisabled(maintenance || !options.length)
+        .addOptions(options.length ? options : [{ label: "No product available", value: "none" }]);
+    const actions = [
+        [buttons.profile, "My Profile", "👤"],
+        ["deposit", "Top Up WL", "💎"],
+        ["depositqris_btn", "QRIS Top Up", "💳"],
+        [buttons.history, "History", "📜"],
+    ];
+    return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(
+        actions.map(([id, label, emoji]) => new ButtonBuilder().setCustomId(id).setLabel(label)
+            .setStyle(ButtonStyle.Success).setEmoji(emoji).setDisabled(maintenance)))];
+}
 
 module.exports = {
     name: "startrealtime",
@@ -43,215 +109,213 @@ module.exports = {
      * @param {String[]} args
      */
     run: async (client, interaction, args) => {
-        let delay = interaction.options.getNumber("delay");
-        let kategoriInput = interaction.options.getString("kategori");
-        let kategori = kategoriInput ? kategoriInput.trim() : "ALL";
+        const delay = interaction.options.getNumber("delay");
+        if (!validDelay(delay)) return interaction.reply({ content: "Isi delay antara 1 dan 86400 detik.", ephemeral: true });
+        const kategori = interaction.options.getString("kategori")?.trim() || "ALL";
+        const check = await RealtimeChannel.findOne({ kategori }).lean();
 
-        let user = await client.users.fetch(Owner);
-        let check = await RealtimeChannel.findOne({ kategori }).catch(console.error);
-
-        if (!check?.channelId) return interaction.reply({
+        if (!check?.channelId || !check.messageId) return interaction.reply({
             content: `/setrealtime dulu buat kategori **${kategori}** sebelum pakai command ini!`,
             ephemeral: true
         });
 
-        // Filter produk sesuai kategori. "ALL" = tampilin semua produk (mode lama).
-        let productFilter = kategori === "ALL" ? {} : { kategori: kategori };
-
-        let getCodesa = await list.find(productFilter).catch(console.error);
-
-        if (!getCodesa || getCodesa.length < 1) return interaction.reply({
+        if (!await list.exists(kategori === "ALL" ? {} : { kategori })) return interaction.reply({
             content: kategori === "ALL"
                 ? `**/addproduct first before use this commands!**`
                 : `**Belum ada produk dengan kategori (type) "${kategori}"!** Cek lagi field 'type' di /addproduct.`,
             ephemeral: true
         });
 
+        const target = await RealtimeChannel.findOneAndUpdate({ _id: check._id, messageId: check.messageId },
+            { $set: { intervalSeconds: delay } }, { new: true }).lean();
+        if (!target) return interaction.reply({ content: "Channel katalog berubah. Coba jalankan /startrealtime lagi.", ephemeral: true });
+        scheduleCatalog(client, interaction.guildId, kategori, target, delay);
         await interaction.reply({
             content: `Started Editing The Realtime Stock (Kategori: **${kategori}**) Delay **${delay}s**`,
             ephemeral: true
         });
+    },
+    resumeRealtime,
+};
 
-        try {
-            setInterval(async () => {
-                if (!check?.channelId || !check?.messageId) return;
+async function renderCatalog(message, guildId, kategori) {
+    const productFilter = kategori === "ALL" ? {} : { kategori };
+    const [maintenance, storefront] = await Promise.all([
+        mt.exists({ mt: true }),
+        mongoose.connection.collection(collection).findOne({ _id: guildId }),
+    ]);
+    const MT = !!maintenance;
+    const compact = storefront?.model === models.model1;
 
-                let channel = await client.channels.fetch(check.channelId).catch(() => null);
-                let messageid = channel ? await channel.messages.fetch(check.messageId).catch(() => null) : null;
+    // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
+    let { pricePerWL, pricePerDL } = compact ? {} : await getEffectiveWLPrice();
 
-                if (!channel || !messageid) {
-                    return user.send({ content: `Have Problem For Channel Or MessageID (Kategori: ${kategori})` });
-                }
+    if (!compact) await order
+        .findOneAndUpdate({}, { $inc: { OdeOder: 1 } }, { upsert: true, new: true })
+        .catch(console.error);
 
-                let MT = await mt.findOne({}).then((d) => d?.mt).catch(console.error);
+    const products = list.find(productFilter);
+    const getCodes = await (compact ? products.limit(25) : products);
 
-                // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
-                let { pricePerWL, pricePerDL } = await getEffectiveWLPrice();
+    let now = new Date();
+    let format = `<t:${Math.floor(now.getTime() / 1000)}:R>`;
 
-                await order
-                    .findOneAndUpdate({}, { $inc: { OdeOder: 1 } }, { upsert: true, new: true })
-                    .catch(console.error);
+    const DIVIDER = "-".repeat(40);
 
-                let getCodes = await list.find(productFilter).catch(console.error);
+    // ── Build product list ──
+    let productBlocks = [];
+    let selectOptions = [];
+    for (const code of getCodes) {
+        const filter = { code: code.code };
+        const [stock, priceDoc, discountDoc] = await Promise.all([
+            shop.countDocuments(filter), Price.findOne(filter), disc.findOne(filter),
+        ]);
+        const discount = discountDoc?.discount;
+        let hasStock = stock > 0;
+        let basePrice = priceDoc ? Number(priceDoc.price) : null;
+        let effectivePrice = basePrice;
+        let priceText = "Not Set Yet";
+        let rupiahText = "";
 
-                let now = new Date();
-                let format = `<t:${Math.floor(now.getTime() / 1000)}:R>`;
+        if (basePrice !== null) {
+            if (discount) {
+                let finalPrice = basePrice - basePrice * discount;
+                priceText = `~~${new Intl.NumberFormat().format(basePrice)}~~ **${new Intl.NumberFormat().format(finalPrice)}**`;
+                effectivePrice = finalPrice;
+            } else {
+                priceText = `**${new Intl.NumberFormat().format(basePrice)}**`;
+            }
 
-                const DIVIDER = "-".repeat(40);
+            if (pricePerWL) {
+                let rupiah = Math.round(effectivePrice * pricePerWL);
+                rupiahText = ` (≈ **Rp${rupiah.toLocaleString("id-ID")}**)`;
+            }
+        }
 
-                // ── Build product list ──
-                let productBlocks = [];
-                let selectOptions = [];
-                for (let i = 0; i < getCodes.length; i++) {
-                    let code = getCodes[i];
+        let statusEmoji = hasStock ? Benar : Salah;
+        let stockText = hasStock ? `**${stock}** ${statusEmoji}` : `**0** ${statusEmoji}`;
+        let soldText = `**${code.sold ?? 0}**`;
 
-                    let stock = await shop.find({ code: code.code }).catch(console.error) || [];
-                    let priceDoc = await Price.findOne({ code: code.code }).catch(console.error);
-                    let discount = await disc.findOne({ code: code.code }).then((r) => r?.discount).catch(console.error);
-
-                    let hasStock = stock.length > 0;
-                    let basePrice = priceDoc ? Number(priceDoc.price) : null;
-                    let priceText = "Not Set Yet";
-                    let rupiahText = "";
-
-                    if (basePrice !== null) {
-                        let effectivePrice = basePrice;
-                        if (discount) {
-                            let finalPrice = basePrice - basePrice * discount;
-                            priceText = `~~${new Intl.NumberFormat().format(basePrice)}~~ **${new Intl.NumberFormat().format(finalPrice)}**`;
-                            effectivePrice = finalPrice;
-                        } else {
-                            priceText = `**${new Intl.NumberFormat().format(basePrice)}**`;
-                        }
-
-                        if (pricePerWL) {
-                            let rupiah = Math.round(effectivePrice * pricePerWL);
-                            rupiahText = ` (≈ **Rp${rupiah.toLocaleString("id-ID")}**)`;
-                        }
-                    }
-
-                    let statusEmoji = hasStock ? Benar : Salah;
-                    let stockText = hasStock ? `**${stock.length}** ${statusEmoji}` : `**0** ${statusEmoji}`;
-                    let soldText = `**${code.sold ?? 0}**`;
-
-                    productBlocks.push(
+        productBlocks.push(
 `${CROWN} **${code.name.toUpperCase()}** ${CROWN}
 ${ARROW} Code: **${code.code}**
 ${ARROW} Stock: ${stockText}
 ${ARROW} Sold: ${soldText} ${Buy}
 ${ARROW} Price: ${priceText} ${WL}${rupiahText}
 ${DIVIDER}`
-                    );
+        );
 
-                    if (selectOptions.length < 25) {
-                        let plainPrice = priceText.replace(/\*\*/g, "").replace(/~~[^~]*~~/g, "").trim();
-                        selectOptions.push({
-                            label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
-                            description: `Stock: ${stock.length} | Price: ${plainPrice}`.slice(0, 100),
-                            value: code.code
-                        });
-                    }
-                }
+        if (selectOptions.length < 25) {
+            const plainPrice = compact && effectivePrice !== null
+                ? new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(effectivePrice) + " WL"
+                : priceText.replace(/\*\*/g, "").replace(/~~[^~]*~~/g, "").trim();
+            selectOptions.push({
+                label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
+                description: `Stock: ${stock} | Price: ${plainPrice}`.slice(0, 100),
+                value: code.code
+            });
+        }
+    }
 
-                let howToBuySection =
+    if (compact) {
+        await message.edit({ content: null, embeds: [], components: compactRows(selectOptions, MT) });
+        return;
+    }
+
+    let howToBuySection =
 `${Warning} **HOW TO BUY** ${Warning}
 ${ARROW} Click Button **Set GrowID**
 ${ARROW} Click Button **Balance** To Check Your GrowID
 ${ARROW} Click Button **Deposit** To See World Deposit
 ${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
 
-                let kursText = pricePerWL
-                    ? `${ARROW} Kurs: **1 ${WL} = Rp${Math.round(pricePerWL).toLocaleString("id-ID")}** | **1 DL = Rp${Math.round(pricePerDL).toLocaleString("id-ID")}**`
-                    : `${ARROW} Kurs: Harga belum tersedia`;
+    let kursText = pricePerWL
+        ? `${ARROW} Kurs: **1 ${WL} = Rp${Math.round(pricePerWL).toLocaleString("id-ID")}** | **1 DL = Rp${Math.round(pricePerDL).toLocaleString("id-ID")}**`
+        : `${ARROW} Kurs: Harga belum tersedia`;
 
-                let titleText = kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
+    let titleText = kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
 
-                let description =
+    let description =
 `**Last Update:** ${format}
 ${kursText}
 ${DIVIDER}
 ${productBlocks.join("\n")}
 ${howToBuySection}`;
 
-                let productEmbed = new EmbedBuilder()
-                    .setTitle(`${CROWN} ${titleText} ${CROWN}`)
-                    .setDescription(description)
-                    .setColor(COLOR)
-                    .setImage(imageUrl2)
-                    .setTimestamp();
+    let productEmbed = new EmbedBuilder()
+        .setTitle(`${CROWN} ${titleText} ${CROWN}`)
+        .setDescription(description)
+        .setColor(COLOR)
+        .setImage(imageUrl2)
+        .setTimestamp();
 
-                let selectRow = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId("Howmanys")
-                        .setPlaceholder("Click here to buy products")
-                        .setDisabled(selectOptions.length < 1)
-                        .addOptions(
-                            selectOptions.length > 0
-                                ? selectOptions
-                                : [{ label: "No product available", value: "none" }]
-                        )
-                );
+    let selectRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId("Howmanys")
+            .setPlaceholder("Click here to buy products")
+            .setDisabled(selectOptions.length < 1)
+            .addOptions(
+                selectOptions.length > 0
+                    ? selectOptions
+                    : [{ label: "No product available", value: "none" }]
+            )
+    );
 
-                let buttonRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setLabel("Set GrowID")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setEmoji("<a:SHRules:1269199498320809996>")
-                        .setCustomId("growid23"),
-                    new ButtonBuilder()
-                        .setLabel("Balance")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setEmoji("<a:uang:1269199494063456256>")
-                        .setCustomId("balance1"),
-                    new ButtonBuilder()
-                        .setLabel("Deposit")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setEmoji("<a:planet2:1269199500673683466>")
-                        .setCustomId("deposit"),
-                    new ButtonBuilder()
-                        .setLabel("Deposit QRIS")
-                        .setStyle(ButtonStyle.Success)
-                        .setEmoji("💳")
-                        .setCustomId("depositqris_btn")
-                );
+    let buttonRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setLabel("Set GrowID")
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji("<a:SHRules:1269199498320809996>")
+            .setCustomId("growid23"),
+        new ButtonBuilder()
+            .setLabel("Balance")
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji("<a:uang:1269199494063456256>")
+            .setCustomId("balance1"),
+        new ButtonBuilder()
+            .setLabel("Deposit")
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji("<a:planet2:1269199500673683466>")
+            .setCustomId("deposit"),
+        new ButtonBuilder()
+            .setLabel("Deposit QRIS")
+            .setStyle(ButtonStyle.Success)
+            .setEmoji("💳")
+            .setCustomId("depositqris_btn")
+    );
 
-                let maintenanceSelectRow = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId("Howmanys")
-                        .setPlaceholder("Under Maintenance")
-                        .setDisabled(true)
-                        .addOptions([{ label: "Under Maintenance", value: "none" }])
-                );
+    let maintenanceSelectRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId("Howmanys")
+            .setPlaceholder("Under Maintenance")
+            .setDisabled(true)
+            .addOptions([{ label: "Under Maintenance", value: "none" }])
+    );
 
-                let maintenanceRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setLabel("Maintenance")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true)
-                        .setEmoji("<a:SHRules:1269199498320809996>")
-                        .setCustomId("growid23"),
-                    new ButtonBuilder()
-                        .setLabel("Maintenance")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true)
-                        .setEmoji("<a:uang:1269199494063456256>")
-                        .setCustomId("balance1"),
-                    new ButtonBuilder()
-                        .setLabel("Maintenance")
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true)
-                        .setEmoji("<a:planet2:1269199500673683466>")
-                        .setCustomId("deposit")
-                );
+    let maintenanceRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setLabel("Maintenance")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
+            .setEmoji("<a:SHRules:1269199498320809996>")
+            .setCustomId("growid23"),
+        new ButtonBuilder()
+            .setLabel("Maintenance")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
+            .setEmoji("<a:uang:1269199494063456256>")
+            .setCustomId("balance1"),
+        new ButtonBuilder()
+            .setLabel("Maintenance")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
+            .setEmoji("<a:planet2:1269199500673683466>")
+            .setCustomId("deposit")
+    );
 
-                messageid.edit({
-                    content: null,
-                    embeds: [productEmbed],
-                    components: MT ? [maintenanceSelectRow, maintenanceRow] : [selectRow, buttonRow]
-                });
-            }, delay * 1000);
-        } catch (err) {
-            console.error(err);
-        }
-    }
+    await message.edit({
+        content: null,
+        embeds: [productEmbed],
+        components: MT ? [maintenanceSelectRow, maintenanceRow] : [selectRow, buttonRow]
+    });
 }

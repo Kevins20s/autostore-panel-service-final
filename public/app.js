@@ -572,6 +572,55 @@ function balanceModal(u, mode, reload) {
 }
 
 // ---------- Settings ----------
+function storefrontSettings(storefront) {
+    const text = (id, en) => gsLanguage === "en" ? en : id;
+    const model = h("select", { disabled: !storefront.guildId },
+        h("option", { value: "classic" }, text("Klasik · katalog lengkap", "Classic · full catalog")),
+        h("option", { value: "model1" }, text("Model 1 · menu ringkas", "Model 1 · compact menu")));
+    model.value = storefront.model;
+    const preview = h("div", { class: "storefront-preview" });
+    const draw = () => {
+        const compact = model.value === "model1";
+        const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
+            : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
+        preview.replaceChildren(
+            compact ? null : h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
+                h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
+            h("div", { class: "storefront-preview-select" },
+                compact ? "🛒 Select product to buy..." : "Click here to buy products", h("span", { "aria-hidden": "true" }, "⌄")),
+            h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
+                h("span", { class: compact || index === 3 ? "green" : null }, label))),
+            compact ? h("details", { class: "storefront-profile-preview" },
+                h("summary", {}, text("Lihat pratinjau My Profile", "Preview My Profile")),
+                h("div", { class: "storefront-preview-embed" }, h("strong", {}, "Profil Kamu"),
+                    h("span", {}, "Discord · @Pelanggan　 |　 GrowID · GrowBuyer　 |　 Balance WL · 100 WL"),
+                    h("span", {}, "Total Spent · 25 WL　 |　 Total Deposit · 125 WL"),
+                    h("div", { class: "storefront-preview-actions" },
+                        h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
+                        h("span", {}, "👤 Profile"), h("span", {}, "💰 Balance"), h("span", {}, "📜 History"))))
+                : null);
+    };
+    draw();
+    model.addEventListener("change", draw);
+    const save = h("button", { class: "pri", type: "button", disabled: !storefront.guildId }, text("Simpan model toko", "Save storefront model"));
+    save.onclick = guard(async () => {
+        save.disabled = model.disabled = true;
+        try {
+            await api("PUT", "/api/shop/settings/storefront", { guildId: storefront.guildId, model: model.value });
+            toast(text("Model toko tersimpan.", "Storefront model saved."));
+        } finally {
+            save.disabled = model.disabled = false;
+        }
+    });
+    return card(h("h2", {}, text("Model tampilan toko", "Storefront model")),
+        h("p", { class: "mut" }, storefront.guildId
+            ? text("Katalog Discord yang sedang berjalan memakai model ini pada pembaruan berikutnya. Untuk katalog baru, jalankan /setrealtime lalu /startrealtime. Jika punya lebih dari 25 produk, bagi katalog per kategori.", "Running Discord catalogs apply this model on their next refresh. For a new catalog, run /setrealtime, then /startrealtime. If you have more than 25 products, split the catalog by category.")
+            : text("Isi ID Server Discord di Bot & Server sebelum menyimpan model toko.", "Enter your Discord server ID in Bot & Server before saving a storefront model.")),
+        field(text("Pilih model", "Choose a model"), model),
+        h("h3", { class: "storefront-preview-title" }, text("Pratinjau Discord", "Discord preview")), preview,
+        h("div", { class: "row mt" }, save));
+}
+
 async function settings() {
     const s = await api("GET", "/api/shop/settings");
     const mt = h("input", { type: "checkbox", checked: s.maintenance }), live = h("input", { type: "checkbox", checked: s.useLiveApi });
@@ -580,6 +629,7 @@ async function settings() {
     const rate = h("input", { value: s.pricePerWL ?? "", inputmode: "decimal" });
     const webhook = h("input", { value: s.donationWebhookId || "", inputmode: "numeric" });
     return h("div", {}, head("Settings", gsT("Pengaturan toko.")),
+        storefrontSettings(s.storefront || { guildId: "", model: "classic" }),
         card(h("h2", {}, "Maintenance"), h("p", { class: "mut" }, gsT("Saat aktif, pembelian di toko dinonaktifkan.")), h("label", { class: "sw" }, mt, gsT("Aktifkan mode maintenance"))),
         card(h("h2", {}, gsT("Kurs World Lock")), h("label", { class: "sw" }, live, gsT("Pakai harga live (gtid.pro), kurs manual jadi cadangan")),
             field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))),

@@ -74,7 +74,7 @@ require("./handlers/slash")(client).then(() => {
     if (hostedBinding) process.exit(1);
 });
 
-mongoose
+const mongoReady = mongoose
     .connect(config.MongoURL, hostedBinding ? { dbName: hostedBinding.dbName, maxPoolSize: 5 } : {})
     .then(() => {
         console.log("----------------------------------------".white);
@@ -86,6 +86,11 @@ mongoose
         console.log("[CRUSH] Error from MongoDB :" + e);
         process.exit();
     });
+
+client.once("ready", () => {
+    mongoReady.then(() => require("./slashCommands/information/startrealtime").resumeRealtime(client))
+        .catch(error => console.error("[STOREFRONT] Gagal memulihkan katalog:", error.code || error.name));
+});
 
 const { startWebhookServer } = require("./webhookServer.js");
 if (!hostedBinding) startWebhookServer(client);

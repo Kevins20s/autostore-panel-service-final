@@ -1499,6 +1499,16 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .guide-options dd code { color: var(--tx); overflow-wrap: anywhere; }
 @media (max-width: 960px) { .guide-grid { grid-template-columns: 1fr; } }
 
+.storefront-preview-title { margin: 16px 0 8px; color: var(--mut); font-size: 13px; }
+.storefront-preview { display: grid; gap: 8px; max-width: 680px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #1c1d23; color: #f2f3f5; }
+.storefront-preview-select { display: flex; justify-content: space-between; gap: 12px; width: min(100%, 500px); padding: 9px 12px; border: 1px solid #484951; border-radius: 8px; color: #d1d3d8; }
+.storefront-preview-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.storefront-preview-actions span { display: inline-block; padding: 6px 10px; border-radius: 7px; background: #3b3d47; font-size: 12px; font-weight: 700; }
+.storefront-preview-actions .green { background: #00854d; }
+.storefront-preview-actions .primary { background: #5865f2; }
+.storefront-preview-embed { display: grid; gap: 7px; padding: 12px; border-left: 3px solid #5865f2; border-radius: 6px; background: #292b33; font-size: 13px; }
+.storefront-profile-preview summary { width: fit-content; padding-block: 5px; cursor: pointer; font-size: 13px; }
+
 .tutorial-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }
 .tutorial-tabs legend { margin-bottom: 8px; color: var(--mut); font-size: 13px; }
 .tutorial-tabs label { position: relative; margin: 0; }

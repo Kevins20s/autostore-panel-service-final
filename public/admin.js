@@ -63,7 +63,15 @@ async function loadOrders() {
         const amt = td(""); const a1 = document.createElement("b"); a1.textContent = o.paymentMethod === "dl" ? `${Math.floor(o.amountWL / 100)} DL ${o.amountWL % 100} WL` : rp(o.amount); amt.append(a1);
         tr.append(code, pkgCell(o), amt, who, pillTd(lbl, st));
         const act = document.createElement("td"); act.className = "row";
-        if (o.status !== "done" && o.status !== "rejected") {
+        if (o.status === "rejected") {
+            const label = gsLanguage === "en" ? "Remove from list" : "Hapus dari daftar";
+            act.append(btn(label, async () => {
+                const question = gsLanguage === "en" ? `Remove rejected order ${o.code} from the list?` : `Hapus pesanan ditolak ${o.code} dari daftar?`;
+                if (!(await gsConfirm(question, { danger: true, okText: label }))) return;
+                await api("DELETE", `/api/admin/orders/${o.id}`);
+                msg("ordMsg", gsLanguage === "en" ? "Order removed from the list." : "Pesanan dihapus dari daftar.", true);
+            }, "bad"));
+        } else if (o.status !== "done") {
             const lunas = o.paymentMethod === "dl" ? gsT("Sudah menerima {0} untuk pesanan {1} di Discord?", a1.textContent, o.code) :
                 o.auto ? gsT("Pesanan otomatis seharusnya lunas sendiri. Tetap konfirmasi manual sekarang?") : gsT`Sudah cek mutasi DANA sebesar ${rp(o.amount)} dari ${o.name}?`;
             act.append(

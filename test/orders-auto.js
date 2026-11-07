@@ -108,6 +108,22 @@ const hook = (payload, secret = "mock-webhook-secret", sig) => {
         const other = await call("POST", "/api/orders", { headers: xff("198.51.100.4"), body: { type: "autostore", name: "Orang Lain", contact: "lain1" } });
         assert.strictEqual(other.status, 200, "pengunjung dengan IP lain tidak ikut terblokir");
         console.log("ok  batas pesanan per IP (IP lain tidak ikut terblokir)");
+
+        const rejectedId = other.json.order.id;
+        const rejectedPath = "/api/admin/orders/" + rejectedId;
+        assert.strictEqual((await call("DELETE", rejectedPath)).status, 401);
+        assert.strictEqual((await call("DELETE", rejectedPath, { cookie: adm })).status, 409);
+        assert.strictEqual((await call("POST", rejectedPath + "/reject", { cookie: adm })).status, 200);
+        assert.strictEqual((await call("DELETE", rejectedPath, { cookie: adm })).status, 200);
+        assert.strictEqual((await call("DELETE", rejectedPath, { cookie: adm })).status, 200);
+        assert.strictEqual(await hook({ orderId: "KO-" + rejectedId, status: "paid", amount: other.json.order.amount }), 200);
+        const rejected = await call("GET", "/api/orders/" + rejectedId, { headers: { "x-order-token": other.json.token } });
+        assert.strictEqual(rejected.json.order.status, "rejected");
+        assert.strictEqual(rejected.json.order.key, undefined);
+        const orders = (await call("GET", "/api/admin/orders", { cookie: adm })).json.orders;
+        assert.ok(!orders.some(order => order.id === rejectedId));
+        assert.ok(orders.some(order => order.id === id && order.status === "done"));
+        console.log("ok  hapus pesanan ditolak dari daftar; notifikasi pembayaran terlambat tidak menerbitkan key");
         console.log("\nSemua tes pesanan otomatis lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }
     finally { srv.kill(); try { fs.unlinkSync(data); } catch {} }

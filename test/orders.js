@@ -96,6 +96,7 @@ const throwsMsg = (fn, re, status) => { try { fn(); } catch (e) { assert(e insta
         get: (p, ...f) => (routes["GET " + p] = f),
         post: (p, ...f) => (routes["POST " + p] = f),
         put: (p, ...f) => (routes["PUT " + p] = f),
+        delete: (p, ...f) => (routes["DELETE " + p] = f),
     };
     let isAdmin = false; const admin = (req, res, next) => (isAdmin ? next() : res.status(401).json({ error: "Belum login admin." }));
     registerOrderRoutes(app, { admin, orders: o, ttlMin: 30 });

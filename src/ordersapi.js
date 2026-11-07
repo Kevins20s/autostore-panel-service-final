@@ -105,6 +105,7 @@ module.exports = function registerOrderRoutes(app, { admin, buyer = null, orders
     app.get("/api/admin/orders", admin, h(() => ({ orders: orders.adminList() })));
     app.post("/api/admin/orders/:id/confirm", admin, h((req) => orders.confirm(req.params.id)));
     app.post("/api/admin/orders/:id/reject", admin, h((req) => orders.reject(req.params.id)));
+    app.delete("/api/admin/orders/:id", admin, h((req) => orders.removeRejected(req.params.id)));
     app.post("/api/admin/orders/:id/mock-pay", admin, h((req) => orders.mockPay(req.params.id)));
     app.get("/api/admin/packages", admin, h(() => ({ packages: orders.packages().filter(p => p.type !== "service"), auto: orders.autoEnabled(), mock: orders.isMock() })));
     app.put("/api/admin/packages/:id", admin, h((req) => {

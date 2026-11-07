@@ -189,7 +189,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
     const RANK = { claimed: 0, pending: 1 };
     function adminList() {
         sweep();
-        return [...all()].sort((a, b) => (RANK[a.status] ?? 2) - (RANK[b.status] ?? 2) || b.createdAt - a.createdAt).slice(0, 100).map(adminView);
+        return all().filter(o => !o.hiddenFromAdmin).sort((a, b) => (RANK[a.status] ?? 2) - (RANK[b.status] ?? 2) || b.createdAt - a.createdAt).slice(0, 100).map(adminView);
     }
 
     function adminFind(id) {
@@ -226,6 +226,17 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         if (o.status === "done") throw new OrderError("Pesanan sudah dikonfirmasi, tidak bisa ditolak.", 409);
         if (o.status !== "rejected") { o.status = "rejected"; o.endedAt = now(); delete o.qrString; delete o.qrImageUrl; store.save(); }
         return { order: adminView(o) };
+    }
+
+    function removeRejected(id) {
+        const o = adminFind(id);
+        if (o.status !== "rejected") throw new OrderError("Hanya pesanan yang sudah ditolak yang bisa dihapus dari daftar.", 409);
+        if (!o.hiddenFromAdmin) {
+            o.hiddenFromAdmin = true;
+            try { store.save(); }
+            catch (error) { delete o.hiddenFromAdmin; throw error; }
+        }
+        return { ok: true };
     }
 
     // ---------------------------------------------------------------- Perpanjangan (dari panel pembeli)
@@ -303,7 +314,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         return handlePaid({ orderId: o.autoRef });
     }
 
-    return { create, get, claim, adminList, confirm, reject, PACKAGES, sweep, packages, setPackage, createRenewal, renewPackages, upgradeToAuto, handlePaid, ownsRef, sweepAuto, autoEnabled, isMock, mockPay };
+    return { create, get, claim, adminList, confirm, reject, removeRejected, PACKAGES, sweep, packages, setPackage, createRenewal, renewPackages, upgradeToAuto, handlePaid, ownsRef, sweepAuto, autoEnabled, isMock, mockPay };
 }
 
 module.exports = { createOrders, OrderError, PACKAGES, rp };

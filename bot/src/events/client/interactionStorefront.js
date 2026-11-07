@@ -97,7 +97,7 @@ async function showWorldDeposit(embed) {
         `**WORLD** = ${code(deposit?.world)}\n**OWNER** = ${code(deposit?.owner)}\n**BOT** = ${code(deposit?.botName)}\n\n` +
         "**⚠️ Penting**\n1. Pastikan GrowID sudah diatur di bot.\n2. Cek kembali GrowID dan pastikan bot deposit ada di world sebelum drop.\n3. Saldo WL bertambah setelah deposit tercatat.");
     return [row(
-        button("deposit", "Deposit WL/DL", "💎", ButtonStyle.Success),
+        button(buttons.deposit, "Deposit WL/DL", "💎", ButtonStyle.Success),
         button(buttons.qris, "QRIS / E-Wallet", "💳", ButtonStyle.Primary),
         button(buttons.convert, "Convert Rp to WL", "🔄", ButtonStyle.Success),
     )];
@@ -134,14 +134,15 @@ async function confirmConversion(interaction, embed) {
     const discordId = interaction.user.id;
     const quote = quotes.get(discordId);
     embed.setTitle("🔄 Convert Rp to WL").setColor(0x57f287);
-    if (!quote || quote.token !== interaction.customId.slice(confirmPrefix.length) || quote.expiresAt <= Date.now()) {
+    if (!quote || quote.token !== interaction.customId.slice(confirmPrefix.length) || (!quote.completion && quote.expiresAt <= Date.now())) {
         embed.setDescription("Penawaran ini sudah kedaluwarsa atau dipakai. Buka Convert lagi untuk kurs terbaru.");
         return [row(button(buttons.convert, "Buka Convert", "🔄"))];
     }
-    quotes.delete(discordId);
-    const updated = await Balance.updateOne({ DiscordID: discordId, BalanceRp: quote.rupiah }, {
+    // Repeated clicks on the same card must show the same result.
+    quote.completion ??= Balance.updateOne({ DiscordID: discordId, BalanceRp: quote.rupiah }, {
         $inc: { BalanceRp: -quote.cost, Balance: quote.wl, Deposit: quote.wl },
-    });
+    }).exec();
+    const updated = await quote.completion;
     embed.setDescription(updated.matchedCount
         ? `**${formatWL(quote.wl)}** masuk ke saldo WL. Sisa saldo Rupiah **${formatRp(quote.remaining)}**.`
         : "Saldo Rupiah sudah berubah. Buka Convert lagi untuk melihat jumlah terbaru.");
@@ -154,7 +155,8 @@ async function handleStorefront(interaction) {
     const history = customId === buttons.history || new RegExp("^" + buttons.history + ":[0-9]{1,8}$").test(customId);
     const confirm = customId.startsWith(confirmPrefix);
     if (!history && !confirm && ![buttons.profile, buttons.balance, buttons.deposit, buttons.convert].includes(customId)) return;
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (interaction.message?.flags.has(MessageFlags.Ephemeral)) await interaction.deferUpdate();
+    else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
         const embed = new EmbedBuilder().setColor(COLOR).setTimestamp()
             .setFooter({ text: interaction.guild?.name || "GevraStore" });
@@ -165,7 +167,7 @@ async function handleStorefront(interaction) {
         else if (customId === buttons.convert) actions = await showQuote(interaction, embed);
         else if (confirm) actions = await confirmConversion(interaction, embed);
         else actions = await showHistory(interaction, embed, Number(customId.split(":")[1] || "1"));
-        await interaction.editReply({ embeds: [embed], components: [...actions, navigation()], allowedMentions: { parse: [] } });
+        await interaction.editReply({ content: null, embeds: [embed], components: [...actions, navigation()], allowedMentions: { parse: [] } });
     } catch (error) {
         console.error("[STOREFRONT] Gagal membuka data pembeli:", error.code || error.name);
         await interaction.editReply({ content: "Permintaan belum bisa diproses. Cek saldo terbaru sebelum mencoba lagi." });

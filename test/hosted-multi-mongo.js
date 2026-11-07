@@ -65,17 +65,35 @@ async function runBuyer({ url, dbName, guildId }) {
             } finally { await new Promise(resolve => webhook.close(resolve)); }
         }
         assert.equal((await accounts.findOne({ DiscordID: buyerId })).BalanceRp, 9250);
-        const conversionReplies = [];
-        const conversion = customId => ({
-            customId, guildId, guild: { name: "Synthetic store" }, user: { id: buyerId }, isButton: () => true,
-            deferReply: async options => assert.equal(options.flags, MessageFlags.Ephemeral),
-            editReply: async response => { conversionReplies.push(response); },
-        });
-        await handleStorefront(conversion("storefront_convert"));
-        const quote = conversionReplies[0].components[0].toJSON().components[0].custom_id;
+        let privateReply;
+        async function clickStorefront(customId, isPrivate = true) {
+            let acknowledged;
+            await handleStorefront({
+                customId, guildId, guild: { name: "Synthetic store" }, isButton: () => true,
+                user: { id: buyerId, displayAvatarURL: () => "https://example.com/avatar.png" },
+                message: { flags: { has: flag => flag === MessageFlags.Ephemeral && isPrivate } },
+                deferReply: async options => {
+                    assert.equal(options.flags, MessageFlags.Ephemeral);
+                    acknowledged = "new";
+                },
+                deferUpdate: async () => { acknowledged = "update"; },
+                editReply: async response => { privateReply = response; },
+            });
+            assert.equal(acknowledged, isPrivate ? "update" : "new");
+            return privateReply.embeds[0].toJSON();
+        }
+        assert.match((await clickStorefront("storefront_profile", false)).title, /Profil/);
+        assert.match((await clickStorefront("storefront_balance")).description, /Saldo Rupiah/);
+        assert.match((await clickStorefront("storefront_history:2")).title, /Riwayat/);
+        assert.match((await clickStorefront("storefront_profile")).title, /Profil/);
+        assert.match((await clickStorefront("storefront_deposit", false)).title, /Deposit via Growtopia/);
+        const depositAction = privateReply.components[0].toJSON().components[0].custom_id;
+        assert.match((await clickStorefront(depositAction)).title, /Deposit via Growtopia/);
+        await clickStorefront("storefront_convert");
+        const quote = privateReply.components[0].toJSON().components[0].custom_id;
         assert.match(quote, /^storefront_convert:/);
-        await Promise.all([handleStorefront(conversion(quote)), handleStorefront(conversion(quote))]);
-        assert.equal(conversionReplies.filter(reply => /masuk ke saldo WL/.test(reply.embeds[0].toJSON().description)).length, 1);
+        const confirmations = await Promise.all([clickStorefront(quote), clickStorefront(quote)]);
+        for (const reply of confirmations) assert.match(reply.description, /masuk ke saldo WL/);
         assert.equal((await accounts.findOne({ DiscordID: buyerId })).BalanceRp, 70);
 
         const log = { id: "100000000000000088", webhookId: "100000000000000087", channelId: "100000000000000086",

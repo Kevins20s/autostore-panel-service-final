@@ -14,17 +14,13 @@ module.exports = {
 
 client.once("ready", async (client) => {
     try {
-        const fixedActivities = client.options.presence?.activities ?? [];
-        const watching = [`Made By Gevra`, `${client.user.username} Online!`, `AutoSend Bot`, `/help to see commands`];
-        let index = 0;
-        const updatePresence = () => {
+        let activities = [`Made By Gevra`, `${client.user.username} Online!`, `AutoSend Bot`, `/help to see commands`], i = 0;
+        setInterval(async () => {
             client.user.setPresence({
-                activities: [...fixedActivities, { name: watching[index++ % watching.length], type: ActivityType.Watching }],
+                activities: [{ name: `${activities[i++ % activities.length]}`, type: ActivityType.Watching }],
                 status: "dnd",
             });
-        };
-        if (fixedActivities.length) updatePresence();
-        setInterval(updatePresence, 10000);
+        }, 10000);
         console.log("----------------------------------------".white.bold);
         console.log(`[READY] ${client.user.tag} is up and ready to go.`.green.bold);
         console.log("----------------------------------------".white.bold);

@@ -1,6 +1,5 @@
 require('./console/watermark')
 let {
-    ActivityType,
     GatewayIntentBits,
     Client,
     Collection,
@@ -47,12 +46,6 @@ let client = new BotClient({
             ? [GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] : [])]
         : IncludedIntents,
     partials: [Partials.Channel, Partials.Message],
-    ...(hostedBinding && {
-        presence: {
-            status: "dnd",
-            activities: [{ type: ActivityType.Custom, name: "Custom Status", state: "https://discord.gg/ffU9Q6bagA" }],
-        },
-    }),
 });
 
 if (!config.TOKEN) {

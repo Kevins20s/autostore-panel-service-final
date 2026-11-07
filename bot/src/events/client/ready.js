@@ -14,16 +14,17 @@ module.exports = {
 
 client.once("ready", async (client) => {
     try {
-        if (!process.env.HOSTED_PILOT_BINDING) {
-            const activities = [`Made By Gevra`, `${client.user.username} Online!`, `AutoSend Bot`, `/help to see commands`];
-            let index = 0;
-            setInterval(() => {
-                client.user.setPresence({
-                    activities: [{ name: activities[index++ % activities.length], type: ActivityType.Watching }],
-                    status: "dnd",
-                });
-            }, 10000);
-        }
+        const fixedActivities = client.options.presence?.activities ?? [];
+        const watching = [`Made By Gevra`, `${client.user.username} Online!`, `AutoSend Bot`, `/help to see commands`];
+        let index = 0;
+        const updatePresence = () => {
+            client.user.setPresence({
+                activities: [...fixedActivities, { name: watching[index++ % watching.length], type: ActivityType.Watching }],
+                status: "dnd",
+            });
+        };
+        if (fixedActivities.length) updatePresence();
+        setInterval(updatePresence, 10000);
         console.log("----------------------------------------".white.bold);
         console.log(`[READY] ${client.user.tag} is up and ready to go.`.green.bold);
         console.log("----------------------------------------".white.bold);

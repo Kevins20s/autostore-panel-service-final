@@ -1469,10 +1469,36 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .guide-toolbar { margin-bottom: 16px; }
 .guide-toolbar input { width: min(100%, 420px); }
 .guide-grid, .deposit-layout { display: grid; gap: 16px; align-items: start; }
-.guide-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.guide-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
 .guide-grid .card, .deposit-layout .card { margin: 0; min-width: 0; }
-.guide-grid .card { align-self: stretch; }
+.guide-grid .card { align-self: stretch; display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.guide-grid .card > p { margin: 0; }
+.guide-grid .card > button { align-self: flex-start; margin-top: auto; }
 .guide-command { color: var(--ac); font-weight: 750; }
+.guide-access { margin: 0 0 14px; }
+.guide-options { margin: 0; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel2); }
+.guide-options > div { padding: 10px 0; }
+.guide-options > div + div { border-top: 1px solid var(--line); }
+.guide-options dt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.guide-options dt > code { color: var(--ac); }
+.guide-option-status { margin-left: auto; font-size: 11px; color: var(--mut); }
+.guide-options dd { margin: 4px 0 0; font-size: 13px; line-height: 1.5; }
+.guide-options dd small { display: block; margin-top: 5px; }
+.guide-options dd code { color: var(--tx); overflow-wrap: anywhere; }
+
+.tutorial-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }
+.tutorial-tabs legend { margin-bottom: 8px; color: var(--mut); font-size: 13px; }
+.tutorial-tabs label { position: relative; margin: 0; }
+.tutorial-tabs input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.tutorial-tabs label span { display: block; padding: 10px 14px; border: 1px solid var(--line2); border-radius: 10px; background: var(--panel); color: var(--tx); cursor: pointer; }
+.tutorial-tabs input:checked + span { border-color: var(--ac); background: var(--acSoft); color: var(--ac); }
+.tutorial-tabs input:focus-visible + span { outline: 2px solid var(--ac); outline-offset: 2px; }
+.tutorial-page .tutorial-step-title::before { display: none; }
+.tutorial-number { display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 8px; background: var(--acSoft); color: var(--ac); }
+.tutorial-checks { display: grid; gap: 10px; list-style: none; padding: 0; margin: 12px 0 0; }
+.tutorial-checks li { padding-top: 10px; border-top: 1px solid var(--line); color: var(--mut); }
+.tutorial-checks a { display: block; width: fit-content; margin-bottom: 4px; font-weight: 700; }
+
 .deposit-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
 .deposit-form { display: grid; gap: 10px; }
 .deposit-code {

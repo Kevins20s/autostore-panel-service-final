@@ -1,8 +1,8 @@
 const commandDocs = [
     ["help", "", "Tampilkan daftar perintah yang dapat kamu gunakan.", "List the commands you can use."],
     ["leaderboard", "", "Tampilkan lima pelanggan dengan saldo tertinggi.", "Show the five customers with the highest balances."],
-    ["addproduct", "code name role type kategori", "Buat produk dengan kode, nama, role pembeli, tipe, dan kategori.", "Create a product with a code, name, buyer role, type, and category."],
-    ["addstock", "code item file tag", "Isi stok dari teks atau file. Tag opsional untuk notifikasi restock.", "Add stock from text or a file. The tag is optional for restock notices."],
+    ["addproduct", "code name role type kategori?", "Buat produk baru dengan kode yang belum dipakai. Kategori kosong memakai ALL.", "Create a product with an unused code. A blank category uses ALL."],
+    ["addstock", "code item? file? tag?", "Isi stok produk. Isi item atau unggah file, pilih salah satu.", "Restock a product. Enter items or upload a file, choosing one of the two."],
     ["changecode", "code newcode", "Ganti kode produk.", "Change a product code."],
     ["changename", "code name", "Ganti nama produk.", "Rename a product."],
     ["changekategori", "code kategori", "Pindahkan produk ke kategori lain.", "Move a product to another category."],
@@ -16,7 +16,7 @@ const commandDocs = [
     ["removediscount", "code", "Hapus diskon produk.", "Remove a product discount."],
     ["setbulkdiscount", "code minqty cut", "Atur potongan per item jika pembelian mencapai jumlah minimum.", "Set a per-item discount for a minimum purchase quantity."],
     ["removebulkdiscount", "code minqty", "Hapus diskon grosir pada jumlah minimum tertentu.", "Remove a bulk discount tier."],
-    ["send", "code amount user", "Kirim stok produk ke pelanggan Discord.", "Send product stock to a Discord customer."],
+    ["send", "user code amount", "Kirim stok produk ke pelanggan Discord.", "Send product stock to a Discord customer."],
     ["checkuser", "user", "Cek GrowID dan saldo pelanggan.", "Check a customer's GrowID and balance."],
     ["addbalance", "user balance", "Tambah saldo WL pelanggan.", "Add WL to a customer's balance."],
     ["removebalance", "user balance", "Kurangi saldo WL pelanggan.", "Subtract WL from a customer's balance."],
@@ -26,8 +26,8 @@ const commandDocs = [
     ["setwlprice", "harga", "Simpan kurs manual untuk 1 WL.", "Save the manual rate for 1 WL."],
     ["setapi", "status", "Nyalakan atau matikan kurs live gtid.pro.", "Enable or disable the live gtid.pro rate."],
     ["setrestockchannel", "channel", "Pilih channel notifikasi restock.", "Choose a restock notification channel."],
-    ["setrealtime", "channel kategori", "Siapkan channel tampilan stok, opsional per kategori.", "Set up a live stock channel, optionally for a category."],
-    ["startrealtime", "delay kategori", "Jalankan pembaruan stok berkala. Delay dihitung dalam detik.", "Start periodic stock updates. Delay is in seconds."],
+    ["setrealtime", "channel kategori?", "Siapkan channel tampilan stok. Kosongkan kategori untuk menampilkan semua produk.", "Set up a live stock channel. Leave the category blank to display all products."],
+    ["startrealtime", "delay kategori?", "Jalankan pembaruan stok di channel yang sudah diatur lewat /setrealtime.", "Start stock updates in the channel configured with /setrealtime."],
     ["setmaintenance", "", "Aktifkan atau matikan mode maintenance.", "Toggle maintenance mode."],
     ["resetcount", "", "Reset nomor urut testimoni toko.", "Reset the store's testimonial counter."],
     ["uptime", "", "Lihat informasi waktu aktif bot.", "View bot uptime information."],
@@ -35,20 +35,62 @@ const commandDocs = [
 
 const guideText = (id, en) => gsLanguage === "en" ? en : id;
 
+const commandFields = {
+    code: ["Kode produk", "Product code", "Kode yang tercantum di Produk & stok.", "The code listed under Products & stock.", "VOUCHER01"],
+    newcode: ["Kode baru", "New code", "Masukkan kode produk baru yang belum dipakai.", "Enter a new product code that is not already in use.", "VOUCHER02"],
+    name: ["Nama produk", "Product name", "Nama yang akan dilihat pembeli di katalog.", "The name buyers see in the catalog.", "Voucher Digital"],
+    role: ["Role pembeli", "Buyer role", "Pilih role dari daftar Discord. Role ini terkait dengan produk dan diberikan ke pembeli saat pembelian.", "Select a role from Discord's list. The role is associated with the product and assigned on purchase.", "Buyer"],
+    type: ["Tipe produk", "Product type", "Isi yes untuk kode atau item teks, atau script untuk produk berupa file script.", "Enter yes for text codes or items, or script for a product delivered as a script file.", "yes"],
+    kategori: ["Kategori produk", "Product category", "Masukkan nama kategori produk. Untuk tampilan stok per kategori, pakai nama yang sama di produk, /setrealtime, dan /startrealtime.", "Enter the product category. For a category-specific stock display, use the same name in the product, /setrealtime, and /startrealtime.", "Voucher"],
+    item: ["Stok dalam teks", "Stock as text", "Masukkan kode stok dan pisahkan tiap unit dengan spasi.", "Enter stock codes separated by spaces.", "VCR-001 VCR-002"],
+    file: ["File stok", "Stock file", "Unggah file .txt, .lua, atau .js. Untuk tipe script, isi file menjadi satu unit stok.", "Upload a .txt, .lua, or .js file. For the script type, the whole file becomes one stock unit.", "stok.txt"],
+    tag: ["Penerima notifikasi", "Notification mention", "Pilih role atau pengguna yang ingin ditandai saat restock.", "Select a role or user to mention in the restock notice.", "@Restock"],
+    amount: ["Jumlah unit", "Number of units", "Masukkan jumlah item sebagai angka bulat.", "Enter the number of items as a whole number.", "2"],
+    price: ["Harga per unit", "Unit price", "Masukkan harga dalam WL. Isi angka saja.", "Enter the price in WL as a number.", "25"],
+    discount: ["Diskon persen", "Percentage discount", "Isi angka dari 1 sampai 100. Angka 10 berarti diskon 10%.", "Enter a number from 1 to 100. For example, 10 gives a 10% discount.", "10"],
+    minqty: ["Jumlah minimum", "Minimum quantity", "Jumlah unit untuk tier diskon grosir ini. Saat menghapus tier, isi minimum yang sama dengan tier yang dibuat.", "The number of units for this bulk tier. When removing a tier, use the minimum that was set when it was created.", "5"],
+    cut: ["Potongan per unit", "Discount per unit", "Masukkan potongan dalam WL. Nilainya harus lebih kecil dari harga per unit.", "Enter the discount in WL. It must be less than the unit price.", "2"],
+    user: ["Pengguna Discord", "Discord user", "Pilih akun pelanggan dari daftar pengguna di Discord.", "Select the customer's account from Discord's user list.", "@Pelanggan"],
+    balance: ["Nominal saldo", "Balance amount", "Masukkan jumlah WL yang ingin ditambah atau dikurangi.", "Enter the amount of WL to add or subtract.", "100"],
+    world: ["World deposit", "Deposit world", "Masukkan nama world Growtopia untuk menerima deposit.", "Enter the Growtopia world that receives deposits.", "TOKODEPO"],
+    owner: ["Pemilik world", "World owner", "Masukkan nama atau GrowID pemilik world deposit.", "Enter the name or GrowID of the deposit world owner.", "GrowOwner"],
+    botname: ["Nama bot deposit", "Deposit bot name", "Masukkan nama bot Growtopia yang menerima deposit di world.", "Enter the name of the Growtopia bot that accepts deposits in the world.", "BotDepo"],
+    testimoni: ["Channel testimoni", "Testimonial channel", "Pilih channel Discord untuk catatan pembelian.", "Choose the Discord channel for purchase testimonials.", "#testimoni"],
+    donationlog: ["Channel log donasi", "Donation log channel", "Pilih channel Discord untuk catatan donasi atau deposit world.", "Choose the Discord channel for donation or world deposit logs.", "#donation-log"],
+    image: ["Gambar QRIS", "QRIS image", "Unggah gambar QRIS statis untuk deposit manual.", "Upload a static QRIS image for manual deposits.", "qris.png"],
+    harga: ["Kurs rupiah per WL", "Rupiah per WL", "Isi nilai rupiah untuk 1 WL. Misalnya 9 berarti Rp9 per WL.", "Enter the rupiah value of 1 WL. For example, 9 means Rp9 per WL.", "9"],
+    status: ["Status kurs live", "Live rate status", "Pilih Nyala untuk kurs live atau Mati untuk kurs manual dari /setwlprice.", "Choose On for the live rate or Off for the manual rate from /setwlprice.", "on"],
+    channel: ["Channel Discord", "Discord channel", "Pilih channel dari daftar Discord.", "Select a channel from Discord's list.", "#stok-toko"],
+    delay: ["Jeda pembaruan", "Update interval", "Masukkan jeda antara pembaruan stok dalam detik.", "Enter the number of seconds between stock updates.", "60"],
+};
+
 function commandGuide() {
     const results = h("div", { class: "guide-grid" });
     const count = h("span", { class: "mut", "aria-live": "polite" });
     const searchLabel = guideText("Cari command atau fungsi", "Search commands or descriptions");
     const search = h("input", { type: "search", placeholder: searchLabel, "aria-label": searchLabel });
+    const fieldFor = (command, key) => commandFields[command === "addproduct" && key === "code" ? "newcode" : key];
     function renderCommands() {
         const query = search.value.trim().toLowerCase().replace(/^\//, "");
-        const matches = commandDocs.filter(row => row.join(" ").toLowerCase().includes(query));
+        const matches = commandDocs.filter(([name, options, id, en]) => {
+            const fieldText = options ? options.split(" ").flatMap(option => fieldFor(name, option.replace(/\?$/, ""))) : [];
+            return [name, options, id, en, ...fieldText].join(" ").toLowerCase().includes(query);
+        });
         count.textContent = guideText(`${matches.length} command`, `${matches.length} commands`);
         results.replaceChildren(...matches.map(([name, options, id, en]) => card(
             h("div", { class: "row sp" }, h("code", { class: "guide-command" }, "/" + name),
                 h("span", { class: "pill" }, ["help", "leaderboard"].includes(name) ? guideText("Semua pengguna", "Everyone") : "Admin")),
             h("p", {}, guideText(id, en)),
-            options ? h("p", { class: "mut mono" }, options.split(" ").join(" · ")) : null,
+            options ? h("dl", { class: "guide-options" }, ...options.split(" ").map(option => {
+                const optional = option.endsWith("?");
+                const key = optional ? option.slice(0, -1) : option;
+                const [label, labelEn, description, descriptionEn, example] = fieldFor(name, key);
+                return h("div", {},
+                    h("dt", {}, h("strong", {}, guideText(label, labelEn)), h("code", {}, key),
+                        h("span", { class: "guide-option-status" }, optional ? guideText("Opsional", "Optional") : guideText("Wajib", "Required"))),
+                    h("dd", {}, guideText(description, descriptionEn),
+                        h("small", { class: "mut" }, guideText("Contoh", "Example"), " ", h("code", {}, example))));
+            })) : h("p", { class: "mut" }, guideText("Bisa langsung dijalankan.", "Run without filling in any fields.")),
             h("button", { type: "button", class: "sm", onclick: () => copyText("/" + name) }, guideText("Salin command", "Copy command"))
         )));
         if (!matches.length) results.append(card(h("p", { class: "mut" }, guideText("Command tidak ditemukan.", "No commands found."))));
@@ -56,7 +98,8 @@ function commandGuide() {
     search.addEventListener("input", renderCommands);
     renderCommands();
     return h("div", { class: "guide-page" },
-        head("Slash Command List", guideText("Referensi command asli bot AutoStore. Salin nama command lalu isi opsinya di Discord.", "Reference for the original AutoStore bot commands. Copy a command name and fill in its options in Discord.")),
+        head("Slash Command List", guideText("Pilih command di Discord, lalu isi kolom sesuai panduan. Label seperti code dan role mengikuti nama kolom di Discord.", "Select a command in Discord and use this guide to fill in its fields. Labels like code and role match the fields in Discord.")),
+        h("p", { class: "guide-access mut" }, guideText("Command berlabel Admin bisa digunakan oleh Owner atau akun yang terdaftar sebagai Admin bot.", "Commands marked Admin can be used by the Owner or accounts listed as bot admins.")),
         h("div", { class: "row sp guide-toolbar" }, search, count), results);
 }
 

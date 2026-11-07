@@ -1239,32 +1239,60 @@ async function serviceOrders() {
 
 // ---------- Tutorial & Subscription ----------
 async function tutorial() {
-    const li = (...k) => h("li", {}, ...k);
-    return h("div", {}, head(gsT("Tutorial Setup"), gsT("Langkah pertama dari nol sampai toko jalan.")),
-        card(h("h2", {}, gsT("Pakai Bot GevraStore")),
-            h("p", { class: "mut" }, gsT(me.discordInstallEnabled
-                ? "Lisensimu mendapat akses. Buka Bot & Server, pilih Bot GevraStore, hubungkan Discord, lalu pilih dan aktifkan server."
-                : "Mode ini tersedia untuk lisensi yang mendapat akses. Untuk memakai bot sendiri, ikuti langkah di bawah.")),
-            me.discordInstallEnabled ? h("a", { href: "#/bot" }, gsT("Buka Bot & Server")) : null),
-        card(h("h2", {}, gsT("Pakai bot sendiri")), h("p", { class: "mut" }, gsT("Siapkan aplikasi bot Discord dan database MongoDB milikmu."))),
-        card(h("h2", {}, gsT("1. Buat bot Discord")), h("ol", { class: "steps" },
-            li(gsT("Buka "), h("a", { href: "https://discord.com/developers/applications", target: "_blank", rel: "noopener" }, "Discord Developer Portal"), " → New Application."),
-            li(gsT("Menu Bot → Reset Token, salin tokennya.")),
-            li(gsT("Di halaman yang sama, aktifkan semua Privileged Gateway Intents (Presence, Server Members, Message Content).")),
-            li(gsT("Menu General Information → salin Application ID (itu Client ID).")))),
-        card(h("h2", {}, gsT("2. Siapkan database")), h("ol", { class: "steps" },
-            li(gsT("Buat akun gratis di MongoDB Atlas, buat cluster.")),
-            li(gsT("Database Access → buat user dan password.")),
-            li(gsT("Network Access → izinkan IP server panel ini (tanya penjual IP-nya).")),
-            li(gsT("Connect → Drivers → salin URL (mongodb+srv://…), ganti <password> dengan password user tadi.")))),
-        card(h("h2", {}, gsT("3. Hubungkan")), h("ol", { class: "steps" },
-            li(gsT("Buka menu Bot & Server, isi semua kolom, lalu Simpan.")),
-            li(gsT("Pakai tautan 'Undang bot ke server', lalu Start.")),
-            li(gsT("Di Discord, klik kanan role yang akan diberikan ke pembeli → Copy Role ID (aktifkan Developer Mode dulu).")))),
-        card(h("h2", {}, gsT("4. Mulai jualan")), h("ol", { class: "steps" },
-            li(gsT("Menu Products → Tambah Produk Baru, lalu isi harga dan stok.")),
-            li(gsT("Menu Settings → atur kurs WL.")),
-            li(gsT("Pastikan toko tidak dalam mode maintenance.")))));
+    const step = (number, title, ...content) => card(
+        h("h2", { class: "tutorial-step-title" }, h("span", { class: "tutorial-number" }, number), title),
+        h("ul", { class: "steps" }, ...content.map(line => h("li", {}, line))));
+    const panelLink = h("a", { class: "bot-mode-cta", href: "#/bot" }, gsT("Buka Bot & Server"));
+    const hosted = h("section", { id: "tutorialHosted", "aria-label": gsT("Pakai Bot GevraStore") },
+        card(h("div", { class: "row sp gap" }, h("h2", {}, gsT("Pakai Bot GevraStore")),
+            h("span", { class: "pill" }, me.discordInstallEnabled ? guideText("Akses tersedia", "Access available") : gsT("Akses terbatas"))),
+            h("p", {}, me.discordInstallEnabled
+                ? guideText("Hosting dan database sudah disiapkan. Kamu hanya perlu akun Discord dan server yang bisa kamu kelola.", "Hosting and the database are ready. You only need a Discord account and a server you can manage.")
+                : guideText("Mode ini tersedia untuk lisensi yang mendapat akses. Pilih tab Bot sendiri untuk memulai dengan bot milikmu.", "This mode is available to eligible licenses. Choose the Your own bot tab to start with your own bot.")),
+            me.discordInstallEnabled ? panelLink.cloneNode(true) : null),
+        step(1, guideText("Hubungkan akun", "Connect your account"),
+            guideText("Di Bot & Server, pilih Bot GevraStore. Klik Hubungkan akun Discord dan izinkan akses di Discord.", "In Bot & Server, select the GevraStore bot. Click Connect Discord account and authorize access in Discord.")),
+        step(2, guideText("Pilih dan pasang bot", "Choose a server and install the bot"),
+            guideText("Di Pilih server Discord, pilih server yang kamu kelola.", "Under Choose a Discord server, select a server you manage."),
+            guideText("Jika bot belum terpasang, klik Tambah bot ke server dan konfirmasi di Discord. Kembali ke panel, lalu klik Cek pemasangan bot bila diperlukan.", "If the bot is not installed, click Add bot to server and confirm in Discord. Return to the panel and click Check bot installation if needed."),
+            guideText("Jika server tidak muncul, pastikan akun Discord yang terhubung punya izin Kelola Server atau Administrator.", "If the server does not appear, make sure the connected Discord account has Manage Server or Administrator permission.")),
+        step(3, guideText("Aktifkan di panel", "Activate it in the panel"),
+            guideText("Klik Simpan & aktifkan bot. Tunggu sampai panel menampilkan Bot aktif di server ini.", "Click Save & activate bot. Wait until the panel says the bot is active on this server.")));
+    const own = h("section", { id: "tutorialOwn", "aria-label": gsT("Pakai bot sendiri") },
+        card(h("h2", {}, gsT("Pakai bot sendiri")), h("p", {}, gsT("Siapkan aplikasi bot Discord dan database MongoDB milikmu.")), panelLink),
+        step(1, guideText("Siapkan aplikasi Discord", "Set up your Discord application"),
+            [guideText("Buka ", "Open "), h("a", { href: "https://discord.com/developers/applications", target: "_blank", rel: "noopener noreferrer" }, "Discord Developer Portal"), guideText(" lalu pilih New Application.", " and select New Application.")],
+            guideText("Di General Information, salin Application ID untuk kolom Client ID. Di menu Bot, ambil Bot Token dan aktifkan Presence, Server Members, serta Message Content Intents.", "Under General Information, copy the Application ID for the Client ID field. Under Bot, get your Bot Token and enable the Presence, Server Members, and Message Content Intents."),
+            guideText("Di Discord, aktifkan Developer Mode lewat Pengaturan Pengguna → Lanjutan. Klik kanan profilmu dan pilih Copy User ID untuk Owner ID. Klik kanan ikon server dan pilih Copy Server ID untuk ID Server Discord.", "In Discord, enable Developer Mode under User Settings → Advanced. Right-click your profile and select Copy User ID for Owner ID. Right-click the server icon and select Copy Server ID for the Discord server ID.")),
+        step(2, guideText("Siapkan MongoDB", "Set up MongoDB"),
+            guideText("Buat cluster dan pengguna database di MongoDB Atlas. Di Network Access, tambahkan IP server panel yang diberikan penjual.", "Create a cluster and a database user in MongoDB Atlas. Under Network Access, add the panel server IP provided by the seller."),
+            guideText("Buka Connect → Drivers. Salin connection string dan masukkan sandi pengguna database pada bagian yang diminta.", "Open Connect → Drivers. Copy the connection string and enter the database user's password in the password placeholder.")),
+        step(3, guideText("Simpan dan jalankan bot", "Save and start the bot"),
+            guideText("Di Bot & Server, pilih Bot sendiri. Isi Bot Token, Client ID, MongoDB URL, dan Owner ID. Isi ID Server Discord untuk server tokomu. Admin ID dan kolom payment gateway opsional.", "In Bot & Server, select Your own bot. Enter the Bot Token, Client ID, MongoDB URL, and Owner ID. Enter your store's Discord server ID. Admin ID and payment gateway fields are optional."),
+            guideText("Klik Simpan, lalu Undang bot ke server. Setelah bot masuk ke server, kembali ke panel dan klik Start.", "Click Save, then Invite bot to server. After the bot joins, return to the panel and click Start.")));
+
+    const hasOwnBot = me.config?.has.botToken;
+    const showHosted = !!me.hostedBot?.enabled || (me.discordInstallEnabled && !hasOwnBot);
+    const hostedRadio = h("input", { type: "radio", name: "setup-guide-mode", checked: showHosted, "aria-controls": hosted.id });
+    const ownRadio = h("input", { type: "radio", name: "setup-guide-mode", checked: !showHosted, "aria-controls": own.id });
+    const update = () => { hosted.hidden = !hostedRadio.checked; own.hidden = !ownRadio.checked; };
+    hostedRadio.addEventListener("change", update);
+    ownRadio.addEventListener("change", update);
+    update();
+
+    return h("div", { class: "tutorial-page" },
+        head(gsT("Tutorial Setup"), guideText("Pilih cara menjalankan bot, lalu ikuti langkah untuk menyiapkan tokomu.", "Choose how to run your bot, then follow the steps to set up your store.")),
+        h("fieldset", { class: "tutorial-tabs" }, h("legend", {}, gsT("Pilih cara menjalankan bot")),
+            h("label", {}, hostedRadio, h("span", {}, gsT("Pakai Bot GevraStore"))),
+            h("label", {}, ownRadio, h("span", {}, gsT("Pakai bot sendiri")))),
+        hosted, own,
+        card(h("h2", {}, guideText("Pastikan toko siap", "Check that your store is ready")),
+            h("ul", { class: "tutorial-checks" },
+                h("li", {}, h("a", { href: "#/bot" }, gsT("Bot & server")), guideText("Periksa apakah bot sudah online.", "Check that the bot is online.")),
+                h("li", {}, h("a", { href: "#/products" }, gsT("Produk & stok")), guideText("Buat produk, atur harga, dan isi stok.", "Create a product, set its price, and add stock.")),
+                h("li", {}, h("a", { href: "#/commands" }, "Slash Command List"), guideText("Gunakan /setchannel untuk mengatur channel testimoni dan log donasi sebelum jualan.", "Use /setchannel to configure the testimonial and donation log channels before selling.")),
+                h("li", {}, h("a", { href: "#/settings" }, gsT("Pengaturan toko")), guideText("Cek kurs WL dan pastikan mode maintenance sudah dimatikan.", "Check the WL rate and make sure maintenance mode is off.")),
+                h("li", {}, h("a", { href: "#/sales" }, gsT("Pesanan")), guideText("Setelah pembelian pertama, cek pesanan tercatat dan produk terkirim ke pembeli.", "After the first purchase, check that the order is recorded and the product reaches the buyer.")))));
 }
 async function subscription() {
     me = await api("GET", "/api/me");

@@ -546,6 +546,53 @@ let botFilled = false;
 const BOT_FIELDS = ["botToken", "clientId", "mongoUrl", "ownerId", "adminIds", "guildId", "paymentUrl", "paymentApiKey", "paymentSecret"];
 const SECRETS = ["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"];
 
+function hostedNicknameEditor(guildId) {
+    const url = "/api/discord-install/nickname";
+    const input = h("input", { type: "text", autocomplete: "off", disabled: true });
+    const save = h("button", { type: "submit", class: "pri", disabled: true }, gsT("Simpan nama bot"));
+    const retry = h("button", { type: "button", hidden: true }, gsT("Muat ulang nama bot"));
+    const status = h("p", { class: "mut", role: "status" });
+    const form = h("form", { class: "hosted-bot-setup" },
+        field(gsT("Nama bot di server"), input, gsT("Maksimal 32 karakter. Kosongkan untuk kembali ke nama bawaan Discord.")),
+        status, h("div", { class: "hosted-bot-actions" }, save, retry));
+    const setBusy = busy => { input.disabled = save.disabled = busy; };
+    async function load() {
+        retry.hidden = true;
+        status.textContent = gsT("Memuat nama bot…");
+        try {
+            const result = await api("GET", url);
+            if (result.guildId !== guildId) throw new Error(gsT("Server aktif sudah berubah. Muat ulang halaman."));
+            input.value = result.nickname;
+            status.textContent = "";
+            setBusy(false);
+        } catch (error) {
+            status.textContent = error.message;
+            retry.hidden = false;
+        }
+    }
+    form.onsubmit = async event => {
+        event.preventDefault();
+        if (save.disabled) return;
+        const nickname = input.value.trim();
+        if ([...nickname].length > 32) {
+            status.textContent = gsT("Masukkan nama bot satu baris, maksimal 32 karakter.");
+            return;
+        }
+        setBusy(true);
+        status.textContent = gsT("Menyimpan nama bot…");
+        try {
+            const result = await api("PUT", url, { guildId, nickname });
+            input.value = result.nickname;
+            status.textContent = gsT("Nama bot di server sudah disimpan.");
+        } catch (error) {
+            status.textContent = error.message;
+        } finally { setBusy(false); }
+    };
+    retry.onclick = load;
+    load();
+    return form;
+}
+
 function hostedBotCard(outcome) {
     const content = h("div", { class: "hosted-bot-setup" });
     const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
@@ -569,7 +616,8 @@ function hostedBotCard(outcome) {
         }) }, gsT("Nonaktifkan bot")) : null;
         content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
             h("strong", {}, setup.name || (gsLanguage === "en" ? "Saved server" : "Server tersimpan") + " · " + setup.guildId),
-            status, h("div", { class: "hosted-bot-actions" }, manage, stop));
+            status, h("div", { class: "hosted-bot-actions" }, manage, stop),
+            setup.enabled && hostedNicknameEditor(setup.guildId));
         update();
     }
     content.addEventListener("hosted-status", () => content.onhostedstatus?.());
@@ -595,7 +643,8 @@ function hostedBotCard(outcome) {
                 load.textContent = gsT("Cek ulang daftar server");
                 content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
                     h("p", { class: "mut", role: "status" }, gsT(hint)),
-                    h("div", { class: "hosted-bot-actions" }, load));
+                    h("div", { class: "hosted-bot-actions" }, load),
+                    setup?.enabled && hostedNicknameEditor(setup.guildId));
                 return;
             }
             load.textContent = gsT("Cek pemasangan bot");
@@ -605,6 +654,7 @@ function hostedBotCard(outcome) {
             selectedGuildId = select.value;
             const actions = h("div", { class: "hosted-bot-actions" });
             const status = h("p", { class: "mut", role: "status" });
+            const nickname = h("div", { hidden: true });
             const updateStatus = () => {
                 const server = servers.find(item => item.id === select.value);
                 const active = setup?.guildId === server.id && setup.enabled;
@@ -616,6 +666,9 @@ function hostedBotCard(outcome) {
             };
             const draw = () => {
                 const { server, active } = updateStatus();
+                nickname.hidden = !active || !server.installed;
+                nickname.replaceChildren();
+                if (!nickname.hidden) nickname.append(hostedNicknameEditor(server.id));
                 if (!server.installed) {
                     const invite = h("a", {
                         class: "bot-mode-cta", href: server.invite, target: "_blank", rel: "noopener",
@@ -647,7 +700,7 @@ function hostedBotCard(outcome) {
                 draw();
             };
             content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
-                field(gsT("Pilih server Discord"), select), status, actions);
+                field(gsT("Pilih server Discord"), select), status, actions, nickname);
             draw();
             content.onhostedstatus = updateStatus;
         } finally {

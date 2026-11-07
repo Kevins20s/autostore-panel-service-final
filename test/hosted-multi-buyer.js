@@ -52,11 +52,27 @@ async function testRouting() {
     ];
     let discordGuilds = managedGuilds;
     const installed = new Set([guildA]);
+    const nicknames = new Map([[guildA, "Toko A"]]);
+    let nicknamePermission = true;
     global.fetch = async (url, options) => {
         if (String(url).includes("/users/@me/guilds")) {
             const guilds = options.headers.Authorization.startsWith("Bot ")
                 ? [...installed].map(id => ({ id })) : discordGuilds;
             return { ok: true, json: async () => guilds };
+        }
+        const member = new URL(url).pathname.match(/\/guilds\/(\d+)\/members\/([^/]+)$/);
+        if (member) {
+            const [, guildId, memberId] = member;
+            assert.equal(options.headers.Authorization, "Bot test");
+            if (options.method === "PATCH") {
+                assert.equal(memberId, "@me");
+                if (!nicknamePermission) return { ok: false, status: 403 };
+                nicknames.set(guildId, JSON.parse(options.body).nick);
+            } else {
+                assert.equal(options.method, "GET");
+                assert.equal(memberId, appId);
+            }
+            return { ok: true, json: async () => ({ nick: nicknames.get(guildId) }) };
         }
         return installed.has(String(url).split("/").at(-1)) ? { ok: true } : { ok: false, status: 404 };
     };
@@ -81,6 +97,7 @@ async function testRouting() {
         assert.equal(invite.hostname, "discord.com");
         assert.equal(invite.searchParams.get("guild_id"), guildB);
         assert.equal(invite.searchParams.get("disable_guild_select"), "true");
+        assert.equal(BigInt(invite.searchParams.get("permissions")) & (1n << 26n), 1n << 26n);
         assert.equal((await bind(b, guildB)).statusCode, 409);
         installed.add(guildB);
         assert.equal((await list(b)).value.servers.find(server => server.id === guildB).installed, true);
@@ -92,6 +109,23 @@ async function testRouting() {
         // Reassign the synthetic fixtures for the legacy-data test.
         a.hostedBot.guildId = guildA;
         b.hostedBot.guildId = guildB;
+        const nicknameUrl = "/api/discord-install/nickname";
+        const readNickname = lic => invoke("get", nicknameUrl, { lic });
+        const setNickname = (lic, guildId, nickname) => invoke("put", nicknameUrl, { lic, body: { guildId, nickname } });
+        assert.deepEqual((await readNickname(a)).value, { guildId: guildA, nickname: "Toko A" });
+        assert.equal((await setNickname(b, guildA, "Nama lintas toko")).statusCode, 409);
+        assert.equal((await setNickname(b, guildB, "x".repeat(33))).statusCode, 400);
+        assert.deepEqual((await setNickname(b, guildB, " Toko B ")).value, { guildId: guildB, nickname: "Toko B" });
+        assert.equal((await readNickname(a)).value.nickname, "Toko A");
+        assert.equal((await readNickname(b)).value.nickname, "Toko B");
+        nicknamePermission = false;
+        assert.match((await setNickname(b, guildB, "Tidak tersimpan")).value.error, /Change Nickname/);
+        nicknamePermission = true;
+        assert.equal((await setNickname(b, guildB, "")).value.nickname, "");
+        assert.equal(nicknames.get(guildB), null);
+        b.hostedBot.enabled = false;
+        assert.equal((await setNickname(b, guildB, "Bot nonaktif")).statusCode, 409);
+        b.hostedBot.enabled = true;
         discordGuilds = [managedGuilds[0]];
         assert.equal((await list(b)).value.emptyReason, "already_claimed");
     } finally { global.fetch = originalFetch; }

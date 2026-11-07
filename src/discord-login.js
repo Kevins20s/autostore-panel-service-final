@@ -12,6 +12,7 @@ const API = "https://discord.com/api/v10";
 const INSTALL = "gs_discord_install";
 const DISCORD_ID = /^\d{17,20}$/;
 const CAN_INSTALL = (1n << 3n) | (1n << 5n); // Administrator atau Manage Server
+const CHANGE_NICKNAME = 1n << 26n;
 
 module.exports = function registerDiscordLogin(app, { buyer, valid, save, licenses }) {
     const clientId = process.env.DISCORD_LOGIN_CLIENT_ID;
@@ -59,6 +60,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
         return { guilds, emptyReason };
     }
     const canActivate = hostingConfigured && !!botToken;
+    const nicknameWrites = new Set();
     const statusFile = process.env.DISCORD_HOSTED_PILOT_STATUS_FILE;
     function statusFor(license) {
         const setup = license.hostedBot;
@@ -111,7 +113,8 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
             const installedIds = canActivate ? await installedGuildIds(guilds) : new Set();
             const servers = guilds.map(({ id, name }) => {
                 const params = new URLSearchParams({
-                    client_id: botId, scope: "bot applications.commands", permissions: botPermissions,
+                    client_id: botId, scope: "bot applications.commands",
+                    permissions: (BigInt(botPermissions) | CHANGE_NICKNAME).toString(),
                     integration_type: "0", guild_id: id, disable_guild_select: "true",
                 });
                 return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: installedIds.has(id) };
@@ -144,12 +147,70 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
             // Recheck after Discord requests, before the synchronous save.
             if (running && hostedGuildClaimed(guildId, license.id, licenses())) return res.status(409).json({ error: "Server Discord ini sudah dipakai lisensi lain." });
             const previous = license.hostedBot;
+            if (nicknameWrites.has(guildId) || nicknameWrites.has(previous?.guildId)) {
+                return res.status(409).json({ error: "Nama bot sedang disimpan. Coba lagi sebentar." });
+            }
             license.hostedBot = { guildId, enabled: running, ...(name ? { name } : {}) };
             try { save(); }
             catch (error) { license.hostedBot = previous; throw error; }
             res.json({ setup: statusFor(license) });
         } catch {
             res.status(502).json({ error: "Pengaturan bot belum bisa disimpan. Coba lagi." });
+        }
+    });
+
+    async function discordNickname(guildId, nickname) {
+        const writing = nickname !== undefined;
+        const member = writing ? "@me" : botId;
+        return fetch(API + "/guilds/" + guildId + "/members/" + member, {
+            method: writing ? "PATCH" : "GET",
+            headers: { Authorization: "Bot " + botToken, ...(writing && { "Content-Type": "application/json" }) },
+            body: writing ? JSON.stringify({ nick: nickname || null }) : undefined,
+            signal: AbortSignal.timeout(5000),
+        });
+    }
+
+    async function respondWithNickname(res, guildId, nickname) {
+        const fallback = nickname === undefined ? "Nama bot belum bisa dimuat. Coba lagi." : "Nama bot belum bisa disimpan. Coba lagi.";
+        try {
+            const response = await discordNickname(guildId, nickname);
+            if (response.status === 404) return res.status(409).json({ error: "Bot GevraStore belum terpasang di server ini." });
+            if (response.status === 403 && nickname !== undefined) {
+                return res.status(403).json({ error: "Aktifkan izin Ubah Nickname (Change Nickname) pada role bot GevraStore di Discord." });
+            }
+            if (response.status === 400) return res.status(400).json({ error: "Discord menolak nama ini. Coba nama lain." });
+            if (response.status === 429) return res.status(429).json({ error: "Terlalu banyak permintaan ke Discord. Coba lagi sebentar." });
+            if (!response.ok) return res.status(502).json({ error: fallback });
+            const member = await response.json();
+            return res.json({ guildId, nickname: member.nick ?? "" });
+        } catch {
+            return res.status(502).json({ error: fallback });
+        }
+    }
+
+    app.get("/api/discord-install/nickname", noStore, buyer, async (req, res) => {
+        if (!canActivate || !eligible(req.lic)) return res.sendStatus(403);
+        const tenant = hostedTenant(req.lic, licenses());
+        if (!tenant) return res.status(409).json({ error: "Aktifkan bot GevraStore di server terlebih dahulu." });
+        await respondWithNickname(res, tenant.guildId);
+    });
+
+    app.put("/api/discord-install/nickname", noStore, buyer, async (req, res) => {
+        if (!canActivate || !eligible(req.lic)) return res.sendStatus(403);
+        const tenant = hostedTenant(req.lic, licenses());
+        const { guildId, nickname } = req.body || {};
+        if (!tenant || tenant.guildId !== guildId) {
+            return res.status(409).json({ error: "Server aktif sudah berubah. Muat ulang halaman." });
+        }
+        if (typeof nickname !== "string" || [...nickname.trim()].length > 32 || /[\r\n]/.test(nickname.trim())) {
+            return res.status(400).json({ error: "Masukkan nama bot satu baris, maksimal 32 karakter." });
+        }
+        if (nicknameWrites.has(guildId)) return res.status(409).json({ error: "Nama bot sedang disimpan. Coba lagi sebentar." });
+        nicknameWrites.add(guildId);
+        try {
+            await respondWithNickname(res, guildId, nickname.trim());
+        } finally {
+            nicknameWrites.delete(guildId);
         }
     });
 

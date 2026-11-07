@@ -2,14 +2,14 @@
 const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
-const { pilotTenant } = require("./shared-tenants");
+const { hostedTenant } = require("./shared-tenants");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
 const num = (v) => (typeof v === "number" ? v : Number(String(v ?? "").trim().replace(",", ".")));
 const okNum = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
 
-module.exports = function createShopRouter({ valid, decrypt }) {
+module.exports = function createShopRouter({ valid, decrypt, licenses = () => [] }) {
     const r = express.Router();
     const wrap = (fn) => (req, res) =>
         fn(req, res).catch((e) => {
@@ -22,16 +22,16 @@ module.exports = function createShopRouter({ valid, decrypt }) {
     r.use(async (req, res, next) => {
         const l = req.lic;
         if (!valid(l)) return fail(res, "Key sudah habis atau dicabut.", 403);
-        const hosted = pilotTenant(l);
+        const hosted = hostedTenant(l, licenses());
         if (!hosted && (l.hostedBot?.enabled || l.runMode === "central")) {
             return fail(res, "Database Bot GevraStore belum tersedia untuk server ini.", 503);
         }
         if (!hosted && !l.config) return fail(res, "Isi pengaturan bot dulu di menu Bot & Server.", 409);
         try {
             req.db = hosted
-                ? await getDb("hosted:" + hosted.licenseId, hosted.config.mongoUrl, hosted.dbName)
+                ? await getDb("hosted:" + hosted.tenantId, hosted.config.mongoUrl, hosted.dbName)
                 : await getDb(l.id, decrypt(l.config).mongoUrl);
-            if (hosted && pilotTenant(l)?.dbName !== hosted.dbName) {
+            if (hosted && hostedTenant(l, licenses())?.dbName !== hosted.dbName) {
                 return fail(res, "Server toko berubah. Muat ulang halaman.", 409);
             }
         }
@@ -297,7 +297,7 @@ module.exports = function createShopRouter({ valid, decrypt }) {
             donationWebhookId: channels?.DonationWebhookId || "" });
     }));
     r.put("/settings/donation-webhook", wrap(async (req, res) => {
-        if (!pilotTenant(req.lic)) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);
+        if (!hostedTenant(req.lic, licenses())) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);
         const id = String(req.body?.webhookId || "").trim();
         if (id && !ID_RE.test(id)) return fail(res, "Masukkan ID angka webhook donasi.");
         await req.db.collection("setchannels").updateOne({}, { $set: { DonationWebhookId: id } }, { upsert: true });

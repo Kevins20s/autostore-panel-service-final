@@ -1,9 +1,11 @@
 const client = require("../../index");
 const Qris = require("../../Schema/qris.js");
 const { creditDeposit, cancelDeposit, fetchDmMessage } = require("../../utils/depositWatcher.js");
-const { Owner, Admin } = require("../../config/config.json");
+const { Owner, Admin, serverId } = require("../../config/config.json");
 const { Warning, Benar, Salah } = require("../../config/configemoji.json");
 const { cancelHostedQris } = require("../../utils/hostedDepositLogs");
+const { readHostedQrCancelId } = require("../../utils/hostedQrCancel");
+const hostedBinding = process.env.HOSTED_PILOT_BINDING ? JSON.parse(process.env.HOSTED_PILOT_BINDING) : null;
 
 module.exports = {
     name: "interactionQrisAdmin",
@@ -16,8 +18,9 @@ function isAdminOrOwner(userId) {
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
     if (interaction.customId.startsWith("qriscancel_")) {
+        const orderId = hostedBinding && readHostedQrCancelId(interaction.customId, serverId, hostedBinding.legacy);
+        if (!orderId) return;
         await interaction.deferReply({ ephemeral: true });
-        const orderId = interaction.customId.slice("qriscancel_".length);
         const trx = await Qris.findOne({ orderId, discordId: interaction.user.id, panelManaged: true });
         if (!trx) return interaction.editReply("Transaksi tidak ditemukan untuk akunmu.");
         if (trx.status !== "pending") return interaction.editReply("Transaksi sudah diproses.");

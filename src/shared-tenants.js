@@ -68,17 +68,44 @@ function tenantForGuild(registry, guildId) {
     return registry.get(id) || null;
 }
 
-// Keep the databases created by the original two-server pilot.
-function pilotTenant(license, env = process.env) {
-    const guildId = license?.hostedBot?.guildId;
-    const index = (env.DISCORD_HOSTED_PILOT_GUILD_IDS || "").split(",").indexOf(guildId);
-    const namespace = env.DISCORD_HOSTED_PILOT_DB_NAMESPACE;
-    const mongoUrl = env.DISCORD_CATALOG_PILOT_MONGO_URL;
-    if (!license?.hostedBot?.enabled || license.type === "service" || license.revoked ||
-        !(license.expiresAt > Date.now()) || license.id !== env.DISCORD_HOSTED_PILOT_LICENSE_ID ||
-        !DISCORD_ID.test(guildId) || index < 0 || !namespace || !mongoUrl) return null;
-    const licenseId = namespace + "-" + index;
-    return { licenseId, guildId, dbName: hostedDbName("autostore", licenseId), config: { mongoUrl } };
+const csv = value => (value || "").split(",").map(item => item.trim()).filter(Boolean);
+
+function eligibleHostedLicense(license, env = process.env) {
+    return !!(license?.id && (license.type || "autostore") === "autostore" && !license.revoked &&
+        Number(license.expiresAt) > Date.now() && env.DISCORD_CATALOG_PILOT_MONGO_URL &&
+        (license.id === env.DISCORD_HOSTED_PILOT_LICENSE_ID ||
+            csv(env.DISCORD_HOSTED_TEST_LICENSE_IDS).includes(license.id)));
 }
 
-module.exports = { buildTenantRegistry, tenantForGuild, productOf, hostedDbName, pilotTenant };
+function eligibleHostedGuild(guildId, env = process.env) {
+    return DISCORD_ID.test(guildId) && csv(env.DISCORD_HOSTED_PILOT_GUILD_IDS).includes(guildId);
+}
+
+// Reserve a saved server even when its license is paused or expired. This
+// prevents renewal or reactivation from displacing another shop.
+function hostedGuildClaimed(guildId, licenseId, licenses) {
+    return licenses.some(item => item.id !== licenseId && item.hostedBot?.guildId === guildId);
+}
+
+function hostedTenant(license, licenses = [], env = process.env) {
+    const guildId = license?.hostedBot?.guildId;
+    if (!license?.hostedBot?.enabled || !eligibleHostedLicense(license, env) ||
+        !eligibleHostedGuild(guildId, env) || hostedGuildClaimed(guildId, license.id, licenses)) return null;
+    const legacy = license.id === env.DISCORD_HOSTED_PILOT_LICENSE_ID;
+    const namespace = env.DISCORD_HOSTED_PILOT_DB_NAMESPACE;
+    if (legacy && !namespace) return null;
+    // Keep existing pilot data and receipts at their original addresses.
+    const tenantId = legacy ? namespace + "-" + csv(env.DISCORD_HOSTED_PILOT_GUILD_IDS).indexOf(guildId)
+        : license.id + ":" + guildId;
+    return { licenseId: license.id, tenantId, guildId, legacy, dbName: hostedDbName("autostore", tenantId),
+        config: { mongoUrl: env.DISCORD_CATALOG_PILOT_MONGO_URL } };
+}
+
+function pilotTenant(license, env = process.env) {
+    if (license?.id !== env.DISCORD_HOSTED_PILOT_LICENSE_ID) return null;
+    const tenant = hostedTenant(license, [], env);
+    return tenant && { ...tenant, licenseId: tenant.tenantId };
+}
+
+module.exports = { buildTenantRegistry, tenantForGuild, productOf, hostedDbName, pilotTenant,
+    eligibleHostedLicense, eligibleHostedGuild, hostedGuildClaimed, hostedTenant };

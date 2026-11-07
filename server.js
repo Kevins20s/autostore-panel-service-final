@@ -219,7 +219,7 @@ app.post("/api/admin/restore", admin, express.raw({ type: "*/*", limit: "5mb" })
     res.json({ ok: true, count: licenses().length });
 }));
 
-app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt }));
+app.use("/api/shop", buyer, (req, res, next) => req.lic.type === "service" ? res.status(403).json({ error: "Fitur toko AutoStore tidak tersedia untuk key Service." }) : next(), express.json({ limit: "2mb" }), createShopRouter({ valid, decrypt, licenses }));
 app.use(express.json({ limit: "20kb" }));
 
 // ---- Pesanan key lewat web (QRIS manual) ----
@@ -239,7 +239,7 @@ const orders = createOrders({
 });
 registerOrderRoutes(app, { admin, buyer, orders, ttlMin: ORDER_TTL_MIN, turnstile });
 registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
-const discordLogin = require("./src/discord-login")(app, { buyer, valid, save: store.save });
+const discordLogin = require("./src/discord-login")(app, { buyer, valid, save: store.save, licenses });
 console.log("[PANEL] Pembayaran key di /beli:", orders.autoEnabled() ? "QRIS otomatis aktif (cadangan: QRIS statis)" : "QRIS statis + konfirmasi admin", "| CAPTCHA:", turnstile.enabled ? "Turnstile aktif" : "nonaktif");
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
 

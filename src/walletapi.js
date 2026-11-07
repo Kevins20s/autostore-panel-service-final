@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const express = require("express");
 const { derive } = require("./crypto");
 const { WalletError } = require("./walletdb");
-const { pilotTenant } = require("./shared-tenants");
+const { hostedTenant } = require("./shared-tenants");
 
 // Token & secret per pembeli diturunkan dari MASTER_KEY, jadi tidak perlu disimpan dan ikut pindah bersama MASTER_KEY.
 const internalToken = (licenseId) => derive("wallet-internal:" + licenseId).toString("hex");
@@ -77,22 +77,22 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         const id = String(req.headers["x-license-id"] || "");
         const guildId = String(req.headers["x-hosted-guild"] || "");
         const l = findLicense(id);
-        const tenant = pilotTenant(l);
+        const tenant = hostedTenant(l, licenses());
         const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
         if (!tenant || tenant.guildId !== guildId || !safeEq(token, hostedWalletToken(id, guildId))) return res.sendStatus(401);
         if (!wallet) return res.sendStatus(503);
-        try { res.json(await wallet.hostedDepositStatus(id, tenant.licenseId, req.params.orderId)); }
+        try { res.json(await wallet.hostedDepositStatus(id, tenant.tenantId, req.params.orderId)); }
         catch (error) { send(res)(error); }
     });
     app.post("/internal/wallet/hosted-deposit/:orderId/cancel", async (req, res) => {
         if (!directOnly(req)) return res.sendStatus(404);
         const id = String(req.headers["x-license-id"] || "");
         const guildId = String(req.headers["x-hosted-guild"] || "");
-        const tenant = pilotTenant(findLicense(id));
+        const tenant = hostedTenant(findLicense(id), licenses());
         const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
         if (!tenant || tenant.guildId !== guildId || !safeEq(token, hostedWalletToken(id, guildId))) return res.sendStatus(401);
         if (!wallet) return res.sendStatus(503);
-        try { res.json(await wallet.cancelHostedDeposit(id, tenant.licenseId, req.params.orderId)); }
+        try { res.json(await wallet.cancelHostedDeposit(id, tenant.tenantId, req.params.orderId)); }
         catch (error) { send(res)(error); }
     });
     app.post("/internal/wallet/deposit", async (req, res) => {
@@ -101,7 +101,7 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         const l = findLicense(id);
         const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
         const guildId = req.headers["x-hosted-guild"];
-        const hosted = guildId && pilotTenant(l);
+        const hosted = guildId && hostedTenant(l, licenses());
         if (!l || !(guildId
             ? hosted?.guildId === guildId && safeEq(tok, hostedWalletToken(id, guildId))
             : safeEq(tok, internalToken(id)))) return res.sendStatus(401);
@@ -118,7 +118,7 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
                 if (!(rate > 0 && Number.isFinite(rate)) || !Number.isSafeInteger(hostedWL) || hostedWL < 1) {
                     throw new WalletError("Nominal belum cukup untuk 1 WL atau kurs tidak valid.");
                 }
-                Object.assign(input, { hostedWL, hostedTenantId: hosted.licenseId });
+                Object.assign(input, { hostedWL, hostedTenantId: hosted.tenantId });
             }
             const d = await wallet.createDeposit(input);
             const qrPng = d.qrString ? (await QRCode.toBuffer(d.qrString, { type: "png", width: 512, margin: 2 })).toString("base64") : null;

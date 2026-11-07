@@ -14,6 +14,8 @@ const Qris = require("../../Schema/qris.js");
 const { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
 const { getQrisImageUrl, sendDepositLog } = require("../../utils/depositWatcher.js");
 const { requestAutoDeposit, PanelError } = require("../../utils/panelWallet.js");
+const { hostedQrCancelId } = require("../../utils/hostedQrCancel");
+const { serverId } = require("../../config/config.json");
 const { COLOR, WL, Warning } = require("../../config/configemoji.json");
 
 module.exports = {
@@ -78,7 +80,7 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
 
     if (qrisDoc.panelManaged) {
         const components = [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`qriscancel_${panel.orderId}`).setLabel("Batalkan")
+            new ButtonBuilder().setCustomId(hostedQrCancelId(serverId, panel.orderId)).setLabel("Batalkan")
                 .setStyle(ButtonStyle.Danger),
         )];
         const sent = await interaction.user.send({ embeds: [embed], files, components }).catch(() => null);

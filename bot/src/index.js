@@ -10,13 +10,15 @@ let config = require('./config/config.json');
 let mongoose = require("mongoose");
 const fs = require("node:fs");
 const hostedBinding = process.env.HOSTED_PILOT_BINDING ? JSON.parse(process.env.HOSTED_PILOT_BINDING) : null;
+const { readHostedQrCancelId } = require("./utils/hostedQrCancel");
 function hostedActive() {
     try {
         const data = JSON.parse(fs.readFileSync(hostedBinding.dataFile, "utf8"));
         const license = data.licenses.find(item => item.id === hostedBinding.licenseId);
         return !!(license && !license.revoked && license.expiresAt > Date.now() &&
             license.discordLoginId === config.Owner && license.hostedBot?.enabled &&
-            license.hostedBot.guildId === config.serverId);
+            license.hostedBot.guildId === config.serverId &&
+            !data.licenses.some(other => other.id !== license.id && other.hostedBot?.guildId === config.serverId));
     } catch {
         return false;
     }
@@ -25,7 +27,7 @@ class HostedClient extends Client {
     emit(event, ...args) {
         if (event === "interactionCreate" || event === "messageCreate") {
             const ownQrCancelDm = event === "interactionCreate" && !args[0]?.guildId &&
-                args[0]?.customId?.startsWith("qriscancel_");
+                !!readHostedQrCancelId(args[0]?.customId, config.serverId, hostedBinding.legacy);
             if ((!ownQrCancelDm && args[0]?.guildId !== config.serverId) || !hostedActive() || mongoose.connection.readyState !== 1) {
                 return false;
             }

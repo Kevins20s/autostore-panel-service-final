@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const auth = require("./auth");
 const { encrypt, decrypt } = require("./crypto");
+const { eligibleHostedLicense, eligibleHostedGuild, hostedGuildClaimed, hostedTenant } = require("./shared-tenants");
 
 const FLOW = "gs_discord_flow";
 const MAX_AGE = 10 * 60 * 1000;
@@ -12,7 +13,7 @@ const INSTALL = "gs_discord_install";
 const DISCORD_ID = /^\d{17,20}$/;
 const CAN_INSTALL = (1n << 3n) | (1n << 5n); // Administrator atau Manage Server
 
-module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
+module.exports = function registerDiscordLogin(app, { buyer, valid, save, licenses }) {
     const clientId = process.env.DISCORD_LOGIN_CLIENT_ID;
     const clientSecret = process.env.DISCORD_LOGIN_CLIENT_SECRET;
     let redirectUri;
@@ -26,10 +27,9 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
     const botId = process.env.DISCORD_HOSTED_BOT_CLIENT_ID || "";
     const botPermissions = process.env.DISCORD_HOSTED_BOT_PERMISSIONS || "0";
     const installEnabled = enabled && DISCORD_ID.test(botId) && /^\d+$/.test(botPermissions);
-    const pilotLicense = process.env.DISCORD_HOSTED_PILOT_LICENSE_ID;
-    const pilotGuilds = new Set((process.env.DISCORD_HOSTED_PILOT_GUILD_IDS || "").split(",").filter(Boolean));
+    const hostingConfigured = !!(process.env.DISCORD_HOSTED_PILOT_LICENSE_ID || process.env.DISCORD_HOSTED_TEST_LICENSE_IDS);
     const eligible = license => installEnabled && license.type !== "service" && valid(license) &&
-        (!pilotLicense || (license.id === pilotLicense && pilotGuilds.size > 0));
+        (!hostingConfigured || eligibleHostedLicense(license));
     const options = { httpOnly: true, sameSite: "lax", secure: !!redirectUri?.startsWith("https:"), path: "/api" };
     const read = (req, name) => auth.verify(auth.readCookie(req, name));
     const set = (res, name, payload) => res.cookie(name, auth.sign({ ...payload, exp: Date.now() + MAX_AGE }), { ...options, maxAge: MAX_AGE });
@@ -51,21 +51,22 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
         if (!response.ok) throw new Error("Discord guild lookup failed");
         return (await response.json()).filter(guild =>
                 DISCORD_ID.test(guild.id) &&
-                (!pilotLicense || pilotGuilds.has(guild.id)) &&
+                (!hostingConfigured || eligibleHostedGuild(guild.id)) &&
+                !hostedGuildClaimed(guild.id, req.lic.id, licenses()) &&
                 (guild.owner === true || (/^\d+$/.test(guild.permissions) && (BigInt(guild.permissions) & CAN_INSTALL) !== 0n))
         );
     }
-    const canActivate = !!(pilotLicense && botToken);
+    const canActivate = hostingConfigured && !!botToken;
     const statusFile = process.env.DISCORD_HOSTED_PILOT_STATUS_FILE;
     function statusFor(license) {
         const setup = license.hostedBot;
         if (!setup) return null;
         const status = { ...setup, state: "stopped" };
-        if (!setup.enabled || !eligible(license)) return status;
+        if (!setup.enabled || !eligible(license) || !hostedTenant(license, licenses())) return status;
         try {
             const heartbeat = JSON.parse(fs.readFileSync(statusFile, "utf8"));
             const age = Date.now() - heartbeat.at;
-            if (age >= 0 && age < 20000 && heartbeat.guilds.includes(setup.guildId)) status.state = "running";
+            if (age >= 0 && age < 20000 && heartbeat.bindings?.[setup.guildId] === license.id) status.state = "running";
         } catch { /* Missing or stale pilot status is offline. */ }
         return status;
     }
@@ -104,6 +105,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
         try {
             let name = license.hostedBot?.name;
             if (running) {
+                if (hostedGuildClaimed(guildId, license.id, licenses())) return res.status(409).json({ error: "Server Discord ini sudah dipakai lisensi lain." });
                 const guilds = await manageableServers(req);
                 if (!guilds) return res.status(401).json({ error: "Hubungkan kembali akun Discord." });
                 const guild = guilds.find(item => item.id === guildId);
@@ -113,7 +115,9 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save }) {
             } else if (license.hostedBot?.guildId !== guildId) {
                 return res.sendStatus(409);
             }
-            if (!eligible(license)) return res.sendStatus(403);
+            if (!licenses().includes(license) || !eligible(license)) return res.sendStatus(403);
+            // Recheck after Discord requests, before the synchronous save.
+            if (running && hostedGuildClaimed(guildId, license.id, licenses())) return res.status(409).json({ error: "Server Discord ini sudah dipakai lisensi lain." });
             const previous = license.hostedBot;
             license.hostedBot = { guildId, enabled: running, ...(name ? { name } : {}) };
             try { save(); }

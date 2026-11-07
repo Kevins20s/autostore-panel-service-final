@@ -548,7 +548,8 @@ const SECRETS = ["botToken", "mongoUrl", "paymentApiKey", "paymentSecret"];
 
 function hostedBotCard(outcome) {
     const content = h("div", { class: "hosted-bot-setup" });
-    const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord"));
+    const connect = h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan Discord untuk tambah bot"));
+    let selectedGuildId;
     function showSaved(setup) {
         const status = h("p", { class: "mut", role: "status" });
         const update = () => {
@@ -572,8 +573,9 @@ function hostedBotCard(outcome) {
         update();
     }
     content.addEventListener("hosted-status", () => content.onhostedstatus?.());
-    const load = h("button", { type: "button" }, gsT("Tampilkan server Discord"));
+    const load = h("button", { type: "button" }, gsT("Cek pemasangan bot"));
     load.onclick = guard(async () => {
+        if (load.disabled) return;
         load.disabled = true;
         try {
             const result = await api("GET", "/api/discord-install/servers");
@@ -581,7 +583,7 @@ function hostedBotCard(outcome) {
             let { setup } = result;
             if (reconnect) {
                 if (me.hostedBot?.guildId) return showSaved(me.hostedBot);
-                content.replaceChildren(h("a", { class: "bot-mode-cta", href: "/api/auth/discord" }, gsT("Hubungkan akun Discord")));
+                content.replaceChildren(connect);
                 return;
             }
             if (!servers.length) {
@@ -589,7 +591,9 @@ function hostedBotCard(outcome) {
                 return;
             }
             const select = h("select", {}, ...servers.map(server => h("option", { value: server.id }, server.name)));
-            if (servers.some(server => server.id === setup?.guildId)) select.value = setup.guildId;
+            const preferred = selectedGuildId || setup?.guildId;
+            if (servers.some(server => server.id === preferred)) select.value = preferred;
+            selectedGuildId = select.value;
             const actions = h("div", { class: "hosted-bot-actions" });
             const status = h("p", { class: "mut", role: "status" });
             const updateStatus = () => {
@@ -604,8 +608,13 @@ function hostedBotCard(outcome) {
             const draw = () => {
                 const { server, active } = updateStatus();
                 if (!server.installed) {
-                    actions.replaceChildren(h("a", { class: "bot-mode-cta", href: server.invite, target: "_blank", rel: "noopener" }, gsT("Undang bot ke server")),
-                        load);
+                    const invite = h("a", {
+                        class: "bot-mode-cta", href: server.invite, target: "_blank", rel: "noopener",
+                        onclick: () => window.addEventListener("focus", () => {
+                            if (content.isConnected) load.click();
+                        }, { once: true }),
+                    }, gsT("Tambah bot ke server"));
+                    actions.replaceChildren(invite, load);
                     return;
                 }
                 if (!canActivate) { actions.replaceChildren(); return; }
@@ -624,7 +633,10 @@ function hostedBotCard(outcome) {
                 });
                 actions.replaceChildren(button);
             };
-            select.onchange = draw;
+            select.onchange = () => {
+                selectedGuildId = select.value;
+                draw();
+            };
             content.replaceChildren(h("span", { class: "bot-mode-status" }, gsT("Discord terhubung")),
                 field(gsT("Pilih server Discord"), select), status, actions);
             draw();
@@ -633,7 +645,7 @@ function hostedBotCard(outcome) {
             load.disabled = false;
         }
     });
-    content.append(h("div", { class: "hosted-bot-actions" }, connect, load));
+    content.append(h("div", { class: "hosted-bot-actions" }, connect));
     if (outcome === "connected") load.click();
     else if (me.hostedBot?.guildId) showSaved(me.hostedBot);
     const notice = {
@@ -641,8 +653,8 @@ function hostedBotCard(outcome) {
         conflict: "Lisensi ini sudah terhubung ke akun Discord lain.",
         unavailable: "Bot GevraStore belum tersedia untuk lisensi ini.",
     }[outcome];
-    return card(h("h2", {}, gsT("Undang bot GevraStore")),
-        h("p", { class: "mut" }, gsT("Pilih server yang kamu kelola dan konfirmasi undangan di Discord.")),
+    return card(h("h2", {}, gsT("Tambah bot GevraStore")),
+        h("p", { class: "mut" }, gsT("Hubungkan Discord, pilih server, lalu konfirmasi pemasangan di Discord.")),
         notice ? h("p", { class: "mut", role: "status" }, gsT(notice)) : null, content);
 }
 
@@ -721,9 +733,10 @@ async function bot() {
                 finally { btn.disabled = false; btn.textContent = gsT("Simpan"); }
             }) }, gsT("Simpan"))), msg),
         card(h("h2", {}, gsT("Log bot")), pre));
+    const showHosted = !!outcome || me.hostedBotConfigured || (me.discordInstallEnabled && !me.config.has.botToken);
     return h("div", {},
         head(isService ? "Service Bot & Server" : "Bot & Server", isService ? gsT("Hubungkan bot AutoStore Service dan database kamu.") : gsT("Pilih bot untuk server tokomu.")),
-        isService ? ownBot : botModePicker(ownBot, me.discordInstallEnabled ? hostedBotCard(outcome) : null, !!outcome || me.hostedBotConfigured));
+        isService ? ownBot : botModePicker(ownBot, me.discordInstallEnabled ? hostedBotCard(outcome) : null, showHosted));
 }
 
 

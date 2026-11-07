@@ -3,8 +3,9 @@
 const config = require("../config/config.json");
 const Qris = require("../Schema/qris");
 const { EmbedBuilder } = require("discord.js");
-const { COLOR, WL, Benar } = require("../config/configemoji.json");
-const { sendDepositLog, updateDepositLog, fetchDmMessage } = require("./depositWatcher");
+const { COLOR, Benar } = require("../config/configemoji.json");
+const { sendDepositLog, updateDepositLog, fetchDmMessage, formatDepositCredit } = require("./depositWatcher");
+const { rupiahCredit } = require("../config/storefront");
 
 function headers() {
     return {
@@ -43,7 +44,8 @@ async function syncHostedDepositLogs() {
         });
         if (!response.ok) continue;
         const result = await response.json();
-        if (result.amount !== trx.grossAmount || result.wl !== trx.wlAmount) continue;
+        if (result.amount !== trx.grossAmount || (trx.creditCurrency === rupiahCredit
+            ? result.creditCurrency !== rupiahCredit : result.wl !== trx.wlAmount)) continue;
         if (!trx.logMessageId) {
             await sendDepositLog(trx);
             trx = await Qris.findById(trx._id);
@@ -63,7 +65,7 @@ async function syncHostedDepositLogs() {
         const dm = await fetchDmMessage(trx);
         if (dm) {
             const embed = new EmbedBuilder().setTitle("Deposit Berhasil")
-                .setDescription(`${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil diverifikasi otomatis!\n\n> Order ID: \`${trx.orderId}\`\n> Balance Diterima: **${trx.wlAmount} ${WL}**`)
+                .setDescription(`${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil diverifikasi otomatis!\n\n> Order ID: \`${trx.orderId}\`\n> Balance Diterima: **${formatDepositCredit(trx)}**`)
                 .setColor(COLOR).setTimestamp();
             await dm.edit({ embeds: [embed], components: [], attachments: [] }).catch(() => {});
         }

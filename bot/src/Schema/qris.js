@@ -32,7 +32,7 @@ const schema = new Schema({
   },
   status: {
     type: String,
-    default: "pending", // pending | credited | cancelled
+    default: "pending", // pending | crediting | credited | cancelled
   },
   processedBy: {
     type: String, // Discord ID admin/owner yang menekan Success/Cancel
@@ -49,6 +49,7 @@ const schema = new Schema({
     default: "manual", // manual | auto (QRIS otomatis lewat panel)
   },
   panelManaged: { type: Boolean, default: false },
+  creditCurrency: { type: String, enum: ["idr"] },
   notificationPending: { type: Boolean, default: false },
   statusCheckedAt: { type: Date, default: () => new Date(0) },
   createdAt: {

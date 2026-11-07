@@ -11,6 +11,7 @@ let client = require('../../index');
 let mt = require("../../Schema/maintenance.js");
 let Bal = require("../../Schema/balance.js");
 let list = require("../../Schema/list.js");
+const Stock = require("../../Schema/shop.js");
 let { serverId } = require("../../config/config.json");
 let { BOT, Buy, COLOR, CROWN } = require("../../config/configemoji.json");
 let cd = new Map();
@@ -59,10 +60,15 @@ client.on("interactionCreate", async (interaction) => {
                     .setCustomId("growid23")
             );
 
-            if (interaction.guild != serverId) return interaction.reply({
+            if (interaction.guildId !== serverId) return interaction.reply({
                 content: "You can use the button if not a server in config!",
                 ephemeral: true
             });
+
+            const code = interaction.values[0];
+            if (!code || code === "none" || !await Stock.exists({ code, data: { $type: "string", $ne: "" } })) {
+                return interaction.reply({ content: "❌ Stok produk ini sedang habis.", ephemeral: true });
+            }
 
             if (!getBal) {
                 return interaction.reply({
@@ -81,14 +87,6 @@ client.on("interactionCreate", async (interaction) => {
                 });
             }
             cd.set(interaction.guildId, Date.now() + 40000);
-
-            let code = interaction.values[0];
-            if (!code || code === "none") {
-                return interaction.reply({
-                    content: "No product available right now!",
-                    ephemeral: true
-                });
-            }
 
             let userCd = cd.get(`amount_${interaction.user.id}`);
             if (userCd && Date.now() < userCd) {

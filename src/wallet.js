@@ -9,6 +9,7 @@
 "use strict";
 const crypto = require("crypto");
 const { WalletError } = require("./walletdb");
+const { rupiahCredit } = require("../bot/src/config/storefront");
 
 const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const rp = (n) => "Rp" + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -39,7 +40,7 @@ function createWallet(opts) {
     };
 
     // ---------------------------------------------------------------- Deposit
-    async function createDeposit({ licenseId, amount, discordId = "", hostedWL, hostedTenantId }) {
+    async function createDeposit({ licenseId, amount, discordId = "", hostedWL, hostedTenantId, creditCurrency }) {
         if (!autoko.enabled) throw new WalletError("Pembayaran otomatis belum aktif.", 503);
         if (isFrozen(licenseId)) throw new WalletError("Pembayaran otomatis toko ini sedang dibekukan penjual.", 403);
         const amt = needInt(amount, "Nominal");
@@ -49,6 +50,9 @@ function createWallet(opts) {
         const t = now(), live = { status: "pending", expiresAt: { $gt: t } };
         if ((await c.deposits.countDocuments({ licenseId, ...live })) >= maxOpenDeposits) throw new WalletError("Terlalu banyak QRIS yang belum dibayar. Tunggu sebentar lalu coba lagi.", 429);
         const did = clean(discordId, 25);
+        if (creditCurrency !== undefined && (creditCurrency !== rupiahCredit || hostedWL !== undefined || !/^\d{17,20}$/.test(did))) {
+            throw new WalletError("Mata uang saldo atau akun Discord tidak valid.");
+        }
         if (hostedWL !== undefined && (!Number.isSafeInteger(hostedWL) || hostedWL < 1 || !/^\d{17,20}$/.test(did))) {
             throw new WalletError("Nominal saldo atau akun Discord tidak valid.");
         }
@@ -58,6 +62,7 @@ function createWallet(opts) {
         const dep = { orderId: newOrderId(), licenseId, discordId: did, amount: amt, fee, net: amt - fee, status: "pending", createdAt: t, expiresAt: t + depositTtlMs, botDeliveredAt: null, botAttempts: 0 };
         if (hostedWL !== undefined) dep.hostedWL = hostedWL;
         if (hostedTenantId) dep.hostedTenantId = hostedTenantId;
+        if (creditCurrency === rupiahCredit) dep.creditCurrency = creditCurrency;
         await c.deposits.insertOne(dep);
         try {
             const q = await autoko.createQris({ orderId: dep.orderId, amount: amt, expiresAt: dep.expiresAt });
@@ -71,16 +76,17 @@ function createWallet(opts) {
 
     async function deliver(c, dep) {
         let ok = false;
+        const isHosted = dep.hostedWL !== undefined || !!dep.hostedTenantId;
         try {
-            ok = dep.hostedWL === undefined
-                ? await forwardToBot(dep.licenseId, { status: "completed", externalId: dep.orderId, amount: dep.amount })
-                : await creditHosted(dep);
+            ok = isHosted ? await creditHosted(dep)
+                : await forwardToBot(dep.licenseId, { status: "completed", externalId: dep.orderId, amount: dep.amount,
+                    ...(dep.creditCurrency === rupiahCredit ? { creditCurrency: dep.creditCurrency } : {}) });
         } catch { ok = false; }
         if (ok) { await c.deposits.updateOne({ orderId: dep.orderId }, { $set: { botDeliveredAt: now() } }); return true; }
         const upd = await c.deposits.findOneAndUpdate({ orderId: dep.orderId }, { $inc: { botAttempts: 1 } }, { returnDocument: "after" });
         if (upd && upd.botAttempts === maxBotAttempts)
             await tell("⚠️ Deposit sudah dibayar tapi belum masuk ke bot pembeli", [`Order: ${dep.orderId}`, `Nominal: ${rp(dep.amount)}`,
-                dep.hostedWL === undefined ? "Admin toko pembeli bisa menekan tombol Success di log donasi Discord sebagai jalan keluar." : "Cek koneksi database toko GevraStore dan transaksi deposit."]);
+                !isHosted ? "Admin toko pembeli bisa menekan tombol Success di log donasi Discord sebagai jalan keluar." : "Cek koneksi database toko GevraStore dan transaksi deposit."]);
         return false;
     }
 
@@ -138,7 +144,8 @@ function createWallet(opts) {
         const c = await getCols();
         const dep = await c.deposits.findOne({ licenseId, hostedTenantId, orderId });
         if (!dep) throw new WalletError("Pesanan deposit tidak ditemukan.", 404);
-        return { status: dep.status, credited: !!dep.botDeliveredAt, amount: dep.amount, wl: dep.hostedWL };
+        return { status: dep.status, credited: !!dep.botDeliveredAt, amount: dep.amount, wl: dep.hostedWL,
+            ...(dep.creditCurrency === rupiahCredit ? { creditCurrency: dep.creditCurrency } : {}) };
     }
 
     async function cancelHostedDeposit(licenseId, hostedTenantId, orderId) {

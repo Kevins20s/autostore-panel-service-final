@@ -1,10 +1,11 @@
 const client = require("../../index");
 const Qris = require("../../Schema/qris.js");
-const { creditDeposit, cancelDeposit, fetchDmMessage } = require("../../utils/depositWatcher.js");
+const { creditDeposit, cancelDeposit, fetchDmMessage, formatDepositCredit } = require("../../utils/depositWatcher.js");
 const { Owner, Admin, serverId } = require("../../config/config.json");
 const { Warning, Benar, Salah } = require("../../config/configemoji.json");
 const { cancelHostedQris } = require("../../utils/hostedDepositLogs");
 const { readHostedQrCancelId } = require("../../utils/hostedQrCancel");
+const { rupiahCredit } = require("../../config/storefront");
 const hostedBinding = process.env.HOSTED_PILOT_BINDING ? JSON.parse(process.env.HOSTED_PILOT_BINDING) : null;
 
 module.exports = {
@@ -58,7 +59,7 @@ client.on("interactionCreate", async (interaction) => {
             });
         }
 
-        if (trx.status !== "pending") {
+        if (trx.status !== "pending" && !(isSuccess && trx.creditCurrency === rupiahCredit && trx.status === "crediting")) {
             return interaction.editReply({
                 content: `${Warning} Transaksi ini sudah diproses sebelumnya (status saat ini: **${trx.status}**).`,
             });
@@ -81,7 +82,7 @@ client.on("interactionCreate", async (interaction) => {
             }
 
             return interaction.editReply({
-                content: `${Benar} Deposit \`${trx.orderId}\` ditandai **SUCCESS**, balance **${trx.wlAmount} WL** sudah ditambahkan ke <@${trx.discordId}>.`,
+                content: `${Benar} Deposit \`${trx.orderId}\` ditandai **SUCCESS**, **${formatDepositCredit(trx)}** sudah ditambahkan untuk <@${trx.discordId}>.`,
             });
         } else {
             const ok = await cancelDeposit(trx, dmMessage, interaction.user.id);

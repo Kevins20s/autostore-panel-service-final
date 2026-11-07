@@ -3,6 +3,7 @@
 // Integration test with disposable MongoDB databases and simulated Discord/Autoko.
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const { once } = require("node:events");
 const path = require("node:path");
 const { fork } = require("node:child_process");
 const root = path.join(__dirname, "..");
@@ -19,16 +20,64 @@ function botDependency(name) {
 
 async function runBuyer({ url, dbName, guildId }) {
     const mongoose = botDependency("mongoose");
-    const { InteractionType } = botDependency("discord.js");
+    const { InteractionType, MessageFlags } = botDependency("discord.js");
     const index = require.resolve("../bot/src/index.js");
     require.cache[index] = { id: index, filename: index, loaded: true, exports: {
         on() {}, users: { fetch: async () => ({ send: async () => {} }) },
     } };
     const { handlePurchase } = require("../bot/src/events/client/interactionBuy");
     const { creditWorldDeposit } = require("../bot/src/utils/hostedWorldDeposit");
+    const botConfig = require("../bot/src/config/config.json");
+    botConfig.serverId = guildId;
+    botConfig.PanelWebhookSecret = "synthetic-panel-webhook-secret";
+    const { handleStorefront } = require("../bot/src/events/client/interactionStorefront");
+    const { creditDeposit } = require("../bot/src/utils/depositWatcher");
+    const Qris = require("../bot/src/Schema/qris");
     process.env.HOSTED_PILOT_BINDING = "integration";
     try {
         await mongoose.connect(url, { dbName });
+        const accounts = mongoose.connection.db.collection("bals");
+        if (guildId === guilds[1]) {
+            const order = await Qris.create({ orderId: "model1-manual", discordId: buyerId, grossAmount: 8500, wlAmount: 0, creditCurrency: "idr" });
+            assert.equal((await Promise.all([creditDeposit(order, null), creditDeposit(order, null)])).filter(Boolean).length, 1);
+            const retry = await Qris.create({ orderId: "model1-retry", discordId: buyerId, grossAmount: 250,
+                wlAmount: 0, creditCurrency: "idr", status: "crediting" });
+            await accounts.updateOne({ DiscordID: buyerId }, { $inc: { BalanceRp: 250 }, $addToSet: { RupiahCreditIds: retry.orderId } });
+            assert.ok(await creditDeposit(retry, null));
+            process.env.PORT = "0";
+            const webhook = require("../bot/src/webhookServer").startWebhookServer({});
+            await once(webhook, "listening");
+            try {
+                const forward = async amount => {
+                    const body = JSON.stringify({ status: "completed", externalId: "model1-auto", amount, creditCurrency: "idr" });
+                    const signature = crypto.createHmac("sha256", botConfig.PanelWebhookSecret).update(body).digest("hex");
+                    const response = await fetch("http://127.0.0.1:" + webhook.address().port + "/webhook", {
+                        method: "POST", headers: { "Content-Type": "application/json", "X-Webhook-Signature": signature }, body,
+                    });
+                    await response.text();
+                    return response.status;
+                };
+                assert.equal(await forward(500), 503);
+                await Qris.create({ orderId: "model1-auto", discordId: buyerId, grossAmount: 500,
+                    wlAmount: 0, creditCurrency: "idr", status: "cancelled", mode: "auto" });
+                assert.equal(await forward(400), 409);
+                assert.deepEqual(await Promise.all([forward(500), forward(500)]), [200, 200]);
+            } finally { await new Promise(resolve => webhook.close(resolve)); }
+        }
+        assert.equal((await accounts.findOne({ DiscordID: buyerId })).BalanceRp, 9250);
+        const conversionReplies = [];
+        const conversion = customId => ({
+            customId, guildId, guild: { name: "Synthetic store" }, user: { id: buyerId }, isButton: () => true,
+            deferReply: async options => assert.equal(options.flags, MessageFlags.Ephemeral),
+            editReply: async response => { conversionReplies.push(response); },
+        });
+        await handleStorefront(conversion("storefront_convert"));
+        const quote = conversionReplies[0].components[0].toJSON().components[0].custom_id;
+        assert.match(quote, /^storefront_convert:/);
+        await Promise.all([handleStorefront(conversion(quote)), handleStorefront(conversion(quote))]);
+        assert.equal(conversionReplies.filter(reply => /masuk ke saldo WL/.test(reply.embeds[0].toJSON().description)).length, 1);
+        assert.equal((await accounts.findOne({ DiscordID: buyerId })).BalanceRp, 70);
+
         const log = { id: "100000000000000088", webhookId: "100000000000000087", channelId: "100000000000000086",
             embeds: [{ description: "GrowID: Synthetic\nAmount: 2 Diamond Lock" }] };
         const settings = { DonationWebhookId: log.webhookId, ChannelDonation: log.channelId };
@@ -121,6 +170,8 @@ async function main() {
             const db = client.db(tenant.dbName);
             await db.collection("bals").insertOne({ DiscordID: buyerId, GrowID: "synthetic", GrowIDNow: "Synthetic", Balance: 30 + 20 * i, Deposit: 30 + 20 * i });
             await db.collection("setchannels").insertOne({ ChanelTesti: testimonyId });
+            await db.collection("apisettings").insertOne({ useLiveApi: false });
+            await db.collection("wlrates").insertOne({ pricePerWL: 90 });
         }));
 
         const deposits = await Promise.all(tenants.map(async tenant => {
@@ -132,6 +183,21 @@ async function main() {
             return r.json();
         }));
         await Promise.all(deposits.flatMap(tx => [1, 2].map(() => wallet.handlePaid({ orderId: tx.orderId, amount: 1000 }))));
+        const tenant = tenants[0];
+        const rupiahOrderResponse = await fetch(origin + "/internal/wallet/deposit", { method: "POST", headers: {
+            "Content-Type": "application/json", "X-License-Id": tenant.licenseId, "X-Hosted-Guild": tenant.guildId,
+            Authorization: "Bearer " + hostedWalletToken(tenant.licenseId, tenant.guildId),
+        }, body: JSON.stringify({ amount: 9250, discordId: buyerId, creditCurrency: "idr" }) });
+        assert.equal(rupiahOrderResponse.status, 200);
+        const rupiahOrder = await rupiahOrderResponse.json();
+        assert.equal(rupiahOrder.creditCurrency, "idr");
+        assert.equal(rupiahOrder.panelManaged, true);
+        await Promise.all([1, 2].map(() => wallet.handlePaid({ orderId: rupiahOrder.orderId, amount: 9250 })));
+        const status = await wallet.hostedDepositStatus(tenant.licenseId, tenant.tenantId, rupiahOrder.orderId);
+        assert.equal(status.creditCurrency, "idr");
+        assert.equal(status.credited, true);
+        assert.equal((await client.db(tenant.dbName).collection("bals").findOne({ DiscordID: buyerId })).Balance, 130);
+        assert.equal((await client.db(tenants[1].dbName).collection("bals").findOne({ DiscordID: buyerId })).BalanceRp, undefined);
 
         const purchases = await Promise.all(tenants.map(tenant => new Promise((resolve, reject) => {
             const worker = fork(__filename, ["worker"]);
@@ -152,12 +218,13 @@ async function main() {
             assert.equal(products.products[0].name, "Store " + i);
             assert.equal(products.products[0].stock, 0);
             assert.equal(stats.productSales[0].qty, 1);
-            assert.equal(buyerDoc.Balance, 320 + 20 * i);
+            assert.equal(buyerDoc.Balance, 422 + 20 * i);
+            assert.equal(buyerDoc.BalanceRp, 70);
             assert.equal(await db.collection("hostedcredits").countDocuments({ _id: deposits[i].orderId }), 1);
             assert.equal(await db.collection("hostedcredits").countDocuments({ _id: deposits[1-i].orderId }), 0);
             assert.equal(await db.collection("worlddepositreceipts").countDocuments(), 1);
         }));
-        console.log("OK: 40 concurrent panel reads and two simultaneous isolated stores; no mixed stock, balance, QRIS, world credit, or reports");
+        console.log("OK: two isolated stores; concurrent QRIS and conversion, interrupted credit retry, stock, world deposit and reports");
     } finally {
         for (const child of children) if (child.connected) child.kill();
         http.close();

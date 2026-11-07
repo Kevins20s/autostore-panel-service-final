@@ -23,6 +23,8 @@ const schema = new Schema({
     default: 0,
     required: true,
   },
+  BalanceRp: { type: Number, default: 0 },
+  RupiahCreditIds: { type: [String], default: undefined },
 });
 
 const Bal = model("Bal", schema);

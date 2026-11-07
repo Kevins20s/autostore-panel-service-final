@@ -15,6 +15,7 @@ let Price = require("../../Schema/priceproduct.js");
 let { MessageEmbed } = require("discord.js");
 let depo = require("../../Schema/deposition.js");
 let cd = new Map();
+const { buttons } = require("../../config/storefront");
 
 module.exports = {
     name: "ButtonMessage"
@@ -67,7 +68,13 @@ client.on("interactionCreate", async (interaction) => {
                 iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
             });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        const components = [];
+        if (wallet1.BalanceRp > 0) {
+            embed.addFields({ name: "Saldo Rupiah", value: "Rp" + wallet1.BalanceRp.toLocaleString("id-ID") });
+            components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(buttons.convert)
+                .setLabel("Convert Rp to WL").setEmoji("🔄").setStyle(ButtonStyle.Success)));
+        }
+        await interaction.reply({ embeds: [embed], components, ephemeral: true });
     }
 
     if (interaction.customId === "deposit") {

@@ -4,12 +4,18 @@ const Qris = require("../Schema/qris.js");
 const Bal = require("../Schema/balance.js");
 const SettingChannel = require("../Schema/SettingChannel.js");
 const { WL, Benar, Warning, COLOR } = require("../config/configemoji.json");
+const { rupiahCredit } = require("../config/storefront");
 
 const LOG_STATUS = {
     PENDING: { label: "⏳ PENDING", color: 0xfee75c },
     SUCCESS: { label: "✅ SUCCESS", color: 0x57f287 },
     CANCELLED: { label: "⛔ CANCELLED", color: 0xed4245 },
 };
+
+function formatDepositCredit(trx) {
+    return trx.creditCurrency === rupiahCredit
+        ? `Rp${trx.grossAmount.toLocaleString("id-ID")} ke saldo Rupiah` : `${trx.wlAmount} ${WL}`;
+}
 
 function buildLogEmbed(trx, statusKey) {
     const style = LOG_STATUS[statusKey];
@@ -24,8 +30,8 @@ function buildLogEmbed(trx, statusKey) {
             { name: "GrowID", value: `\`${trx.growId || "-"}\``, inline: true },
             { name: "Order ID", value: `\`${trx.orderId}\`` },
             { name: "Amount", value: `Rp${trx.grossAmount.toLocaleString("id-ID")}`, inline: true },
-            { name: "WL", value: `${trx.wlAmount} ${WL}`, inline: true },
-            { name: "Rate", value: rate ? `1 ${WL} = Rp${rate.toLocaleString("id-ID")}` : "-", inline: true }
+            { name: "Saldo diterima", value: formatDepositCredit(trx), inline: true },
+            ...(trx.creditCurrency === rupiahCredit ? [] : [{ name: "Rate", value: rate ? `1 ${WL} = Rp${rate.toLocaleString("id-ID")}` : "-", inline: true }])
         )
         .setFooter({ text: trx.mode === "auto" ? "Auto-Store QRIS Deposit • Otomatis" : "Auto-Store QRIS Deposit • Konfirmasi Manual" })
         .setTimestamp();
@@ -187,11 +193,32 @@ async function editMessageSafely(message, embed) {
  * @param {import("discord.js").Message} message - pesan DM user (hasil fetchDmMessage)
  * @param {String} [processedBy] - Discord ID admin/owner yang menekan tombol
  */
-async function creditDeposit(trx, message, processedBy) {
+async function creditRupiahDeposit(trx, processedBy, allowCancelled) {
+    if (!Number.isSafeInteger(trx.grossAmount) || trx.grossAmount <= 0) return null;
+    const order = { orderId: trx.orderId, creditCurrency: rupiahCredit };
+    const eligible = allowCancelled ? { $in: ["pending", "cancelled"] } : "pending";
+    const claimed = await Qris.findOneAndUpdate({ ...order, status: eligible },
+        { $set: { status: "crediting", processedBy } }, { new: true })
+        || await Qris.findOne({ ...order, status: "crediting" });
+    if (!claimed) return null;
+
+    // The order marker and the balance change commit in the same document, even on standalone MongoDB.
+    const account = { DiscordID: claimed.discordId };
+    const result = await Bal.updateOne({ ...account, RupiahCreditIds: { $ne: claimed.orderId } }, {
+        $inc: { BalanceRp: claimed.grossAmount }, $addToSet: { RupiahCreditIds: claimed.orderId },
+    });
+    if (!result.matchedCount && !await Bal.exists({ ...account, RupiahCreditIds: claimed.orderId })) {
+        throw new Error("Akun saldo Rupiah tidak ditemukan");
+    }
+    return Qris.findOneAndUpdate({ ...order, status: "crediting" }, { $set: { status: "credited" } }, { new: true });
+}
+
+async function creditDeposit(trx, message, processedBy, { allowCancelled = false, background = false } = {}) {
     if (trx.panelManaged) return false;
     console.log("[DEBUG QRIS] creditDeposit dipanggil untuk orderId:", trx.orderId, "| processedBy:", processedBy);
 
-    const updated = await Qris.findOneAndUpdate(
+    const rupiah = trx.creditCurrency === rupiahCredit;
+    const updated = rupiah ? await creditRupiahDeposit(trx, processedBy, allowCancelled) : await Qris.findOneAndUpdate(
         { orderId: trx.orderId, status: "pending" },
         { $set: { status: "credited", processedBy } }
     );
@@ -201,7 +228,7 @@ async function creditDeposit(trx, message, processedBy) {
         return false;
     }
 
-    await Bal.updateOne(
+    if (!rupiah) await Bal.updateOne(
         { DiscordID: trx.discordId },
         { $inc: { Balance: trx.wlAmount, Deposit: trx.wlAmount } }
     );
@@ -211,15 +238,18 @@ async function creditDeposit(trx, message, processedBy) {
         .setDescription(
             `${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil ${processedBy ? "dikonfirmasi oleh admin" : "diverifikasi otomatis"}!\n\n` +
             `> Order ID: \`${trx.orderId}\`\n` +
-            `> Balance Diterima: **${trx.wlAmount} ${WL}**`
+            `> Balance Diterima: **${formatDepositCredit(trx)}**`
         )
         .setColor(COLOR)
         .setTimestamp();
 
-    await editMessageSafely(message, embed);
-
-    trx.processedBy = processedBy;
-    await updateDepositLog(trx, "SUCCESS");
+    trx.processedBy = rupiah ? updated.processedBy : processedBy;
+    const notify = async () => {
+        await editMessageSafely(message === undefined ? await fetchDmMessage(trx) : message, embed);
+        await updateDepositLog(trx, "SUCCESS");
+    };
+    if (background) notify().catch(error => console.error("Gagal mengirim notifikasi QRIS:", error.code || error.name));
+    else await notify();
     console.log("[DEBUG QRIS] creditDeposit: selesai.");
     return true;
 }
@@ -269,5 +299,6 @@ module.exports = {
     fetchDmMessage,
     getQrisImageUrl,
     creditDeposit,
+    formatDepositCredit,
     cancelDeposit,
 };

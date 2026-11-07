@@ -584,7 +584,7 @@ function storefrontSettings(storefront) {
         const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
             : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
         preview.replaceChildren(...[
-            compact ? null : h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
+            h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
                 h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
             h("div", { class: "storefront-preview-select" },
                 compact ? "🛒 Select product to buy..." : "Click here to buy products", h("span", { "aria-hidden": "true" }, "⌄")),
@@ -593,11 +593,19 @@ function storefrontSettings(storefront) {
             compact ? h("details", { class: "storefront-profile-preview" },
                 h("summary", {}, text("Lihat pratinjau My Profile", "Preview My Profile")),
                 h("div", { class: "storefront-preview-embed" }, h("strong", {}, "Profil Kamu"),
-                    h("span", {}, "Discord · @Pelanggan　 |　 GrowID · GrowBuyer　 |　 Balance WL · 100 WL"),
+                    h("span", {}, "Discord · @Pelanggan　 |　 GrowID · GrowBuyer　 |　 Balance WL · 100 WL　 |　 Balance Rp · Rp9.250"),
                     h("span", {}, "Total Spent · 25 WL　 |　 Total Deposit · 125 WL"),
                     h("div", { class: "storefront-preview-actions" },
                         h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
                         h("span", {}, "👤 Profile"), h("span", {}, "💰 Balance"), h("span", {}, "📜 History"))))
+                : null,
+            compact ? h("details", { class: "storefront-profile-preview" },
+                h("summary", {}, text("Lihat contoh stok & pembayaran", "Preview stock & payments")),
+                h("div", { class: "storefront-preview-embed" },
+                    h("span", {}, "✅ VOUCHER DIGITAL · Code: VOUCHER01 | Stock: 12"),
+                    h("span", {}, "❌ VOUCHER PREMIUM · Code: VOUCHER02 | Stock: 0"),
+                    h("span", {}, text("❌ Semua produk sedang habis", "❌ All products are sold out")),
+                    h("span", {}, text("Top Up WL langsung menambah WL. QRIS menambah saldo Rupiah yang bisa dikonversi lewat Convert Rp to WL.", "Growtopia top-ups credit WL. QRIS credits a rupiah balance that can be exchanged with Convert Rp to WL."))))
                 : null,
         ].filter(Boolean));
     };

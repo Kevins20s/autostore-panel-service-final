@@ -70,14 +70,17 @@ async function resumeRealtime(client) {
 }
 
 function compactRows(options, maintenance) {
+    const available = options.filter(option => option.emoji.name === "✅");
+    const soldOut = !available.length;
+    const displayed = (options.length > 25 ? [...available, ...options.filter(option => option.emoji.name === "❌")] : options).slice(0, 25);
     const select = new StringSelectMenuBuilder().setCustomId("Howmanys")
-        .setPlaceholder(maintenance ? "Under Maintenance" : "🛒 Select product to buy...")
-        .setDisabled(maintenance || !options.length)
-        .addOptions(options.length ? options : [{ label: "No product available", value: "none" }]);
+        .setPlaceholder(maintenance ? "Under Maintenance" : soldOut ? "❌ Semua produk sedang habis" : "🛒 Select product to buy...")
+        .setDisabled(maintenance || soldOut)
+        .addOptions(displayed.length ? displayed : [{ label: "Semua produk sedang habis", value: "none" }]);
     const actions = [
         [buttons.profile, "My Profile", "👤"],
-        ["deposit", "Top Up WL", "💎"],
-        ["depositqris_btn", "QRIS Top Up", "💳"],
+        [buttons.deposit, "Top Up WL", "💎"],
+        [buttons.qris, "QRIS Top Up", "💳"],
         [buttons.history, "History", "📜"],
     ];
     return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(
@@ -148,14 +151,13 @@ async function renderCatalog(message, guildId, kategori) {
     const compact = storefront?.model === models.model1;
 
     // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
-    let { pricePerWL, pricePerDL } = compact ? {} : await getEffectiveWLPrice();
+    const { pricePerWL, pricePerDL } = await getEffectiveWLPrice();
 
     if (!compact) await order
         .findOneAndUpdate({}, { $inc: { OdeOder: 1 } }, { upsert: true, new: true })
         .catch(console.error);
 
-    const products = list.find(productFilter);
-    const getCodes = await (compact ? products.limit(25) : products);
+    const getCodes = await list.find(productFilter);
 
     let now = new Date();
     let format = `<t:${Math.floor(now.getTime() / 1000)}:R>`;
@@ -168,7 +170,8 @@ async function renderCatalog(message, guildId, kategori) {
     for (const code of getCodes) {
         const filter = { code: code.code };
         const [stock, priceDoc, discountDoc] = await Promise.all([
-            shop.countDocuments(filter), Price.findOne(filter), disc.findOne(filter),
+            shop.countDocuments(compact ? { ...filter, data: { $type: "string", $ne: "" } } : filter),
+            Price.findOne(filter), disc.findOne(filter),
         ]);
         const discount = discountDoc?.discount;
         let hasStock = stock > 0;
@@ -205,24 +208,20 @@ ${ARROW} Price: ${priceText} ${WL}${rupiahText}
 ${DIVIDER}`
         );
 
-        if (selectOptions.length < 25) {
-            const plainPrice = compact && effectivePrice !== null
-                ? new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(effectivePrice) + " WL"
-                : priceText.replace(/\*\*/g, "").replace(/~~[^~]*~~/g, "").trim();
+        if (compact || selectOptions.length < 25) {
+            const plainPrice = priceText.replace(/\*\*/g, "").replace(/~~[^~]*~~/g, "").trim();
             selectOptions.push({
                 label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
-                description: `Stock: ${stock} | Price: ${plainPrice}`.slice(0, 100),
-                value: code.code
+                description: (compact ? `Code: ${code.code} | Stock: ${stock}` : `Stock: ${stock} | Price: ${plainPrice}`).slice(0, 100),
+                value: code.code,
+                ...(compact ? { emoji: { name: hasStock ? "✅" : "❌" } } : {}),
             });
         }
     }
 
-    if (compact) {
-        await message.edit({ content: null, embeds: [], components: compactRows(selectOptions, MT) });
-        return;
-    }
-
-    let howToBuySection =
+    let howToBuySection = compact
+        ? `${Warning} **HOW TO BUY** ${Warning}\n${ARROW} Buka **My Profile** untuk mengatur GrowID.\n${ARROW} Pilih produk yang bertanda ✅ dari dropdown.`
+        :
 `${Warning} **HOW TO BUY** ${Warning}
 ${ARROW} Click Button **Set GrowID**
 ${ARROW} Click Button **Balance** To Check Your GrowID
@@ -235,12 +234,13 @@ ${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
 
     let titleText = kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
 
-    let description =
-`**Last Update:** ${format}
-${kursText}
-${DIVIDER}
-${productBlocks.join("\n")}
-${howToBuySection}`;
+    const header = `**Last Update:** ${format}\n${kursText}\n${DIVIDER}\n`;
+    const footer = "\n" + howToBuySection;
+    const productText = productBlocks.join("\n");
+    const room = 4096 - header.length - footer.length;
+    const shownProducts = productText.length <= room ? productText
+        : productText.slice(0, room - 40) + "\n… Lihat produk lainnya per kategori.";
+    const description = header + shownProducts + footer;
 
     let productEmbed = new EmbedBuilder()
         .setTitle(`${CROWN} ${titleText} ${CROWN}`)
@@ -248,6 +248,11 @@ ${howToBuySection}`;
         .setColor(COLOR)
         .setImage(imageUrl2)
         .setTimestamp();
+
+    if (compact) {
+        await message.edit({ content: null, embeds: [productEmbed], components: compactRows(selectOptions, MT) });
+        return;
+    }
 
     let selectRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()

@@ -16,6 +16,7 @@ const { getQrisImageUrl, sendDepositLog } = require("../../utils/depositWatcher.
 const { requestAutoDeposit, PanelError } = require("../../utils/panelWallet.js");
 const { hostedQrCancelId } = require("../../utils/hostedQrCancel");
 const { serverId } = require("../../config/config.json");
+const { buttons, rupiahCredit } = require("../../config/storefront");
 const { COLOR, WL, Warning } = require("../../config/configemoji.json");
 
 module.exports = {
@@ -26,10 +27,17 @@ module.exports = {
  * Alur QRIS otomatis: QR dinamis dari panel, saldo masuk sendiri begitu webhook pembayaran diterima.
  * Transaksi dicatat SEBELUM DM dikirim, supaya webhook yang datang cepat tetap menemukan ordernya.
  */
-async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL) {
-    const wlAmount = panel.hostedWL ?? Math.floor(panel.amount / pricePerWL);
+function creditDetails(nominal, wlAmount, pricePerWL, rupiah) {
+    return rupiah
+        ? `> Saldo Rupiah diterima: **Rp${nominal.toLocaleString("id-ID")}**\n` +
+          "> Setelah lunas, gunakan **Convert Rp to WL** untuk menukar saldo sesuai kurs saat itu.\n"
+        : `> Rate: **Rp${pricePerWL.toLocaleString("id-ID")}/WL**\n> Balance Diterima: **${wlAmount} ${WL}**\n`;
+}
 
-    if (wlAmount < 1) {
+async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah) {
+    const wlAmount = rupiah ? 0 : (panel.hostedWL ?? Math.floor(panel.amount / pricePerWL));
+
+    if (!rupiah && wlAmount < 1) {
         return interaction.editReply({
             content: `${Warning} Nominal terlalu kecil. Minimal **Rp${pricePerWL.toLocaleString("id-ID")}** untuk 1 ${WL}.`,
         });
@@ -41,8 +49,7 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
             `Scan QR di bawah ini menggunakan aplikasi e-wallet/mobile banking kamu\n\n` +
             `> Order ID: \`${panel.orderId}\`\n` +
             `> Nominal: **Rp${panel.amount.toLocaleString("id-ID")}**\n` +
-            `> Rate: **Rp${pricePerWL.toLocaleString("id-ID")}/WL**\n` +
-            `> Balance Diterima: **${wlAmount} ${WL}**\n` +
+            creditDetails(panel.amount, wlAmount, pricePerWL, rupiah) +
             `> Berlaku sampai: <t:${Math.floor(panel.expiresAt / 1000)}:R>\n\n` +
             `✅ Pembayaran **diverifikasi otomatis**. Balance masuk sendiri beberapa saat setelah kamu membayar, tidak perlu menunggu admin.\n` +
             `⚠️ Bayar sesuai nominal **Rp${panel.amount.toLocaleString("id-ID")}** dan sebelum QR kedaluwarsa. Simpan Order ID di atas kalau ada kendala.`
@@ -65,11 +72,12 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
         qrisDoc = await Qris.create({
             orderId: panel.orderId,
             mode: "auto",
-            panelManaged: panel.hostedWL !== undefined,
+            panelManaged: panel.panelManaged === true || panel.hostedWL !== undefined,
             discordId: interaction.user.id,
             growId: wallet.GrowIDNow,
             grossAmount: panel.amount,
             wlAmount,
+            ...(rupiah ? { creditCurrency: rupiahCredit } : {}),
         });
     } catch (err) {
         console.error("Gagal menyimpan transaksi QRIS otomatis:", err);
@@ -91,7 +99,7 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
         }
         await sendDepositLog(qrisDoc);
         return sent ? interaction.editReply({
-            content: "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
+            content: rupiah ? "✅ QR dikirim lewat DM. Setelah lunas, saldo Rupiah akan bertambah." : "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
         }) : interaction.editReply({ embeds: [embed], files, components });
     }
     let sentMessage;
@@ -114,13 +122,15 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
     sendDepositLog(qrisDoc).catch((err) => console.error("sendDepositLog error:", err.message));
 
     return interaction.editReply({
-        content: `✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!`,
+        content: rupiah ? "✅ QR dikirim lewat DM. Setelah lunas, saldo Rupiah akan bertambah." : "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
     });
 }
 
 client.on("interactionCreate", async (interaction) => {
     // Step 1: tombol "Deposit QRIS" diklik -> munculin modal
-    if (interaction.isButton() && interaction.customId === "depositqris_btn") {
+    if (interaction.isButton() && ["depositqris_btn", buttons.qris].includes(interaction.customId)) {
+        const rupiah = interaction.customId === buttons.qris;
+        if (rupiah && interaction.guildId !== serverId) return;
         const wallet = await Bal.findOne({ DiscordID: interaction.user.id }).catch(console.error);
 
         if (!wallet) {
@@ -131,7 +141,7 @@ client.on("interactionCreate", async (interaction) => {
         }
 
         const modal = new ModalBuilder()
-            .setCustomId("depositqris_modal")
+            .setCustomId(rupiah ? "depositqris_modal_rp" : "depositqris_modal")
             .setTitle("Deposit QRIS");
 
         const nominalInput = new TextInputBuilder()
@@ -149,7 +159,9 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     // Step 2: modal disubmit -> hitung WL, tampilkan QRIS statis, kirim log ke admin
-    if (interaction.isModalSubmit() && interaction.customId === "depositqris_modal") {
+    if (interaction.isModalSubmit() && ["depositqris_modal", "depositqris_modal_rp"].includes(interaction.customId)) {
+        const rupiah = interaction.customId === "depositqris_modal_rp";
+        if (rupiah && interaction.guildId !== serverId) return;
         const nominalRaw = interaction.fields.getTextInputValue("nominal").replace(/[^0-9]/g, "");
         const nominal = Math.floor(Number(nominalRaw));
 
@@ -172,9 +184,9 @@ client.on("interactionCreate", async (interaction) => {
             }
 
             // Harga WL dicek lebih dulu, supaya QRIS otomatis tidak pernah dibuat untuk nominal yang tidak bernilai WL.
-            const { pricePerWL } = await getEffectiveWLPrice();
+            const { pricePerWL } = rupiah ? {} : await getEffectiveWLPrice();
 
-            if (!pricePerWL) {
+            if (!rupiah && !pricePerWL) {
                 return interaction.editReply({
                     content: `${Warning} Harga WL belum tersedia (API down & belum ada harga manual). Coba lagi nanti.`,
                 });
@@ -183,7 +195,8 @@ client.on("interactionCreate", async (interaction) => {
             // Pilihan pembeli toko: QRIS otomatis (lewat panel) atau QRIS manual (/setqris). Panel yang menentukan modenya.
             let panel;
             try {
-                panel = await requestAutoDeposit({ amount: nominal, discordId: interaction.user.id, pricePerWL });
+                panel = await requestAutoDeposit({ amount: nominal, discordId: interaction.user.id, pricePerWL,
+                    creditCurrency: rupiah ? rupiahCredit : undefined });
             } catch (err) {
                 if (!(err instanceof PanelError)) console.error("Deposit QRIS otomatis error:", err);
                 return interaction.editReply({
@@ -192,7 +205,10 @@ client.on("interactionCreate", async (interaction) => {
             }
 
             if (panel.mode === "auto") {
-                return handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL);
+                if (rupiah && panel.creditCurrency !== rupiahCredit) {
+                    return interaction.editReply("QRIS saldo Rupiah belum siap. Coba lagi sebentar.");
+                }
+                return handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah);
             }
 
             const qrisImageUrl = await getQrisImageUrl();
@@ -204,7 +220,7 @@ client.on("interactionCreate", async (interaction) => {
             }
 
             const orderId = `GVRA-${interaction.user.id}-${Date.now()}`;
-            const wlAmount = Math.floor(nominal / pricePerWL);
+            const wlAmount = rupiah ? 0 : Math.floor(nominal / pricePerWL);
 
             const embed = new EmbedBuilder()
                 .setTitle("Deposit QRIS")
@@ -212,8 +228,7 @@ client.on("interactionCreate", async (interaction) => {
                     `Scan QR di bawah ini menggunakan aplikasi e-wallet/mobile banking kamu\n\n` +
                     `> Order ID: \`${orderId}\`\n` +
                     `> Nominal: **Rp${nominal.toLocaleString("id-ID")}**\n` +
-                    `> Rate: **Rp${pricePerWL.toLocaleString("id-ID")}/WL**\n` +
-                    `> Balance Diterima: **${wlAmount} ${WL}**\n\n` +
+                    creditDetails(nominal, wlAmount, pricePerWL, rupiah) + "\n" +
                     `⚠️ QRIS ini **nominal bebas**, jadi pastikan kamu bayar dengan nominal yang **PAS/SESUAI** (Rp${nominal.toLocaleString("id-ID")}) supaya gampang diverifikasi.\n\n` +
                     `Setelah bayar, tunggu **admin memverifikasi pembayaran secara manual**. Balance akan otomatis masuk begitu dikonfirmasi. Simpan Order ID di atas untuk referensi kalau ada kendala.`
                 )
@@ -221,26 +236,15 @@ client.on("interactionCreate", async (interaction) => {
                 .setColor(COLOR)
                 .setTimestamp();
 
-            let sentMessage;
-            try {
-                sentMessage = await interaction.user.send({ embeds: [embed] });
-            } catch (err) {
-                console.error("Gagal kirim DM:", err.message);
-                return interaction.editReply({
-                    content: `${Warning} Gagal mengirim DM ke kamu. Pastikan DM kamu terbuka untuk member server ini, lalu coba lagi.`,
-                });
-            }
-
             let qrisDoc;
             try {
                 qrisDoc = await Qris.create({
                     orderId,
                     discordId: interaction.user.id,
                     growId: wallet.GrowIDNow,
-                    dmChannelId: sentMessage.channelId,
-                    dmMessageId: sentMessage.id,
                     grossAmount: nominal,
                     wlAmount,
+                    ...(rupiah ? { creditCurrency: rupiahCredit } : {}),
                 });
             } catch (err) {
                 console.error("Gagal menyimpan transaksi QRIS ke database:", err);
@@ -248,6 +252,16 @@ client.on("interactionCreate", async (interaction) => {
                     content: `${Warning} Gagal menyimpan transaksi deposit. Coba lagi beberapa saat lagi.`,
                 });
             }
+
+            const sentMessage = await interaction.user.send({ embeds: [embed] }).catch(() => null);
+            if (!sentMessage) {
+                await Qris.updateOne({ orderId, status: "pending" }, { $set: { status: "cancelled" } });
+                return interaction.editReply({
+                    content: `${Warning} Gagal mengirim DM ke kamu. Pastikan DM kamu terbuka untuk member server ini, lalu coba lagi.`,
+                });
+            }
+            await Qris.updateOne({ orderId }, { $set: { dmChannelId: sentMessage.channelId, dmMessageId: sentMessage.id } })
+                .catch(error => console.error("Gagal menyimpan ID pesan QRIS:", error.code || error.name));
 
             // Kirim log deposit (status PENDING + tombol Success/Cancel) ke channel donation
             sendDepositLog(qrisDoc).catch((err) => console.error("sendDepositLog error:", err.message));

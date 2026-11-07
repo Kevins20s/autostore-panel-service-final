@@ -111,6 +111,26 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
       console.log("ok  pembatalan QRIS dan pembayaran terlambat tidak menggandakan saldo");
       await close(); }
 
+    // Model 1 dengan bot sendiri: retry kalau bot belum mencatat order, tanpa mengirim kredit kedua setelah selesai.
+    { const deliveries = [];
+      const { w, close } = await setup({ forwardToBot: async (_id, payload) => {
+          deliveries.push(payload);
+          return deliveries.length > 1;
+      } });
+      const d = await w.createDeposit({ licenseId: L, amount: 9250, discordId: "123456789012345678", creditCurrency: "idr" });
+      await w.handlePaid({ orderId: d.orderId, amount: 9250 });
+      assert.strictEqual((await w.listDeposits(L))[0].delivered, false);
+      await w.handlePaid({ orderId: d.orderId, amount: 9250 });
+      await w.handlePaid({ orderId: d.orderId, amount: 9250 });
+      assert.strictEqual((await w.listDeposits(L))[0].delivered, true);
+      assert.deepStrictEqual(deliveries, [1, 2].map(() => ({ status: "completed", externalId: d.orderId, amount: 9250, creditCurrency: "idr" })));
+      assert.strictEqual((await w.summary(L)).pending, 9250);
+      const { conversionQuote } = require("../bot/src/utils/storefrontConversion");
+      assert.deepStrictEqual(conversionQuote(9250, 90), { rate: 90, wl: 102, cost: 9180, remaining: 70 });
+      assert.deepStrictEqual(conversionQuote(1000, 90.01), { rate: 90.01, wl: 11, cost: 991, remaining: 9 });
+      assert.strictEqual(conversionQuote(1000, 0), null);
+      console.log("ok  QRIS Rupiah bot sendiri dapat dicoba ulang, konversi menyimpan sisa"); await close(); }
+
     // 3. biaya + validasi nominal
     { const { w, close } = await setup({ feePercent: 10, feeFlat: 500 });
       const d = await w.createDeposit({ licenseId: L, amount: 10000 }); await w.handlePaid({ orderId: d.orderId, amount: 10000 });

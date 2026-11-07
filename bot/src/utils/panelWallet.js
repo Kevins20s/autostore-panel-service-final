@@ -7,7 +7,7 @@ class PanelError extends Error {}
  * @returns {Promise<{mode:"manual"} | {mode:"auto", orderId:string, amount:number, expiresAt:number, qrPng:string|null, qrImageUrl:string|null}>}
  * Melempar PanelError (pesan aman ditampilkan ke user) kalau mode auto tapi gagal.
  */
-async function requestAutoDeposit({ amount, discordId, pricePerWL }) {
+async function requestAutoDeposit({ amount, discordId, pricePerWL, creditCurrency }) {
     if (!config.PanelInternalUrl || !config.PanelInternalToken || !config.PanelLicenseId) return { mode: "manual" };
 
     let res;
@@ -20,7 +20,7 @@ async function requestAutoDeposit({ amount, discordId, pricePerWL }) {
                 Authorization: `Bearer ${config.PanelInternalToken}`,
                 ...(process.env.HOSTED_PILOT_BINDING ? { "X-Hosted-Guild": config.serverId } : {}),
             },
-            body: JSON.stringify({ amount, discordId, pricePerWL }),
+            body: JSON.stringify({ amount, discordId, pricePerWL, creditCurrency }),
             signal: AbortSignal.timeout(40000),
         });
     } catch (err) {

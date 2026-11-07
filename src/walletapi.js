@@ -5,6 +5,7 @@ const express = require("express");
 const { derive } = require("./crypto");
 const { WalletError } = require("./walletdb");
 const { hostedTenant } = require("./shared-tenants");
+const { rupiahCredit } = require("../bot/src/config/storefront");
 
 // Token & secret per pembeli diturunkan dari MASTER_KEY, jadi tidak perlu disimpan dan ikut pindah bersama MASTER_KEY.
 const internalToken = (licenseId) => derive("wallet-internal:" + licenseId).toString("hex");
@@ -112,7 +113,12 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         if (tooFast(id)) return res.status(429).json({ error: "Terlalu banyak permintaan. Coba lagi sebentar lagi." });
         try {
             const input = { licenseId: l.id, amount: req.body?.amount, discordId: req.body?.discordId };
-            if (hosted) {
+            const currency = req.body?.creditCurrency;
+            if (currency !== undefined && currency !== rupiahCredit) throw new WalletError("Mata uang saldo tidak valid.");
+            if (currency === rupiahCredit) {
+                input.creditCurrency = currency;
+                if (hosted) input.hostedTenantId = hosted.tenantId;
+            } else if (hosted) {
                 const rate = Number(req.body?.pricePerWL);
                 const hostedWL = Math.floor(Number(input.amount) / rate);
                 if (!(rate > 0 && Number.isFinite(rate)) || !Number.isSafeInteger(hostedWL) || hostedWL < 1) {
@@ -123,7 +129,8 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
             const d = await wallet.createDeposit(input);
             const qrPng = d.qrString ? (await QRCode.toBuffer(d.qrString, { type: "png", width: 512, margin: 2 })).toString("base64") : null;
             res.json({ mode: "auto", orderId: d.orderId, amount: d.amount, expiresAt: d.expiresAt, qrPng, qrImageUrl: d.qrImageUrl,
-                ...(hosted ? { hostedWL: input.hostedWL } : {}) });
+                ...(currency === rupiahCredit ? { creditCurrency: currency, panelManaged: !!hosted }
+                    : hosted ? { hostedWL: input.hostedWL } : {}) });
         } catch (e) { send(res)(e); }
     });
 

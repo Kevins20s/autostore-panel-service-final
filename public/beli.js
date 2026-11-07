@@ -8,12 +8,20 @@
   var poll = null, tick = null, packages = [], chosen = "autostore";
   var tsKey = null, tsId = null, tsToken = ""; // Cloudflare Turnstile (hanya kalau diaktifkan penjual)
   let discordInvite = "", dlQuote = null, loadingQuote = null, methodUpdate = 0;
+  let autoQris = false;
   const selectedMethod = () => document.querySelector('input[name="paymentMethod"]:checked').value;
 
   function rp(n) { return "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
   const CHECKOUT_STEPS = { stForm: 0, stDetails: 1, stPay: 2, stDiscordPay: 2, stWait: 2, stDone: 3, stRenewed: 3 };
+  function showPaymentStep(method) {
+    const label = method === "dl" ? "Bayar DL" : method === "qris" ? "Bayar QRIS" : "Pembayaran";
+    $("checkoutPaymentStep").textContent = gsT(label);
+  }
   function show(id, moveFocus = false) {
     STATES.forEach(s => $(s).classList.toggle("hide", s !== id));
+    showPaymentStep(id === "stForm" || id === "stEnd" ? null
+      : id === "stDetails" ? selectedMethod() : order?.paymentMethod || "qris");
+    $("checkoutFinishStep").textContent = gsT(order?.renew ? "Lisensi diperpanjang" : "Terima key");
     [...$("checkoutProgress").children].forEach((step, index) => {
       if (CHECKOUT_STEPS[id] === index) step.setAttribute("aria-current", "step");
       else step.removeAttribute("aria-current");
@@ -180,7 +188,7 @@
       }
       const features = document.createElement("span");
       features.className = "plan-features";
-      for (const name of ["Gratis hosting bot 24/7 di server cloud GevraStore", "Dashboard pengelolaan toko", "Katalog, stok, dan diskon", "Riwayat pesanan dan saldo", "Kustomisasi bot milikmu", "Gratis script deposit anti fake donate dengan dukungan Vend"]) {
+      for (const name of ["Gratis hosting 24/7 untuk bot milikmu di cloud GevraStore", "Dashboard pengelolaan toko", "Katalog, stok, dan diskon", "Riwayat pesanan dan saldo", "Kustomisasi bot milikmu", "Gratis script deposit anti fake donate dengan dukungan Vend"]) {
         const line = document.createElement("span");
         line.textContent = gsT(name);
         features.append(line);
@@ -206,12 +214,14 @@
   async function updateMethod() {
     const update = ++methodUpdate;
     const paymentMethod = selectedMethod();
+    showPaymentStep(paymentMethod);
     const selected = packages.find(p => p.id === chosen);
     if (!selected) return;
     $("chosenPrice").textContent = rp(selected.price);
     $("btnOrder").disabled = paymentMethod === "dl";
     $("btnRetryDL").classList.add("hide");
-    $("methodNote").textContent = gsT(paymentMethod === "dl" ? "Memuat kurs DL…" : "Pembayaran QRIS terdeteksi otomatis.");
+    const qrisNote = autoQris ? "Pembayaran QRIS terdeteksi otomatis." : "Pembayaran QRIS dikonfirmasi oleh penjual.";
+    $("methodNote").textContent = gsT(paymentMethod === "dl" ? "Memuat kurs DL…" : qrisNote);
     if (paymentMethod !== "dl") return;
     try {
       const quote = await loadDLQuote();
@@ -282,7 +292,18 @@
   $("btnCopyLink").addEventListener("click", function () { copy(location.href, $("btnCopyLink"), gsT("Salin link pesanan")); });
 
   (async function init() {
-    try { var info = await api("GET", "/api/shop-info"); packages = info.packages; discordInvite = info.discordInvite || ""; const requested = new URLSearchParams(location.search).get("paket"); chosen = (packages.find(p => p.id === requested) || packages[0])?.id; if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey); } catch (e) { msg("pkgMsg", gsT("Gagal memuat daftar paket. Muat ulang halaman.")); }
+    try {
+      const info = await api("GET", "/api/shop-info");
+      packages = info.packages;
+      discordInvite = info.discordInvite || "";
+      autoQris = info.auto === true;
+      $("qrisMethodHint").textContent = gsT(autoQris ? "Konfirmasi otomatis" : "Dikonfirmasi oleh penjual");
+      const requested = new URLSearchParams(location.search).get("paket");
+      chosen = (packages.find(p => p.id === requested) || packages[0])?.id;
+      if (info.turnstileSiteKey) setupTurnstile(info.turnstileSiteKey);
+    } catch {
+      msg("pkgMsg", gsT("Gagal memuat daftar paket. Muat ulang halaman."));
+    }
     renderPkgs();
     if (packages.length) loadDLQuote().catch(() => {});
     $("pkgs").setAttribute("aria-busy", "false");

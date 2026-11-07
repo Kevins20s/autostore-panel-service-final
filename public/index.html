@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GevraStore Panel</title><meta name="description" content="Panel GevraStore: kelola bot, produk, dan stok tokomu dengan key dari penjual."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Masuk dengan key dari penjual untuk mengelola bot dan toko kamu."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/png" href="/logo.png"><link rel="apple-touch-icon" href="/logo.png"><link rel="stylesheet" href="/style.css?v=product-donut"><script src="/ui-extras.js"></script></head>
+<title>GevraStore Panel</title><meta name="description" content="Panel GevraStore: kelola bot, produk, dan stok tokomu dengan key dari penjual."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Masuk dengan key dari penjual untuk mengelola bot dan toko kamu."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/png" href="/logo.png"><link rel="apple-touch-icon" href="/logo.png"><link rel="stylesheet" href="/style.css?v=shop-onboarding"><script src="/ui-extras.js"></script></head>
 <body>
 <div id="login" class="landing hide">
   <header class="landing-nav landing-shell">
     <a class="landing-brand" href="/"><img src="/logo.png" alt="" width="34" height="34">GevraStore</a>
-    <nav aria-label="Navigasi utama"><a href="#fitur">Fitur</a><a href="#showcase">Showcase</a><a href="#paket">Harga</a></nav>
+    <nav aria-label="Navigasi utama"><a href="#fitur">Fitur</a><a href="#showcase">Showcase</a><a href="/demo.html">Demo</a><a href="#paket">Harga</a></nav>
     <a class="landing-btn landing-outline" href="#masuk">Masuk</a>
   </header>
   <main class="landing-shell">
@@ -14,7 +14,7 @@
         <p class="landing-tag landing-kicker">GevraStore / Panel toko Discord</p>
         <h1>Jualan di Discord. <em>Kelola dari GevraStore.</em></h1>
         <p>Isi stok, ubah harga, dan pantau pesanan dari satu dashboard. Pilih lisensi dan siapkan toko lewat web.</p>
-        <div class="landing-actions"><a class="landing-btn" href="#paket">Pilih lisensi <span aria-hidden="true">↗</span></a><a class="landing-btn landing-outline" href="#showcase">Jelajahi showcase</a></div>
+        <div class="landing-actions"><a class="landing-btn" href="#paket">Pilih lisensi <span aria-hidden="true">↗</span></a><a class="landing-btn landing-outline" href="/demo.html">Coba demo toko</a></div>
       </div>
       <div class="landing-preview" aria-label="Cuplikan dashboard dengan data contoh">
         <div class="landing-preview-top"><strong>GevraStore <span>/</span> Dashboard</strong><span>Data contoh</span></div>
@@ -41,12 +41,12 @@
     <section class="landing-section" id="mode-bot">
       <p class="landing-tag">Pilihan bot</p><h2>Pilih cara menjalankan tokomu.</h2>
       <div class="landing-grid">
-        <article><span>Segera hadir</span><h3>Pakai Bot GevraStore</h3><p>Rencana untuk toko yang ingin mulai tanpa membuat bot atau memasukkan token sendiri.</p></article>
-        <article><span>Tersedia</span><h3>Pakai bot sendiri</h3><p>Hubungkan bot Discord milikmu dan kelola katalog serta stok dari panel GevraStore.</p><a href="#paket">Lihat paket</a></article>
+        <article><span>Akses terbatas</span><h3>Pakai Bot GevraStore</h3><p>Untuk lisensi yang sudah mendapat akses. Hubungkan Discord, pilih server, dan aktifkan bot dari panel.</p></article>
+        <article><span>Tersedia</span><h3>Pakai bot sendiri</h3><p>Hosting bot tersedia di GevraStore. Siapkan aplikasi bot Discord dan MongoDB milikmu untuk dihubungkan ke panel.</p><a href="#paket">Lihat paket</a></article>
       </div>
     </section>
     <section class="landing-section landing-showcase" id="showcase">
-      <div><p class="landing-tag">02 / Showcase</p><h2>Lihat alur toko dalam satu pesanan.</h2><p>Contoh pembelian voucher dari produk dipilih sampai stok berkurang.</p></div>
+      <div><p class="landing-tag">02 / Showcase</p><h2>Lihat alur toko dalam satu pesanan.</h2><p>Contoh pembelian voucher dari produk dipilih sampai stok berkurang.</p><div class="landing-actions"><a class="landing-btn landing-outline" href="/demo.html">Coba tanpa lisensi</a></div></div>
       <div class="landing-story">
         <details open><summary>01 · Produk tersedia</summary><p>Voucher Digital tampil dengan harga dan 42 unit stok.</p></details>
         <details><summary>02 · Pesanan tercatat</summary><p>Pelanggan membeli satu voucher. Pesanan muncul di riwayat toko.</p></details>
@@ -55,7 +55,7 @@
     </section>
     <section class="landing-section" id="paket">
       <p class="landing-tag">03 / Lisensi</p><h2>Pilih paket untuk tokomu.</h2>
-      <p>Bayar lewat QRIS. Kunci lisensi muncul setelah pembayaran dikonfirmasi.</p>
+      <p>Bayar lewat QRIS atau Diamond Lock (DL). Kunci lisensi muncul setelah pembayaran dikonfirmasi.</p>
       <p id="landingPlanStatus" class="landing-loading" role="status">Memuat paket…</p>
       <div class="landing-grid landing-plans" id="landingPlans" aria-busy="true">
         <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
@@ -66,7 +66,7 @@
     <section class="landing-section landing-showcase" id="bantuan">
       <div><p class="landing-tag">04 / Bantuan</p><h2>Sebelum mulai.</h2></div>
       <div class="landing-story">
-        <details><summary>Apa yang perlu disiapkan?</summary><p>Siapkan server Discord, bot, dan database MongoDB. Panduan setup tersedia di panel.</p></details>
+        <details><summary>Apa yang perlu disiapkan?</summary><p>Siapkan server Discord. Jika memakai bot sendiri, siapkan juga aplikasi bot dan MongoDB. Jika lisensimu mendapat akses Bot GevraStore, cukup hubungkan Discord dan pilih server.</p></details>
         <details><summary>Bagaimana cara memperpanjang lisensi?</summary><p>Buka menu Langganan di panel, pilih paket perpanjangan, dan ikuti langkah pembayaran.</p></details>
       </div>
     </section>
@@ -92,8 +92,8 @@
   <main class="content"><div id="view"></div></main>
 </div>
 <div id="toast"></div>
-<script src="/i18n.js?v=discord-nickname"></script>
-<script src="/shop-guide.js?v=3"></script><script src="/app.js?v=discord-nickname"></script>
+<script src="/i18n.js?v=shop-onboarding"></script>
+<script src="/shop-guide.js?v=3"></script><script src="/app.js?v=shop-onboarding"></script>
 <script src="/login-extras.js"></script>
 <script src="/landing.js"></script>
 </body></html>

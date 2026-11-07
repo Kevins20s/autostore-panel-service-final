@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Beli key - GevraStore</title><meta name="theme-color" content="#101b29"><meta name="description" content="Beli key GevraStore Panel. Bayar lewat QRIS, key dikirim setelah pembayaran dikonfirmasi.">
+<title>Beli key - GevraStore</title><meta name="theme-color" content="#101b29"><meta name="description" content="Beli lisensi GevraStore lewat QRIS atau Diamond Lock. Key tersedia setelah pembayaran dikonfirmasi.">
 <link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css?v=language-buttons"><script src="/ui-extras.js"></script></head>
 <body class="buy"><main class="buy-main">
 <header class="buy-head">
   <div class="buy-logo"><img src="/logo.png" alt="" width="84" height="84"></div>
   <div class="buy-intro"><p class="plan-kicker">Lisensi GevraStore</p><h1>Pilih paket sesuai kebutuhan tokomu</h1>
-  <p class="mut">Kelola produk, stok, dan pesanan dari panel. Bayar lewat QRIS dan ambil kunci lisensi setelah pembayaran dikonfirmasi.</p></div>
+  <p class="mut">Kelola produk, stok, dan pesanan dari panel. Bayar lewat QRIS atau Diamond Lock (DL), lalu ambil kunci lisensi setelah pembayaran dikonfirmasi.</p></div>
   <a href="/#masuk" class="buy-panel-link">Masuk ke panel</a>
 </header>
 
 <ol id="checkoutProgress" class="checkout-progress" aria-label="Tahap pembelian">
-  <li aria-current="step">Paket</li><li>Tinjau pesanan</li><li>Bayar QRIS</li><li>Terima key</li>
+  <li aria-current="step">Paket</li><li>Tinjau pesanan</li><li id="checkoutPaymentStep">Pembayaran</li><li id="checkoutFinishStep">Terima key</li>
 </ol>
 
 <section id="stForm" class="plan-picker" aria-label="Pilih paket">
@@ -32,10 +32,10 @@
   <form id="checkoutDetails" class="review-payment">
     <fieldset class="review-methods">
       <legend>Metode pembayaran</legend>
-      <label><input type="radio" name="paymentMethod" value="qris" checked><span><strong>QRIS</strong><small>Konfirmasi otomatis</small></span></label>
+      <label><input type="radio" name="paymentMethod" value="qris" checked><span><strong>QRIS</strong><small id="qrisMethodHint">Konfirmasi pembayaran</small></span></label>
       <label><input type="radio" name="paymentMethod" value="dl"><span><strong>Diamond Lock (DL)</strong><small>Bayar lewat Discord GevraStore</small></span></label>
     </fieldset>
-    <p id="methodNote" class="mut buy-note" role="status">Pembayaran QRIS terdeteksi otomatis.</p>
+    <p id="methodNote" class="mut buy-note" role="status"></p>
     <button id="btnRetryDL" class="hide" type="button">Coba muat kurs lagi</button>
     <div id="tsBox" class="buy-ts hide"></div>
     <button class="pri" id="btnOrder" type="submit">Buat pesanan &amp; bayar</button>
@@ -95,7 +95,7 @@
   <p class="buy-warn" id="keyUntil"></p>
   <ol class="buy-steps">
     <li>Buka halaman panel, lalu masukkan key di kolom yang tersedia.</li>
-    <li>Ikuti petunjuk setup di menu <b>Tutorial Setup</b>.</li>
+    <li>Ikuti checklist Siapkan toko di halaman Ringkasan.</li>
   </ol>
   <div class="row"><a href="/"><button class="pri" type="button">Buka panel</button></a></div>
 </section>
@@ -108,11 +108,11 @@
 
 <section class="buy-faq" aria-label="Pertanyaan umum">
   <h2>Pertanyaan umum</h2>
-  <details><summary>Berapa lama key aktif?</summary><p>Sesuai paket yang dipilih (30 atau 90 hari) dihitung sejak key dibuat. Kamu bisa memperpanjang kapan saja dari menu Subscription di panel, sisa harinya tidak hangus.</p></details>
-  <details><summary>Kapan key saya muncul?</summary><p>Kalau pembayaran otomatis aktif, beberapa detik setelah lunas. Kalau memakai QRIS manual, setelah penjual memeriksa mutasi dan mengonfirmasi (biasanya beberapa menit).</p></details>
+  <details><summary>Berapa lama key aktif?</summary><p>Masa aktif mengikuti paket saat pembelian. Paket berjangka bisa diperpanjang lewat menu Langganan dan sisa masa aktifnya ikut dihitung. Lisensi lifetime berlaku tanpa perpanjangan.</p></details>
+  <details><summary>Kapan key saya muncul?</summary><p>QRIS otomatis menampilkan key setelah pembayaran terdeteksi. Untuk pembayaran DL atau QRIS manual, key muncul setelah penjual mengonfirmasi pembayaran.</p></details>
   <details><summary>Saya sudah bayar tapi key belum muncul</summary><p>Jangan bayar dua kali. Simpan kode pesananmu, lalu hubungi penjual dengan kode itu. Link pesanan di halaman ini bisa dibuka lagi kapan saja.</p></details>
-  <details><summary>Apa yang perlu saya siapkan?</summary><p>Token dan Client ID bot Discord milikmu, serta database MongoDB (Atlas gratis cukup). Panduan lengkapnya ada di menu Tutorial Setup setelah login.</p></details>
+  <details><summary>Apa yang perlu saya siapkan?</summary><p>Untuk bot sendiri, siapkan token, Client ID, dan MongoDB. Bot GevraStore tersedia untuk lisensi yang mendapat akses. Pada mode itu, cukup hubungkan akun Discord dan pilih server yang kamu kelola.</p></details>
 </section>
 
 <p class="buy-foot"><a href="/">Sudah punya key? Masuk ke panel</a></p>
-</main><script src="/i18n.js?v=language-buttons"></script><script src="/beli.js"></script></body></html>
+</main><script src="/i18n.js?v=shop-onboarding"></script><script src="/beli.js?v=shop-onboarding"></script></body></html>

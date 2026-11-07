@@ -200,8 +200,48 @@ function productSalesDonut(products) {
         legend, detail);
 }
 
+function shopSetupChecklist(summary) {
+    const { config, hostedBot } = me;
+    const ownConfigured = !!(config.has.botToken && config.has.mongoUrl && config.clientId);
+    const useHosted = hostedBot?.enabled || (me.discordInstallEnabled && !ownConfigured);
+    let demoComplete = false;
+    try { demoComplete = localStorage.getItem("gs-order-demo-complete") === "1"; } catch {}
+
+    const steps = [
+        [useHosted ? "Hubungkan akun Discord" : "Hubungkan bot dan database", useHosted ? me.discordLinked : ownConfigured, "#/bot", "Buka Bot & Server"],
+        ["Pilih server & aktifkan bot", useHosted ? !!hostedBot?.guildId && hostedBot.state === "running"
+            : !!config.guildId && me.bot === "running", "#/bot", "Buka Bot & Server"],
+        ["Tambah produk", summary ? summary.products > 0 : null, "#/products", "Buka produk"],
+        ["Isi stok", summary ? summary.stock > 0 : null, "#/products", "Isi stok"],
+        ["Uji alur pesanan", demoComplete || (summary ? summary.sold > 0 : null), "/demo.html?from=panel", "Coba demo toko"],
+    ];
+    const completed = steps.filter(([, done]) => done).length;
+    if (completed === steps.length) return null;
+
+    return card(h("div", { class: "row sp gap" }, h("h2", {}, gsT("Siapkan toko")),
+        h("span", { class: "pill" }, gsT("{0} dari {1} langkah selesai", completed, steps.length))),
+        h("p", { class: "mut" }, gsT("Selesaikan langkah berikut untuk menyiapkan toko Discord-mu.")),
+        h("ol", { class: "setup-checklist" }, ...steps.map(([label, done, href, action], index) =>
+            h("li", {},
+                h("span", { class: "setup-marker", "aria-hidden": "true" }, done ? "✓" : index + 1),
+                h("div", {}, h("strong", {}, gsT(label)), h("small", { class: "mut" },
+                    gsT(done ? "Selesai" : done === null ? "Menunggu koneksi toko" : "Belum selesai"))),
+                done ? null : h("a", { href }, gsT(action))))));
+}
+
 async function dashboard() {
-    const [s, st] = await Promise.all([api("GET", "/api/shop/summary"), api("GET", "/api/shop/stats?days=14").catch(() => null)]);
+    let summaryError;
+    const [account, s, st] = await Promise.all([
+        api("GET", "/api/me"),
+        api("GET", "/api/shop/summary").catch(error => {
+            if (![409, 502, 503].includes(error.status)) throw error;
+            summaryError = error.message;
+            return null;
+        }),
+        api("GET", "/api/shop/stats?days=14").catch(() => null),
+    ]);
+    me = account;
+    updateSide();
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
     const charts = h("div", { class: "desk-columns sales-charts" });
     const insights = h("div");
@@ -246,13 +286,14 @@ async function dashboard() {
                 h("p", { class: "mut" }, gsT("Penjualan, inventaris, dan bot Discord."))),
             h("a", { class: "desk-bot-link", href: "#/bot" }, botPill(),
                 h("span", { class: "mut" }, me.valid ? (me.lifetime ? gsT("Lisensi seumur hidup") : gsT`Lisensi aktif · ${me.daysLeft} hari lagi`) : gsT("Lisensi tidak aktif")))),
+        shopSetupChecklist(s),
         s ? h("section", { class: "desk-metrics", "aria-label": gsT("Ringkasan toko") },
             stat(gsT("Terjual"), fmt(s.sold)), stat(gsT("Stok tersedia"), fmt(s.stock)),
             stat(gsT("Produk"), fmt(s.products)), stat(gsT("Pelanggan"), fmt(s.users)),
             stat(gsT("Saldo pelanggan (WL)"), fmt(s.balance)), stat(gsT("Mode toko"), s.maintenance ? "Maintenance" : "Normal"))
-            : null,
-        charts,
-        insights);
+            : card(h("h2", {}, gsT("Data toko belum tersedia")), h("p", { class: "mut" }, summaryError)),
+        s ? charts : null,
+        s ? insights : null);
 }
 
 // ---------- Orders (riwayat pembelian di Discord) ----------
@@ -1190,6 +1231,12 @@ async function serviceOrders() {
 async function tutorial() {
     const li = (...k) => h("li", {}, ...k);
     return h("div", {}, head(gsT("Tutorial Setup"), gsT("Langkah pertama dari nol sampai toko jalan.")),
+        card(h("h2", {}, gsT("Pakai Bot GevraStore")),
+            h("p", { class: "mut" }, gsT(me.discordInstallEnabled
+                ? "Lisensimu mendapat akses. Buka Bot & Server, pilih Bot GevraStore, hubungkan Discord, lalu pilih dan aktifkan server."
+                : "Mode ini tersedia untuk lisensi yang mendapat akses. Untuk memakai bot sendiri, ikuti langkah di bawah.")),
+            me.discordInstallEnabled ? h("a", { href: "#/bot" }, gsT("Buka Bot & Server")) : null),
+        card(h("h2", {}, gsT("Pakai bot sendiri")), h("p", { class: "mut" }, gsT("Siapkan aplikasi bot Discord dan database MongoDB milikmu."))),
         card(h("h2", {}, gsT("1. Buat bot Discord")), h("ol", { class: "steps" },
             li(gsT("Buka "), h("a", { href: "https://discord.com/developers/applications", target: "_blank", rel: "noopener" }, "Discord Developer Portal"), " → New Application."),
             li(gsT("Menu Bot → Reset Token, salin tokennya.")),

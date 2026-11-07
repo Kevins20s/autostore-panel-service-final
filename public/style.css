@@ -1418,6 +1418,36 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .landing-nav { padding-right: 150px; }
 @media (max-width: 760px) { .landing-nav { padding-right: 0; } }
 
+.setup-checklist { list-style: none; margin: 14px 0 0; padding: 0; }
+.setup-checklist li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.setup-checklist small { display: block; margin-top: 3px; }
+.setup-marker { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; color: var(--ac); font-weight: 750; }
+
+.demo-main { padding: clamp(28px, 6vw, 68px) 0 70px; }
+.demo-intro { margin-bottom: 28px; }
+.demo-intro h1 { margin: 6px 0 12px; font-size: clamp(30px, 5vw, 55px); line-height: 1.08; }
+.demo-intro > p:last-child { max-width: 64ch; color: var(--landing-muted); }
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.demo-card { min-width: 0; padding: clamp(16px, 3vw, 26px); border: 1px solid var(--landing-line); border-radius: 12px; background: var(--landing-panel); }
+.demo-card h2 { margin: 6px 0 14px; }
+.demo-card p:not(.landing-tag) { color: var(--landing-muted); }
+.demo-metrics { display: flex; flex-wrap: wrap; gap: 14px 24px; margin-bottom: 20px; }
+.demo-metrics dt { color: var(--landing-muted); font-size: .85rem; }
+.demo-metrics dd { margin: 3px 0 0; font-weight: 750; }
+.demo-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.demo-actions label { margin: 0; }
+.demo-actions input { display: block; width: 100%; max-width: 11rem; }
+.demo-message { margin: 12px 0 0; }
+.demo-message:empty { display: none; }
+.demo-orders { grid-column: 1 / -1; }
+.demo-order-list { margin: 0; padding-left: 22px; }
+.demo-order-list li { padding-block: 8px; border-top: 1px solid var(--landing-line); }
+@media (max-width: 620px) {
+  .demo-grid { grid-template-columns: 1fr; }
+  .setup-checklist li { grid-template-columns: 30px minmax(0, 1fr); }
+  .setup-checklist li > a { grid-column: 2; justify-self: start; }
+}
+
 .guide-toolbar { margin-bottom: 16px; }
 .guide-toolbar input { width: min(100%, 420px); }
 .guide-grid, .deposit-layout { display: grid; gap: 16px; align-items: start; }

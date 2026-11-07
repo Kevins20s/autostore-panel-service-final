@@ -1258,6 +1258,41 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .desk-action svg { display: block; width: 20px; height: 20px; fill: none; stroke: var(--ac); stroke-width: 1.5; }
 .desk-insights { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .adm-jump a[aria-current="page"] { background: var(--ac); border-color: var(--ac); color: #172333; font-weight: 700; }
+.adm .adm-main { width: min(1240px, calc(100% - 36px)); }
+.adm .adm-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px; margin-bottom: 18px; background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; }
+.adm-tabs a { display: block; padding: 12px 8px; text-align: center; border: 1px solid transparent; border-radius: 9px; color: var(--mut); text-decoration: none; font-weight: 700; }
+.adm-tabs a:hover { color: var(--tx); background: var(--panel2); }
+.adm .adm-tabs a[aria-current="page"] { color: var(--ac); border-color: var(--line2); background: var(--acSoft); }
+.adm .adm-stat { background: var(--panel); }
+.adm .adm-stats { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+.adm-section-head { padding: 8px 0 16px; }
+.adm-section-head h2 { margin: 0 0 4px; font-size: clamp(23px, 4vw, 32px); letter-spacing: -.03em; }
+.adm-section-head p { margin: 0; }
+.adm .adm-panel { padding: clamp(14px, 2.5vw, 24px); }
+.adm-panel h3 { margin: 0 0 10px; font-size: 17px; }
+.adm-note { padding: 10px 14px; margin: 0 0 16px; border: 1px solid var(--line); background: var(--bg2); border-radius: 10px; }
+.adm-note summary { cursor: pointer; color: var(--tx); font-size: 13px; }
+.adm-note p { margin: 8px 0 0; }
+.adm-license-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(92px, .65fr) auto; gap: 12px; align-items: end; }
+.adm-license-form label, .adm-price-field { display: grid; gap: 6px; min-width: 0; color: var(--mut); font-size: 13px; }
+.adm-license-form input, .adm-license-form select { width: 100%; min-width: 0; }
+.adm-license-form button { min-height: 40px; }
+.adm-payment-status { display: inline-block; border: 1px solid var(--line2); border-radius: 8px; padding: 5px 9px; color: var(--mut); font-size: 12px; }
+.adm #pkRows, .adm-backup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
+.adm .adm-pkrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 14px; border: 1px solid var(--line2); border-radius: 12px; background: var(--bg2); }
+.adm-pkname, .adm-price-field { grid-column: 1 / -1; }
+.adm .adm-pkrow input[type=number] { width: 100%; }
+.adm-backup-grid .adm-panel { display: flex; flex-direction: column; align-items: flex-start; margin: 0; }
+.adm-backup-grid p { flex: 1; }
+.adm-kicker { margin-bottom: 12px; color: var(--ac); font: 700 12px ui-monospace, monospace; }
+.adm-download { display: inline-block; padding: 9px 12px; border-radius: 8px; background: var(--acSoft); border: 1px solid var(--line2); color: var(--tx); text-decoration: none; font-weight: 700; }
+.adm-download:hover { border-color: var(--ac); }
+.adm .adm-restore { border-color: color-mix(in srgb, var(--warn), transparent 70%); }
+@media (max-width: 660px) {
+  .adm-license-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm .adm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm-tabs a { font-size: 13px; }
+}
 .checkout-progress { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; padding: 0; gap: 8px; }
 .checkout-progress li { padding: 9px 0; border-bottom: 2px solid var(--line); color: var(--mut); text-align: center; }
 .checkout-progress li[aria-current="step"] { border-color: var(--ac); color: var(--ac); font-weight: 700; }

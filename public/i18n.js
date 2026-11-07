@@ -9,6 +9,22 @@ const gsLanguage = (() => {
 const gsLocale = gsLanguage === "en" ? "en-US" : "id-ID";
 
 const gsEnglish = {
+  "Tinjau pembayaran pembelian key, perpanjangan, dan penarikan saldo.": "Review license payments, renewals, and withdrawals.",
+  "Panduan konfirmasi pembayaran": "Payment confirmation guide",
+  "Untuk QRIS manual, cocokkan nominal dengan mutasi sebelum konfirmasi. Untuk DL, cek pembayaran di Discord. QRIS otomatis memproses pesanan saat pembayaran terverifikasi. Perpanjangan menambah masa aktif key lama.": "For manual QRIS, match the amount against the payment record before confirming. For DL, check Discord. Automatic QRIS processes orders when payment is verified. Renewals extend the existing key.",
+  "Atur harga dan paket yang tersedia di halaman pembelian.": "Set prices and control which plans appear at checkout.",
+  "QRIS otomatis ·": "Automatic QRIS ·",
+  "Matikan status Dijual untuk menyembunyikan paket dari halaman beli. Key lama tetap bisa diperpanjang.": "Turn off For sale to hide a plan at checkout. Existing keys can still be renewed.",
+  "Buat key, cek masa aktif, dan kelola lisensi pembeli.": "Create keys, check expiry dates, and manage buyer licenses.",
+  "Buat key": "Create key",
+  "Cari lisensi": "Search licenses",
+  "Unduh, kirim, atau pulihkan cadangan data panel.": "Download, send, or restore panel backups.",
+  "Unduh cadangan": "Download backup",
+  "Simpan salinan data.json di perangkatmu.": "Save a copy of data.json to your device.",
+  "Cadangan Discord": "Discord backup",
+  "Kirim salinan terbaru ke webhook backup yang dikonfigurasi di server.": "Send the latest copy to the backup webhook configured on the server.",
+  "Pulihkan data": "Restore data",
+  "Pilih file data.json untuk mengganti data panel dengan isi cadangan.": "Choose a data.json file to replace the panel data with the backup.",
   "/ 1 bulan": "/ 1 month",
   "/ 3 bulan": "/ 3 months",
   "/ 1 tahun": "/ 1 year",

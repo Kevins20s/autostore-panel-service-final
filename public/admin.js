@@ -44,7 +44,10 @@ async function loadPackages() {
         const price = document.createElement("input"); price.type = "number"; price.min = "1000"; price.max = "1000000"; price.step = "500"; price.value = p.price; price.setAttribute("aria-label", gsT("Harga ") + p.name);
         const lab = document.createElement("label"); lab.className = "check-row"; const ck = document.createElement("input"); ck.type = "checkbox"; ck.checked = p.sellable; const sp = document.createElement("span"); sp.textContent = gsT("Dijual"); lab.append(ck, sp);
         const save = btn(gsT("Simpan"), async () => { await api("PUT", "/api/admin/packages/" + p.id, { price: Number(price.value), sellable: ck.checked }); ADM.pk = ""; msg("pkMsg", gsT`${p.name} tersimpan.`, true); }, "pri");
-        row.append(name, price, lab, save); box.append(row);
+        const priceField = document.createElement("label");
+        priceField.className = "adm-price-field";
+        priceField.append(gsLanguage === "en" ? "Price (IDR)" : "Harga (Rp)", price);
+        row.append(name, priceField, lab, save); box.append(row);
     }
 }
 async function loadOrders() {

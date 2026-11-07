@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GevraStore Admin</title><meta name="theme-color" content="#101b29"><meta name="robots" content="noindex,nofollow"><link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css?v=language-buttons"><script src="/ui-extras.js"></script></head>
+<title>GevraStore Admin</title><meta name="theme-color" content="#101b29"><meta name="robots" content="noindex,nofollow"><link rel="icon" type="image/png" href="/logo.png"><link rel="stylesheet" href="/style.css?v=admin-workspaces"><script src="/ui-extras.js"></script></head>
 <body class="adm"><main class="adm-main">
 <header class="adm-head">
   <div class="adm-logo"><img src="/logo.png" alt="" width="48" height="48"></div>
@@ -12,8 +12,11 @@
   <div class="row" style="margin-top:12px"><button class="pri" id="btnLogin">Masuk</button></div><div id="loginMsg" class="msg"></div>
 </section>
 <section id="dash" class="hide">
-  <nav class="adm-jump" aria-label="Ruang kerja admin">
-    <a href="#admin-orders">Transaksi</a><a href="#admin-licenses">Lisensi</a><a href="#admin-pricing">Paket</a><a href="#admin-backup">Backup</a>
+  <nav class="adm-jump adm-tabs" aria-label="Ruang kerja admin">
+    <a href="#admin-orders">Transaksi</a>
+    <a href="#admin-licenses">Lisensi</a>
+    <a href="#admin-pricing">Paket</a>
+    <a href="#admin-backup">Backup</a>
   </nav>
   <div class="adm-stats">
     <div class="adm-stat"><span class="mut">Total pembeli</span><b id="stTotal">0</b></div>
@@ -24,14 +27,17 @@
     <div class="adm-stat bad"><span class="mut">Habis / dicabut</span><b id="stDead">0</b></div>
   </div>
   <section class="adm-workspace" id="admin-orders">
-  <div class="card"><h2>Pesanan masuk <span class="adm-count hide" id="ordCount"></span></h2>
-    <p class="mut">Pembeli membayar lewat QRIS di <b>/beli</b>. Pesanan berlabel <b>Otomatis</b> lunas dan membuat key sendiri. Pesanan <b>manual</b>: cek mutasi DANA, cocokkan nominalnya (termasuk 3 angka terakhir), lalu tekan <b>Konfirmasi</b>. Pesanan berlabel <b>Perpanjangan</b> menambah masa aktif key lama.</p>
+  <header class="adm-section-head"><h2>Transaksi</h2><p class="mut">Tinjau pembayaran pembelian key, perpanjangan, dan penarikan saldo.</p></header>
+  <div class="card adm-panel"><h3>Pesanan masuk <span class="adm-count hide" id="ordCount"></span></h3>
+    <details class="adm-note"><summary>Panduan konfirmasi pembayaran</summary>
+      <p class="mut">Untuk QRIS manual, cocokkan nominal dengan mutasi sebelum konfirmasi. Untuk DL, cek pembayaran di Discord. QRIS otomatis memproses pesanan saat pembayaran terverifikasi. Perpanjangan menambah masa aktif key lama.</p>
+    </details>
     <div id="ordMsg" class="msg"></div>
     <div id="orderKey" class="hide adm-newkey"><p class="mut" id="orderKeyNote">Key dibuat:</p><div class="adm-keyrow"><div class="key" id="orderKeyText"></div><button type="button" class="pri" id="btnCopyOrderKey">Salin key</button></div></div>
     <div class="adm-table"><table><thead><tr><th>Kode</th><th>Paket</th><th>Nominal</th><th>Pembeli</th><th>Status</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></div>
     <p id="emptyOrders" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pesanan.</p>
   </div>
-  <div class="card hide" id="walletCard"><h2>Penarikan saldo pembeli <span class="adm-count hide" id="wdCount"></span></h2>
+  <div class="card adm-panel hide" id="walletCard"><h3>Penarikan saldo pembeli <span class="adm-count hide" id="wdCount"></span></h3>
     <p class="mut" id="walletInfo"></p>
     <div class="adm-table"><table><thead><tr><th>Pembeli</th><th>Dikirim</th><th>Ke rekening</th><th>Diajukan</th><th></th></tr></thead><tbody id="wdRows"></tbody></table></div>
     <p id="emptyWd" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada permintaan penarikan.</p>
@@ -41,30 +47,42 @@
   </div>
   </section>
   <section class="adm-workspace hide" id="admin-pricing">
-  <div class="card"><h2>Harga &amp; paket penjualan</h2>
-    <p class="mut">Harga di halaman /beli dan untuk perpanjangan dari panel. Matikan <b>Dijual</b> untuk menyembunyikan paket dari /beli (key lama tetap bisa diperpanjang). Pembayaran QRIS otomatis: <b id="pkAutoInfo">memeriksa...</b></p>
+  <header class="adm-section-head"><h2>Paket</h2><p class="mut">Atur harga dan paket yang tersedia di halaman pembelian.</p></header>
+  <div class="card adm-panel"><div class="row sp"><h3>Harga &amp; paket penjualan</h3><span class="adm-payment-status">QRIS otomatis · <b id="pkAutoInfo">memeriksa...</b></span></div>
+    <p class="mut">Matikan status Dijual untuk menyembunyikan paket dari halaman beli. Key lama tetap bisa diperpanjang.</p>
     <div id="pkRows"></div>
     <div id="pkMsg" class="msg"></div>
   </div>
   </section>
   <section class="adm-workspace hide" id="admin-licenses">
-  <div class="card"><h2>Buat key baru</h2>
-    <div class="row adm-new"><input id="buyer" placeholder="Nama pembeli" style="flex:2"><select id="licenseType" aria-label="Jenis key"><option value="autostore">AutoStore</option></select><input id="days" type="number" value="30" min="1" style="flex:1" aria-label="Lama (hari)"><button class="pri" id="btnNew">Buat</button></div>
+  <header class="adm-section-head"><h2>Lisensi</h2><p class="mut">Buat key, cek masa aktif, dan kelola lisensi pembeli.</p></header>
+  <div class="card adm-panel"><h3>Buat key baru</h3>
+    <div class="adm-license-form">
+      <label>Nama pembeli<input id="buyer" placeholder="Nama pembeli"></label>
+      <label>Jenis key<select id="licenseType"><option value="autostore">AutoStore</option></select></label>
+      <label>Lama (hari)<input id="days" type="number" value="30" min="1"></label>
+      <button class="pri" id="btnNew">Buat key</button>
+    </div>
     <div id="newMsg" class="msg"></div>
     <div id="newKey" class="hide adm-newkey"><p class="mut">Salin sekarang, key ini tidak akan ditampilkan lagi:</p><div class="adm-keyrow"><div class="key" id="keyText"></div><button type="button" class="pri" id="btnCopyKey">Salin key</button></div></div>
   </div>
-  <div class="card"><h2>Daftar pembeli</h2>
-    <div class="adm-search"><input id="q" type="search" placeholder="Cari nama pembeli atau awalan key…" autocomplete="off"></div>
+  <div class="card adm-panel"><h3>Daftar pembeli</h3>
+    <div class="adm-search"><input id="q" type="search" aria-label="Cari lisensi" placeholder="Cari nama pembeli atau awalan key…" autocomplete="off"></div>
     <div class="adm-table"><table><thead><tr><th>Pembeli</th><th>Mode</th><th>Key</th><th>Masa aktif</th><th>Bot</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <p id="emptyRows" class="mut hide" style="text-align:center;padding:22px 0 6px">Belum ada pembeli yang cocok.</p>
   </div>
   </section>
   <section class="adm-workspace hide" id="admin-backup">
-  <div class="card"><h2>Backup data</h2>
-    <p class="mut">Data pembeli disimpan di data.json. Backup otomatis dikirim ke Discord tiap 12 jam dan setiap server menyala (isi BACKUP_WEBHOOK_URL di Railway). Untuk pindah server, tekan Restore dan pilih file data.json.</p>
-    <div class="row"><a href="/api/admin/backup" download="data.json"><button class="pri" type="button">Download data.json</button></a><button id="btnSend" type="button">Kirim ke Discord sekarang</button><button id="btnRestore" class="bad" type="button">Restore dari file</button><input id="fileRestore" type="file" accept=".json,application/json" class="hide"></div>
-    <div id="bkMsg" class="msg"></div>
+  <header class="adm-section-head"><h2>Backup</h2><p class="mut">Unduh, kirim, atau pulihkan cadangan data panel.</p></header>
+  <div class="adm-backup-grid">
+    <div class="card adm-panel"><span class="adm-kicker">01</span><h3>Unduh cadangan</h3><p class="mut">Simpan salinan data.json di perangkatmu.</p>
+      <a class="adm-download" href="/api/admin/backup" download="data.json">Download data.json</a></div>
+    <div class="card adm-panel"><span class="adm-kicker">02</span><h3>Cadangan Discord</h3><p class="mut">Kirim salinan terbaru ke webhook backup yang dikonfigurasi di server.</p>
+      <button id="btnSend" type="button">Kirim ke Discord sekarang</button></div>
+    <div class="card adm-panel adm-restore"><span class="adm-kicker">03</span><h3>Pulihkan data</h3><p class="mut">Pilih file data.json untuk mengganti data panel dengan isi cadangan.</p>
+      <button id="btnRestore" class="bad" type="button">Restore dari file</button><input id="fileRestore" type="file" accept=".json,application/json" class="hide"></div>
   </div>
+  <div id="bkMsg" class="msg"></div>
   </section>
 </section>
-</main><script src="/i18n.js?v=language-buttons"></script><script src="/admin.js?v=rejected-orders"></script></body></html>
+</main><script src="/i18n.js?v=admin-workspaces"></script><script src="/admin.js?v=admin-workspaces"></script></body></html>

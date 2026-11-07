@@ -2,6 +2,7 @@
 // Yang diuji: bentuk respons dan alur kode. Sintaks pipeline MongoDB tetap perlu diuji ke database asli (test/shop.js dengan SHOP_TEST_MONGO).
 const assert = require("assert"), http = require("http"), express = require("express");
 const shopdb = require("../src/shopdb");
+const { emojiDefaults, resolveEmojis, componentEmoji } = require("../bot/src/config/storefront");
 
 const inserted = []; let lastFind = null;
 const cur = (rows) => { const c = { sort: () => c, skip: () => c, limit: () => c, project: () => c, toArray: async () => rows }; return c; };
@@ -14,7 +15,7 @@ const cols = {
     apisettings: { findOne: async () => null },
     storefronts: {
         findOne: async ({ _id }) => storefronts.get(_id),
-        updateOne: async ({ _id }, { $set }) => storefronts.set(_id, $set),
+        updateOne: async ({ _id }, { $set }) => storefronts.set(_id, { ...storefronts.get(_id), ...$set }),
     },
     lists: { findOne: async (f) => ({ code: f.code }), find: () => cur([{ code: "P1", name: "Akun A" }, { code: "P2", name: "Akun B" }, { code: "P3", name: "Akun C" }]) },
     prices: { find: () => cur([{ code: "P1", price: 1000 }, { code: "P2", price: 2000 }]) }, // P3 belum ada harga
@@ -76,6 +77,23 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.deepStrictEqual((await j("GET", "/settings")).j.storefront, { guildId: guildA, model: "model1" });
         assert.deepStrictEqual((await j("GET", "/settings", null, "B")).j.storefront, { guildId: guildB, model: "classic" });
         console.log("ok  /settings/storefront: default klasik, simpan, validasi, dan isolasi server");
+
+        const emojiPath = "/settings/storefront/emojis";
+        const custom = "<a:gem:123456789012345678>";
+        const settings = { profile: "👑", qris: custom, inStock: "🟢", outOfStock: "🔴" };
+        assert.deepStrictEqual((await j("GET", emojiPath)).j.emojis, emojiDefaults);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: settings }, "B")).s, 409);
+        for (const emojis of [{ profile: "hello" }, { profile: "💰💰" }, { profile: "<:invalid:123>" }, { unknown: "👑" }]) {
+            assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis })).s, 400);
+        }
+        assert.deepStrictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: settings })).j.emojis, { ...emojiDefaults, ...settings });
+        assert.deepStrictEqual((await j("GET", emojiPath, null, "B")).j.emojis, emojiDefaults);
+        assert.strictEqual((await j("GET", "/settings")).j.storefront.model, "model1");
+        assert.deepStrictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: {} })).j.emojis, emojiDefaults);
+        assert.strictEqual(resolveEmojis(settings).qris, emojiDefaults.qris);
+        const guild = { emojis: { cache: new Map([[guildA, { available: true, roles: { cache: new Map() }, toString: () => custom }]]) } };
+        assert.deepStrictEqual(componentEmoji(resolveEmojis(settings, guild).qris), { animated: true, name: "gem", id: guildA });
+        console.log("ok  emoji Model 1: simpan per server, reset, validasi, dan fallback emoji Discord");
         console.log("\nSemua tes shopapi (tiruan) lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }
     srv.close();

@@ -3,7 +3,7 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
-const { collection: storefrontCollection, models: storefrontModels } = require("../bot/src/config/storefront");
+const { collection: storefrontCollection, models: storefrontModels, emojiDefaults, validEmoji } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -314,6 +314,23 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         if (typeof model !== "string" || !Object.hasOwn(storefrontModels, model)) return fail(res, "Model toko tidak dikenal.");
         await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { model } }, { upsert: true });
         res.json({ model });
+    }));
+    r.get("/settings/storefront/emojis", wrap(async (req, res) => {
+        const guildId = req.shopGuildId;
+        if (!ID_RE.test(guildId)) return fail(res, "Pilih server di menu Bot & Server dulu.", 409);
+        const storefront = await req.db.collection(storefrontCollection).findOne({ _id: guildId });
+        res.json({ guildId, emojis: { ...emojiDefaults, ...storefront?.emojis }, defaults: emojiDefaults });
+    }));
+    r.put("/settings/storefront/emojis", wrap(async (req, res) => {
+        const { guildId, emojis } = req.body || {};
+        if (!ID_RE.test(req.shopGuildId) || guildId !== req.shopGuildId) {
+            return fail(res, "Server toko belum diatur atau sudah berubah. Muat ulang halaman.", 409);
+        }
+        if (!emojis || typeof emojis !== "object" || Array.isArray(emojis) || Object.entries(emojis).some(
+            ([key, value]) => !Object.hasOwn(emojiDefaults, key) || !validEmoji(value)
+        )) return fail(res, "Pilih satu emoji Unicode atau masukkan kode emoji Discord yang valid.");
+        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { emojis } }, { upsert: true });
+        res.json({ emojis: { ...emojiDefaults, ...emojis } });
     }));
     r.put("/settings/donation-webhook", wrap(async (req, res) => {
         if (!hostedTenant(req.lic, licenses())) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);

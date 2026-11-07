@@ -82,7 +82,9 @@ async function runBuyer({ url, dbName, guildId }) {
             assert.equal(acknowledged, isPrivate ? "update" : "new");
             return privateReply.embeds[0].toJSON();
         }
-        assert.match((await clickStorefront("storefront_profile", false)).title, /Profil/);
+        const profile = await clickStorefront("storefront_profile", false);
+        assert.equal(profile.title, (guildId === guilds[0] ? "👑" : "👤") + " Profil Kamu");
+        assert.equal(privateReply.components.at(-1).toJSON().components[0].emoji.name, guildId === guilds[0] ? "👑" : "👤");
         assert.match((await clickStorefront("storefront_balance")).description, /Saldo Rupiah/);
         assert.match((await clickStorefront("storefront_history:2")).title, /Riwayat/);
         assert.match((await clickStorefront("storefront_profile")).title, /Profil/);
@@ -182,6 +184,9 @@ async function main() {
         const firstReads = await Promise.all(Array.from({ length: 40 }, (_, i) =>
             request(i % tenants.length, "GET", "/shop/products")));
         assert.ok(firstReads.every(result => result.products.length === 0));
+        const emojiPath = "/shop/settings/storefront/emojis";
+        assert.equal((await request(0, "PUT", emojiPath, { guildId: guilds[0], emojis: { profile: "👑" } })).emojis.profile, "👑");
+        assert.equal((await request(1, "GET", emojiPath)).emojis.profile, "👤");
         await Promise.all(tenants.map(async (tenant, i) => {
             await request(i, "POST", "/shop/products", { code, name: "Store " + i, type: "yes", role, price: 10 });
             await request(i, "POST", "/shop/products/" + code + "/stock", { text: "STOCK-" + i });

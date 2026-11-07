@@ -1151,8 +1151,78 @@ const STORE_EMOJI_FIELDS = [
     ["DepositQRIS", "Deposit QRIS"], ["AdminPanel", "Admin Panel"], ["Queue", "Queue"], ["Waiting", "Waiting"],
     ["COLOR", gsT("Warna Embed")]
 ];
-function storeCustomEmojis() {
-    return customEmojiEditor({
+const MODEL_EMOJI_GROUPS = [
+    ["Katalog", "Catalog", [["cart", "Pilih produk", "Product picker"], ["inStock", "Stok tersedia", "In stock"], ["outOfStock", "Stok habis", "Sold out"]]],
+    ["Profil & navigasi", "Profile & navigation", [["profile", "Profil", "Profile"], ["discord", "Akun Discord", "Discord account"],
+        ["growId", "GrowID", "GrowID"], ["balance", "Saldo WL", "WL balance"], ["rupiah", "Saldo Rupiah", "Rupiah balance"],
+        ["spent", "Total belanja", "Total spent"], ["joined", "Tanggal bergabung", "Join date"], ["history", "Riwayat", "History"],
+        ["previous", "Halaman sebelumnya", "Previous page"], ["next", "Halaman berikutnya", "Next page"]]],
+    ["Deposit & pembayaran", "Deposits & payments", [["deposit", "Deposit WL/DL", "WL/DL deposit"], ["qris", "Top Up QRIS", "QRIS top-up"],
+        ["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi", "Confirm"]]],
+];
+const MODEL_EMOJI_PALETTE = [
+    ["Toko", "Store", "🛒 🛍️ 🏪 🏷️ 📦 🎁 🧾 📋 📜 📊 📈 🗂️ 🛠️ ⚙️ 🧰 🔧 📌 📍 🎟️ 🧩"],
+    ["Saldo", "Balance", "💎 💰 🪙 💳 💵 💸 💲 🤑 🏦 💼 🏧 🔄 🔁 🔃 📲 🧮 💹 💱 🧧 🥇"],
+    ["Profil", "Profile", "👤 👥 🪪 👑 ⭐ 🌟 ✨ 🏆 🎖️ 🏅 💫 💠 🔰 🛡️ ✏️ 📝 🗓️ 📅 🔑 🔐"],
+    ["Status", "Status", "✅ ❌ ☑️ ✔️ ✖️ ⚠️ ❗ ❕ ❓ ⏳ ⌛ 🟢 🟡 🔴 🔵 🟣 🔔 📢 📣 🚨"],
+    ["Arah & dekorasi", "Navigation & accents", "⬅️ ➡️ ⬆️ ⬇️ ⏮️ ⏭️ 🔙 🔜 ➕ ➖ 🔍 🔗 ⚡ 🔥 🌍 🌱 🎮 🧱 🚀 🎯"],
+];
+
+async function modelEmojiEditor() {
+    const endpoint = "/api/shop/settings/storefront/emojis";
+    const t = (id, en) => gsLanguage === "en" ? en : id;
+    const title = t("Emoji toko Model 1", "Model 1 storefront emojis");
+    let settings;
+    try { settings = await api("GET", endpoint); }
+    catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
+    const { guildId, defaults } = settings;
+    let values = { ...settings.emojis };
+    const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS.map(([id, en, fields]) =>
+        h("optgroup", { label: t(id, en) }, ...fields.map(([key, idLabel, enLabel]) => h("option", { value: key }, t(idLabel, enLabel))))));
+    const input = h("input", { autocomplete: "off", spellcheck: "false", maxlength: 60, placeholder: "✨ / <:nama:id>", "aria-label": "Emoji" });
+    const preview = h("div", { class: "store-media-preview emoji-slot-preview", "aria-hidden": "true" });
+    const draw = () => {
+        input.value = values[select.value];
+        preview.replaceChildren(emojiVisual(input.value, 50));
+    };
+    const choose = value => { values[select.value] = value; draw(); };
+    select.onchange = draw;
+    input.oninput = () => { values[select.value] = input.value.trim(); preview.replaceChildren(emojiVisual(input.value, 50)); };
+    const group = h("select", { "aria-label": t("Kategori emoji", "Emoji category") }, ...MODEL_EMOJI_PALETTE.map(([id, en], index) => h("option", { value: index }, t(id, en))));
+    const palette = h("div", { class: "emoji-palette-grid" });
+    const drawPalette = () => palette.replaceChildren(...MODEL_EMOJI_PALETTE[Number(group.value)][2].split(" ").map(emoji =>
+        h("button", { type: "button", onclick: () => choose(emoji), title: emoji }, emoji)));
+    group.onchange = drawPalette;
+    const save = h("button", { type: "button", class: "pri" }, t("Simpan emoji", "Save emojis"));
+    const reset = h("button", { type: "button" }, t("Reset semua emoji Model 1", "Reset all Model 1 emojis"));
+    const controls = h("fieldset", { class: "emoji-slot-controls" });
+    const persist = async emojis => {
+        controls.disabled = true;
+        try {
+            const result = await api("PUT", endpoint, { guildId, emojis });
+            values = { ...result.emojis };
+            draw();
+            toast(t("Emoji toko tersimpan.", "Storefront emojis saved."));
+        } finally { controls.disabled = false; }
+    };
+    save.onclick = guard(() => persist(values));
+    reset.onclick = guard(async () => {
+        if (await gsConfirm(t("Kembalikan semua emoji Model 1 ke bawaan?", "Reset all Model 1 emojis to defaults?"), { danger: true })) await persist({});
+    });
+    draw();
+    drawPalette();
+    controls.append(
+        h("div", { class: "emoji-slot-row" }, h("div", {}, select, input), preview),
+        h("p", { class: "mut" }, t("Pilih emoji dari palet atau tempel kode emoji dari server toko. Bot memakai emoji bawaan jika emoji khusus tidak tersedia.", "Pick an emoji or paste a code from your store server. The bot uses a default if a custom emoji is unavailable.")),
+        group, palette,
+        h("div", { class: "row gap mt" }, save, h("button", { type: "button", onclick: () => choose(defaults[select.value]) }, t("Pulihkan bagian ini", "Restore this slot")), reset),
+    );
+    return card(h("h2", {}, title), controls);
+}
+
+async function storeCustomEmojis() {
+    const model = await modelEmojiEditor();
+    const own = me.hostedBot?.enabled ? null : await customEmojiEditor({
         title: "Custom Emoji AutoStore",
         subtitle: gsT("Atur emoji yang digunakan bot AutoStore untuk produk, pembelian, saldo, dan notifikasi."),
         fields: STORE_EMOJI_FIELDS,
@@ -1160,6 +1230,8 @@ function storeCustomEmojis() {
         resetEndpoint: "/api/emojis/reset",
         includeBanner: false
     });
+    return h("div", {}, head(gsT("Emoji"), gsLanguage === "en" ? "Customize the emojis in your Discord storefront." : "Pilih emoji untuk tampilan toko di Discord."), model,
+        own ? h("details", { class: "card mt" }, h("summary", {}, gsLanguage === "en" ? "Existing bot emoji settings" : "Pengaturan emoji bot lainnya"), own) : null);
 }
 
 // ---------- AutoStore: Custom Banner ----------

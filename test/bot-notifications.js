@@ -10,6 +10,7 @@ class Embed {
     setTimestamp() { return this; }
     setFooter(v) { this.data.footer = v; return this; }
     setImage(v) { this.data.image = v; return this; }
+    addFields(...fields) { this.data.fields = fields; return this; }
 }
 function load(file, imports, extra = {}) {
     const module = { exports: {} };
@@ -87,4 +88,36 @@ function load(file, imports, extra = {}) {
     assert.equal(notifications, 1);
     assert.equal(updates, 1);
     console.log("PASS hosted payment log waits for confirmed credit and updates once without a balance write");
+
+    let claimed = false, sends = 0;
+    const doc = { _id: "000000000000000000000001", panelManaged: true, orderId: "DP-ONE", grossAmount: 1000, wlAmount: 100 };
+    class Row { addComponents(...components) { this.components = components; return this; } }
+    class Button {
+        setLabel(label) { this.label = label; return this; }
+        setEmoji() { return this; }
+        setStyle() { return this; }
+        setCustomId(id) { this.customId = id; return this; }
+    }
+    const { sendDepositLog } = load("bot/src/utils/depositWatcher.js", {
+        "discord.js": { EmbedBuilder: Embed, ActionRowBuilder: Row, ButtonBuilder: Button, ButtonStyle: { Danger: 4 } },
+        "../index.js": { channels: { fetch: async () => ({
+            id: "channel", send: async payload => {
+                sends++;
+                assert.equal(payload.enforceNonce, true);
+                assert.equal(payload.nonce, doc._id);
+                assert.equal(payload.components[0].components[0].label, "Cancel");
+                return { id: "message" };
+            },
+        }) } },
+        "../Schema/qris.js": {
+            findOneAndUpdate: async () => { if (claimed) return null; claimed = true; return doc; },
+            updateOne: async () => {},
+        },
+        "../Schema/balance.js": {},
+        "../Schema/SettingChannel.js": { findOne: () => Promise.resolve({ ChannelDonation: "channel" }) },
+        "../config/configemoji.json": emoji,
+    });
+    await Promise.all([sendDepositLog(doc), sendDepositLog(doc)]);
+    assert.equal(sends, 1);
+    console.log("PASS concurrent QRIS log senders create one message with a cancel button");
 })().catch(error => { console.error(error); process.exitCode = 1; });

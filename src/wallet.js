@@ -140,6 +140,18 @@ function createWallet(opts) {
         return { status: dep.status, credited: !!dep.botDeliveredAt, amount: dep.amount, wl: dep.hostedWL };
     }
 
+    async function cancelHostedDeposit(licenseId, hostedTenantId, orderId) {
+        const c = await getCols();
+        const query = { licenseId, hostedTenantId, orderId };
+        const dep = await c.deposits.findOne(query);
+        if (!dep) throw new WalletError("Pesanan deposit tidak ditemukan.", 404);
+        if (dep.status === "paid" || dep.botDeliveredAt) throw new WalletError("Pembayaran sudah diterima.", 409);
+        const updated = await c.deposits.updateOne({ ...query, status: { $in: ["pending", "expired"] } },
+            { $set: { status: "cancelled", cancelledAt: now() } });
+        if (!updated.matchedCount && dep.status !== "cancelled") throw new WalletError("Status pembayaran sudah berubah.", 409);
+        return { cancelled: true };
+    }
+
     // ---------------------------------------------------------------- Rekening & penarikan
     const bankView = (b) => b && { bankName: b.bankName, accountName: b.accountName, accountNoMasked: "••••" + String(b.accountNo).slice(-4) };
 
@@ -287,7 +299,7 @@ function createWallet(opts) {
         return diffs;
     }
 
-    return { createDeposit, handlePaid, summary, listDeposits, hostedDepositStatus, setBank, requestWithdrawal, listWithdrawals, adminWithdrawals, adminComplete, adminReject, adminOverview, balanceOf, sweep, reconcile, config: { holdMs, minDeposit, minWithdraw, withdrawFee, feePercent, feeFlat } };
+    return { createDeposit, handlePaid, summary, listDeposits, hostedDepositStatus, cancelHostedDeposit, setBank, requestWithdrawal, listWithdrawals, adminWithdrawals, adminComplete, adminReject, adminOverview, balanceOf, sweep, reconcile, config: { holdMs, minDeposit, minWithdraw, withdrawFee, feePercent, feeFlat } };
 }
 
 module.exports = { createWallet, WalletError, rp };

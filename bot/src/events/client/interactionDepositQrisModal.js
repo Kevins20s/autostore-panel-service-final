@@ -5,6 +5,8 @@ const {
     ActionRowBuilder,
     EmbedBuilder,
     AttachmentBuilder,
+    ButtonBuilder,
+    ButtonStyle,
 } = require("discord.js");
 const client = require("../../index");
 const Bal = require("../../Schema/balance.js");
@@ -75,7 +77,11 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
     }
 
     if (qrisDoc.panelManaged) {
-        const sent = await interaction.user.send({ embeds: [embed], files }).catch(() => null);
+        const components = [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`qriscancel_${panel.orderId}`).setLabel("Batalkan")
+                .setStyle(ButtonStyle.Danger),
+        )];
+        const sent = await interaction.user.send({ embeds: [embed], files, components }).catch(() => null);
         if (sent) {
             await Qris.updateOne({ orderId: panel.orderId }, { $set: {
                 dmChannelId: sent.channelId, dmMessageId: sent.id,
@@ -84,7 +90,7 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
         await sendDepositLog(qrisDoc);
         return sent ? interaction.editReply({
             content: "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
-        }) : interaction.editReply({ embeds: [embed], files });
+        }) : interaction.editReply({ embeds: [embed], files, components });
     }
     let sentMessage;
     try {

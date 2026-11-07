@@ -527,10 +527,18 @@ async function settings() {
     mt.onchange = guard(async () => { await api("PUT", "/api/shop/settings/maintenance", { on: mt.checked }); toast(mt.checked ? gsT("Mode maintenance aktif.") : gsT("Maintenance dimatikan.")); });
     live.onchange = guard(async () => { await api("PUT", "/api/shop/settings/liveapi", { on: live.checked }); toast(gsT("Tersimpan.")); });
     const rate = h("input", { value: s.pricePerWL ?? "", inputmode: "decimal" });
+    const webhook = h("input", { value: s.donationWebhookId || "", inputmode: "numeric" });
     return h("div", {}, head("Settings", gsT("Pengaturan toko.")),
         card(h("h2", {}, "Maintenance"), h("p", { class: "mut" }, gsT("Saat aktif, pembelian di toko dinonaktifkan.")), h("label", { class: "sw" }, mt, gsT("Aktifkan mode maintenance"))),
         card(h("h2", {}, gsT("Kurs World Lock")), h("label", { class: "sw" }, live, gsT("Pakai harga live (gtid.pro), kurs manual jadi cadangan")),
-            field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))));
+            field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))),
+        me.hostedBot?.enabled ? card(h("h2", {}, gsLanguage === "en" ? "Donation webhook" : "Webhook donasi"),
+            field(gsLanguage === "en" ? "Donation webhook ID" : "ID webhook donasi", webhook,
+                gsLanguage === "en" ? "Use /setchannel in Discord to select the donation log channel." : "Pilih channel Donation Log melalui /setchannel di Discord."),
+            h("button", { class: "pri", onclick: guard(async () => {
+                await api("PUT", "/api/shop/settings/donation-webhook", { webhookId: webhook.value });
+                toast(gsT("Tersimpan."));
+            }) }, gsT("Simpan"))) : null);
 }
 
 // ---------- Bot & Server ----------

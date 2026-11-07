@@ -84,6 +84,17 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         try { res.json(await wallet.hostedDepositStatus(id, tenant.licenseId, req.params.orderId)); }
         catch (error) { send(res)(error); }
     });
+    app.post("/internal/wallet/hosted-deposit/:orderId/cancel", async (req, res) => {
+        if (!directOnly(req)) return res.sendStatus(404);
+        const id = String(req.headers["x-license-id"] || "");
+        const guildId = String(req.headers["x-hosted-guild"] || "");
+        const tenant = pilotTenant(findLicense(id));
+        const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+        if (!tenant || tenant.guildId !== guildId || !safeEq(token, hostedWalletToken(id, guildId))) return res.sendStatus(401);
+        if (!wallet) return res.sendStatus(503);
+        try { res.json(await wallet.cancelHostedDeposit(id, tenant.licenseId, req.params.orderId)); }
+        catch (error) { send(res)(error); }
+    });
     app.post("/internal/wallet/deposit", async (req, res) => {
         if (!directOnly(req)) return res.sendStatus(404);
         const id = String(req.headers["x-license-id"] || "");

@@ -43,6 +43,7 @@ const schema = new Schema({
   logMessageId: {
     type: String,
   },
+  logClaimUntil: Date,
   mode: {
     type: String,
     default: "manual", // manual | auto (QRIS otomatis lewat panel)

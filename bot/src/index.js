@@ -24,7 +24,9 @@ function hostedActive() {
 class HostedClient extends Client {
     emit(event, ...args) {
         if (event === "interactionCreate" || event === "messageCreate") {
-            if (args[0]?.guildId !== config.serverId || !hostedActive() || mongoose.connection.readyState !== 1) {
+            const ownQrCancelDm = event === "interactionCreate" && !args[0]?.guildId &&
+                args[0]?.customId?.startsWith("qriscancel_");
+            if ((!ownQrCancelDm && args[0]?.guildId !== config.serverId) || !hostedActive() || mongoose.connection.readyState !== 1) {
                 return false;
             }
         }

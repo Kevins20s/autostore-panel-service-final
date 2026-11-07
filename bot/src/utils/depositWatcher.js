@@ -79,7 +79,13 @@ async function getQrisImageUrl() {
  * Menyimpan channelId + messageId ke dokumen Qris supaya bisa diedit belakangan.
  */
 async function sendDepositLog(trx) {
+    let claimed;
     try {
+        claimed = await Qris.findOneAndUpdate({
+            _id: trx._id, logMessageId: { $in: [null, ""] },
+            $or: [{ logClaimUntil: { $exists: false } }, { logClaimUntil: { $lte: new Date() } }],
+        }, { $set: { logClaimUntil: new Date(Date.now() + 60000) } }, { new: true });
+        if (!claimed) return null;
         const setting = await SettingChannel.findOne({}).catch(() => null);
         const channelId = setting?.ChannelDonation;
         if (!channelId) return null;
@@ -89,7 +95,12 @@ async function sendDepositLog(trx) {
 
         const message = await channel.send({
             embeds: [buildLogEmbed(trx, "PENDING")],
-            components: trx.panelManaged ? [] : [buildAdminButtons(trx.orderId)],
+            components: trx.panelManaged ? [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setLabel("Cancel").setEmoji("❌").setStyle(ButtonStyle.Danger)
+                    .setCustomId(`qrisadmin_cancel_${trx.orderId}`),
+            )] : [buildAdminButtons(trx.orderId)],
+            nonce: String(trx._id),
+            enforceNonce: true,
         });
 
         await Qris.updateOne(
@@ -101,6 +112,8 @@ async function sendDepositLog(trx) {
     } catch (err) {
         console.error("Gagal kirim log deposit QRIS:", err.message);
         return null;
+    } finally {
+        if (claimed) await Qris.updateOne({ _id: trx._id }, { $unset: { logClaimUntil: "" } }).catch(() => {});
     }
 }
 

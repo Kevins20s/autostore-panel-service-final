@@ -93,6 +93,21 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
       assert.strictEqual(legacyCalls, 0);
       console.log("ok  deposit GevraStore dikreditkan ke database lisensi yang benar"); await close(); }
 
+    { let credits = 0;
+      const { w, close } = await setup({ creditHosted: async () => { credits++; return true; } });
+      const d = await w.createDeposit({ licenseId: L, amount: 10000, discordId: "123456789012345678", hostedWL: 50, hostedTenantId: "store-a" });
+      await bad(w.cancelHostedDeposit(L2, "store-a", d.orderId), /tidak ditemukan/, 404);
+      await w.cancelHostedDeposit(L, "store-a", d.orderId);
+      await w.cancelHostedDeposit(L, "store-a", d.orderId);
+      assert.strictEqual((await w.hostedDepositStatus(L, "store-a", d.orderId)).status, "cancelled");
+      assert.strictEqual(credits, 0);
+      await w.handlePaid({ orderId: d.orderId, amount: 10000 });
+      await w.handlePaid({ orderId: d.orderId, amount: 10000 });
+      assert.strictEqual(credits, 1);
+      await bad(w.cancelHostedDeposit(L, "store-a", d.orderId), /sudah diterima/, 409);
+      console.log("ok  pembatalan QRIS dan pembayaran terlambat tidak menggandakan saldo");
+      await close(); }
+
     // 3. biaya + validasi nominal
     { const { w, close } = await setup({ feePercent: 10, feeFlat: 500 });
       const d = await w.createDeposit({ licenseId: L, amount: 10000 }); await w.handlePaid({ orderId: d.orderId, amount: 10000 });

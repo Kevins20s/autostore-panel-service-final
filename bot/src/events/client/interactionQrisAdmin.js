@@ -3,6 +3,7 @@ const Qris = require("../../Schema/qris.js");
 const { creditDeposit, cancelDeposit, fetchDmMessage } = require("../../utils/depositWatcher.js");
 const { Owner, Admin } = require("../../config/config.json");
 const { Warning, Benar, Salah } = require("../../config/configemoji.json");
+const { cancelHostedQris } = require("../../utils/hostedDepositLogs");
 
 module.exports = {
     name: "interactionQrisAdmin",
@@ -14,6 +15,17 @@ function isAdminOrOwner(userId) {
 
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
+    if (interaction.customId.startsWith("qriscancel_")) {
+        await interaction.deferReply({ ephemeral: true });
+        const orderId = interaction.customId.slice("qriscancel_".length);
+        const trx = await Qris.findOne({ orderId, discordId: interaction.user.id, panelManaged: true });
+        if (!trx) return interaction.editReply("Transaksi tidak ditemukan untuk akunmu.");
+        if (trx.status !== "pending") return interaction.editReply("Transaksi sudah diproses.");
+        try {
+            await cancelHostedQris(trx);
+            return interaction.editReply("Permintaan QRIS dibatalkan. Pembayaran yang sudah terlanjur dikirim tetap diproses saat terverifikasi.");
+        } catch (error) { return interaction.editReply(error.message); }
+    }
     if (
         !interaction.customId.startsWith("qrisadmin_success_") &&
         !interaction.customId.startsWith("qrisadmin_cancel_")
@@ -50,6 +62,11 @@ client.on("interactionCreate", async (interaction) => {
         }
 
         const dmMessage = await fetchDmMessage(trx);
+        if (trx.panelManaged) {
+            if (isSuccess) return interaction.editReply("QRIS otomatis dikonfirmasi oleh sistem pembayaran.");
+            await cancelHostedQris(trx);
+            return interaction.editReply(`${Salah} Deposit \`${trx.orderId}\` ditandai **CANCELLED**.`);
+        }
 
         if (isSuccess) {
             const ok = await creditDeposit(trx, dmMessage, interaction.user.id);

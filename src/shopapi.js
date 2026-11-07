@@ -292,7 +292,16 @@ module.exports = function createShopRouter({ valid, decrypt }) {
     // ---------- pengaturan toko ----------
     r.get("/settings", wrap(async (req, res) => {
         const [mt, rate, api] = await Promise.all([c(req, "mt").findOne({}), c(req, "wlrate").findOne({}), c(req, "api").findOne({})]);
-        res.json({ maintenance: !!mt?.mt, pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true });
+        const channels = req.lic.hostedBot?.enabled ? await req.db.collection("setchannels").findOne({}) : null;
+        res.json({ maintenance: !!mt?.mt, pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true,
+            donationWebhookId: channels?.DonationWebhookId || "" });
+    }));
+    r.put("/settings/donation-webhook", wrap(async (req, res) => {
+        if (!pilotTenant(req.lic)) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);
+        const id = String(req.body?.webhookId || "").trim();
+        if (id && !ID_RE.test(id)) return fail(res, "Masukkan ID angka webhook donasi.");
+        await req.db.collection("setchannels").updateOne({}, { $set: { DonationWebhookId: id } }, { upsert: true });
+        res.json({ ok: true });
     }));
     r.put("/settings/maintenance", wrap(async (req, res) => {
         await c(req, "mt").updateOne({}, { $set: { mt: req.body?.on === true } }, { upsert: true });

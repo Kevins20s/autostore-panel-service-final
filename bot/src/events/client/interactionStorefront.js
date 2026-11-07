@@ -160,7 +160,7 @@ async function handleStorefront(interaction) {
     else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
         const storefront = await mongoose.connection.collection(collection).findOne({ _id: interaction.guildId });
-        const emojis = resolveEmojis(storefront?.emojis, interaction.guild);
+        const emojis = await resolveEmojis(storefront?.emojis, interaction.guild);
         const embed = new EmbedBuilder().setColor(COLOR).setTimestamp()
             .setFooter({ text: interaction.guild?.name || "GevraStore" });
         let actions;

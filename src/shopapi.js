@@ -3,12 +3,37 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
-const { collection: storefrontCollection, models: storefrontModels, emojiDefaults, validEmoji } = require("../bot/src/config/storefront");
+const { collection: storefrontCollection, models: storefrontModels, emojiDefaults, customEmojiId } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
 const num = (v) => (typeof v === "number" ? v : Number(String(v ?? "").trim().replace(",", ".")));
 const okNum = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
+
+async function discordEmotes(guildId, token, botId) {
+    if (!token) return null;
+    const server = `/guilds/${guildId}`;
+    const get = async path => {
+        try {
+            const response = await fetch("https://discord.com/api/v10" + path, {
+                headers: { Authorization: "Bot " + token }, signal: AbortSignal.timeout(5000),
+            });
+            return response.ok ? await response.json() : null;
+        } catch { return null; }
+    };
+    const [guild, application] = await Promise.all([
+        get(server + "/emojis"), ID_RE.test(botId) ? get(`/applications/${botId}/emojis`) : null,
+    ]);
+    if (!Array.isArray(guild) && !Array.isArray(application?.items)) return null;
+    const guildList = Array.isArray(guild) ? guild : [];
+    const member = ID_RE.test(botId) && guildList.some(emoji => emoji.roles?.length) ? await get(server + "/members/" + botId) : null;
+    const roles = member?.roles || [];
+    const available = guildList.filter(emoji => emoji.available !== false &&
+        (!emoji.roles?.length || emoji.roles.some(role => roles.includes(role))));
+    const toEntry = source => ({ id, name, animated }) => ({ name, source, code: `<${animated ? "a" : ""}:${name}:${id}>` });
+    return [...(application?.items || []).map(toEntry("bot")), ...available.map(toEntry("server"))]
+        .filter(emoji => customEmojiId(emoji.code)).sort((a, b) => a.name.localeCompare(b.name));
+}
 
 module.exports = function createShopRouter({ valid, decrypt, licenses = () => [] }) {
     const r = express.Router();
@@ -31,6 +56,9 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         try {
             const config = hosted ? hosted.config : decrypt(l.config);
             req.shopGuildId = hosted?.guildId || config.guildId || "";
+            req.shopDiscord = hosted
+                ? { token: process.env.DISCORD_CATALOG_PILOT_TOKEN, botId: process.env.DISCORD_HOSTED_BOT_CLIENT_ID }
+                : { token: config.botToken, botId: config.clientId };
             req.db = hosted
                 ? await getDb("hosted:" + hosted.tenantId, config.mongoUrl, hosted.dbName)
                 : await getDb(l.id, config.mongoUrl);
@@ -42,6 +70,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         next();
     });
     const c = (req, k) => req.db.collection(COL[k]);
+    const storeEmotes = req => discordEmotes(req.shopGuildId, req.shopDiscord.token, req.shopDiscord.botId);
 
     // ---------- ringkasan ----------
     r.get("/summary", wrap(async (req, res) => {
@@ -318,8 +347,13 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
     r.get("/settings/storefront/emojis", wrap(async (req, res) => {
         const guildId = req.shopGuildId;
         if (!ID_RE.test(guildId)) return fail(res, "Pilih server di menu Bot & Server dulu.", 409);
-        const storefront = await req.db.collection(storefrontCollection).findOne({ _id: guildId });
-        res.json({ guildId, emojis: { ...emojiDefaults, ...storefront?.emojis }, defaults: emojiDefaults });
+        const [storefront, library] = await Promise.all([
+            req.db.collection(storefrontCollection).findOne({ _id: guildId }), storeEmotes(req),
+        ]);
+        const emotes = Object.fromEntries(Object.entries(storefront?.emojis || {}).filter(
+            ([key, value]) => Object.hasOwn(emojiDefaults, key) && customEmojiId(value)
+        ));
+        res.set("Cache-Control", "no-store").json({ guildId, emotes, library });
     }));
     r.put("/settings/storefront/emojis", wrap(async (req, res) => {
         const { guildId, emojis } = req.body || {};
@@ -327,10 +361,16 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             return fail(res, "Server toko belum diatur atau sudah berubah. Muat ulang halaman.", 409);
         }
         if (!emojis || typeof emojis !== "object" || Array.isArray(emojis) || Object.entries(emojis).some(
-            ([key, value]) => !Object.hasOwn(emojiDefaults, key) || !validEmoji(value)
-        )) return fail(res, "Pilih satu emoji Unicode atau masukkan kode emoji Discord yang valid.");
-        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { emojis } }, { upsert: true });
-        res.json({ emojis: { ...emojiDefaults, ...emojis } });
+            ([key, value]) => !Object.hasOwn(emojiDefaults, key) || !customEmojiId(value)
+        )) return fail(res, "Pilih emote custom Discord dari server toko.");
+        const entries = Object.entries(emojis);
+        const library = entries.length ? await storeEmotes(req) : [];
+        if (!library) return fail(res, "Daftar emote dari Discord belum tersedia. Coba lagi.", 502);
+        const byId = new Map(library.map(({ code }) => [customEmojiId(code), code]));
+        const normalized = Object.fromEntries(entries.map(([key, code]) => [key, byId.get(customEmojiId(code))]));
+        if (Object.values(normalized).some(code => !code)) return fail(res, "Ada emote yang sudah tidak tersedia. Muat ulang daftar emote.");
+        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { emojis: normalized } }, { upsert: true });
+        res.json({ emotes: normalized });
     }));
     r.put("/settings/donation-webhook", wrap(async (req, res) => {
         if (!hostedTenant(req.lic, licenses())) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);

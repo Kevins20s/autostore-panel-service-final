@@ -13,22 +13,30 @@ const emojiDefaults = Object.freeze({
     discord: "🪪", rupiah: "💵", spent: "🛍️", joined: "🗓️",
 });
 const customEmoji = /^<(a?):([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
-const unicodeEmoji = /^(?:[#*\d]\uFE0F?\u20E3|\p{Regional_Indicator}{2}|\p{Extended_Pictographic}[\p{Emoji_Component}\p{Extended_Pictographic}]*)$/u;
-const segmenter = new Intl.Segmenter();
+const applicationEmojiLists = new WeakMap();
 
-function validEmoji(value) {
-    return typeof value === "string" && (customEmoji.test(value) ||
-        (value.length <= 32 && unicodeEmoji.test(value) && [...segmenter.segment(value)].length === 1));
+function customEmojiId(value) {
+    return typeof value === "string" && value === value.trim() ? customEmoji.exec(value)?.[3] : undefined;
 }
 
-function resolveEmojis(config, guild) {
+function applicationEmojis(guild) {
+    const manager = guild?.client?.application?.emojis;
+    if (!manager) return null;
+    const current = applicationEmojiLists.get(manager);
+    if (current && current.until > Date.now()) return current.list;
+    const list = manager.fetch().catch(() => null);
+    applicationEmojiLists.set(manager, { list, until: Date.now() + 30000 });
+    return list;
+}
+
+async function resolveEmojis(config, guild) {
     const emojis = { ...emojiDefaults };
-    for (const key of Object.keys(emojiDefaults)) {
-        const value = config?.[key];
-        if (!validEmoji(value)) continue;
-        const id = customEmoji.exec(value)?.[3];
-        if (!id) {
-            emojis[key] = value;
+    const configured = Object.keys(emojiDefaults).map(key => [key, customEmojiId(config?.[key])]).filter(([, id]) => id);
+    const owned = configured.some(([, id]) => !guild?.emojis?.cache.has(id)) ? await applicationEmojis(guild) : null;
+    for (const [key, id] of configured) {
+        const appEmoji = owned?.get(id);
+        if (appEmoji) {
+            emojis[key] = appEmoji.toString();
             continue;
         }
         const emoji = guild?.emojis?.cache.get(id);
@@ -44,4 +52,4 @@ function componentEmoji(value) {
     return custom ? { animated: custom[1] === "a", name: custom[2], id: custom[3] } : { name: value };
 }
 
-module.exports = { collection, models, buttons, rupiahCredit, emojiDefaults, validEmoji, resolveEmojis, componentEmoji };
+module.exports = { collection, models, buttons, rupiahCredit, emojiDefaults, customEmojiId, resolveEmojis, componentEmoji };

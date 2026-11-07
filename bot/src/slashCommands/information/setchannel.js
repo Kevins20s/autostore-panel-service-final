@@ -27,7 +27,12 @@ module.exports = {
             description: "Set Channel For Donation Logs",
             type: ApplicationCommandOptionType.Channel,
             required: true
-        }
+        },
+        ...(process.env.HOSTED_PILOT_BINDING ? [{
+            name: "donationwebhookid",
+            description: "ID webhook deposit (bagian angka di URL webhook, tanpa token)",
+            type: ApplicationCommandOptionType.String,
+        }] : [])
     ],
     /** 
      * @param {Client} client 
@@ -37,6 +42,11 @@ module.exports = {
     run: async (client, interaction, args) => {
         const data1 = interaction.options.getChannel("testimoni");
         const data2 = interaction.options.getChannel("donationlog");
+        const hosted = !!process.env.HOSTED_PILOT_BINDING;
+        const webhookId = hosted ? interaction.options.getString("donationwebhookid") : null;
+        if (webhookId && !/^\d{17,20}$/.test(webhookId)) {
+            return interaction.reply({ content: "Masukkan ID angka webhook saja, tanpa URL atau token.", ephemeral: true });
+        }
         const user = await client.users.fetch(Owner);
 
         const ChanelID = interaction.guild.channels.cache.get(`${data1.id}`);
@@ -57,7 +67,7 @@ module.exports = {
 
         await setchannel.findOneAndUpdate(
             {},
-            { $set: { ChanelTesti: data1.id, ChannelDonation: data2.id } },
+            { $set: { ChanelTesti: data1.id, ChannelDonation: data2.id, ...(hosted ? { DonationWebhookId: webhookId || "" } : {}) } },
             { upsert: true, new: true }
         )
             .then((res) => {

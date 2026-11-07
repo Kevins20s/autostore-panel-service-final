@@ -23,28 +23,11 @@ module.exports = {
  * Transaksi dicatat SEBELUM DM dikirim, supaya webhook yang datang cepat tetap menemukan ordernya.
  */
 async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL) {
-    const wlAmount = Math.floor(panel.amount / pricePerWL);
+    const wlAmount = panel.hostedWL ?? Math.floor(panel.amount / pricePerWL);
 
     if (wlAmount < 1) {
         return interaction.editReply({
             content: `${Warning} Nominal terlalu kecil. Minimal **Rp${pricePerWL.toLocaleString("id-ID")}** untuk 1 ${WL}.`,
-        });
-    }
-
-    let qrisDoc;
-    try {
-        qrisDoc = await Qris.create({
-            orderId: panel.orderId,
-            mode: "auto",
-            discordId: interaction.user.id,
-            growId: wallet.GrowIDNow,
-            grossAmount: panel.amount,
-            wlAmount,
-        });
-    } catch (err) {
-        console.error("Gagal menyimpan transaksi QRIS otomatis:", err);
-        return interaction.editReply({
-            content: `${Warning} Gagal menyimpan transaksi deposit. Coba lagi beberapa saat lagi.`,
         });
     }
 
@@ -71,6 +54,26 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
         embed.setImage(panel.qrImageUrl);
     }
 
+    // Hosted deposits are credited by the panel transaction, with no manual
+    // approval button for the same payment.
+    if (panel.hostedWL !== undefined) return interaction.editReply({ embeds: [embed], files });
+
+    let qrisDoc;
+    try {
+        qrisDoc = await Qris.create({
+            orderId: panel.orderId,
+            mode: "auto",
+            discordId: interaction.user.id,
+            growId: wallet.GrowIDNow,
+            grossAmount: panel.amount,
+            wlAmount,
+        });
+    } catch (err) {
+        console.error("Gagal menyimpan transaksi QRIS otomatis:", err);
+        return interaction.editReply({
+            content: `${Warning} Gagal menyimpan transaksi deposit. Coba lagi beberapa saat lagi.`,
+        });
+    }
     let sentMessage;
     try {
         sentMessage = await interaction.user.send({ embeds: [embed], files });
@@ -160,7 +163,7 @@ client.on("interactionCreate", async (interaction) => {
             // Pilihan pembeli toko: QRIS otomatis (lewat panel) atau QRIS manual (/setqris). Panel yang menentukan modenya.
             let panel;
             try {
-                panel = await requestAutoDeposit({ amount: nominal, discordId: interaction.user.id });
+                panel = await requestAutoDeposit({ amount: nominal, discordId: interaction.user.id, pricePerWL });
             } catch (err) {
                 if (!(err instanceof PanelError)) console.error("Deposit QRIS otomatis error:", err);
                 return interaction.editReply({

@@ -4,9 +4,11 @@ const crypto = require("crypto");
 const express = require("express");
 const { derive } = require("./crypto");
 const { WalletError } = require("./walletdb");
+const { pilotTenant } = require("./shared-tenants");
 
 // Token & secret per pembeli diturunkan dari MASTER_KEY, jadi tidak perlu disimpan dan ikut pindah bersama MASTER_KEY.
 const internalToken = (licenseId) => derive("wallet-internal:" + licenseId).toString("hex");
+const hostedWalletToken = (licenseId, guildId) => derive(`wallet-hosted:${licenseId}:${guildId}`).toString("hex");
 const botHookSecret = (licenseId) => derive("wallet-hook:" + licenseId).toString("hex");
 const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -74,16 +76,30 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         const id = String(req.headers["x-license-id"] || "");
         const l = findLicense(id);
         const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-        if (!l || !safeEq(tok, internalToken(id))) return res.sendStatus(401);
+        const guildId = req.headers["x-hosted-guild"];
+        const hosted = guildId && pilotTenant(l);
+        if (!l || !(guildId
+            ? hosted?.guildId === guildId && safeEq(tok, hostedWalletToken(id, guildId))
+            : safeEq(tok, internalToken(id)))) return res.sendStatus(401);
         if (l.type === "service" || !valid(l)) return res.status(403).json({ error: "Key tidak aktif." });
         if (l.runMode === "central") return res.status(409).json({ error: "Gunakan perintah isi saldo di bot GevraStore." });
         if (modeOf(l) === "manual") return res.json({ mode: "manual" });
         if (!wallet) return res.status(503).json({ error: "Pembayaran otomatis belum aktif." });
         if (tooFast(id)) return res.status(429).json({ error: "Terlalu banyak permintaan. Coba lagi sebentar lagi." });
         try {
-            const d = await wallet.createDeposit({ licenseId: l.id, amount: req.body?.amount, discordId: req.body?.discordId });
+            const input = { licenseId: l.id, amount: req.body?.amount, discordId: req.body?.discordId };
+            if (hosted) {
+                const rate = Number(req.body?.pricePerWL);
+                const hostedWL = Math.floor(Number(input.amount) / rate);
+                if (!(rate > 0 && Number.isFinite(rate)) || !Number.isSafeInteger(hostedWL) || hostedWL < 1) {
+                    throw new WalletError("Nominal belum cukup untuk 1 WL atau kurs tidak valid.");
+                }
+                Object.assign(input, { hostedWL, hostedTenantId: hosted.licenseId });
+            }
+            const d = await wallet.createDeposit(input);
             const qrPng = d.qrString ? (await QRCode.toBuffer(d.qrString, { type: "png", width: 512, margin: 2 })).toString("base64") : null;
-            res.json({ mode: "auto", orderId: d.orderId, amount: d.amount, expiresAt: d.expiresAt, qrPng, qrImageUrl: d.qrImageUrl });
+            res.json({ mode: "auto", orderId: d.orderId, amount: d.amount, expiresAt: d.expiresAt, qrPng, qrImageUrl: d.qrImageUrl,
+                ...(hosted ? { hostedWL: input.hostedWL } : {}) });
         } catch (e) { send(res)(e); }
     });
 
@@ -133,4 +149,4 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
     }));
 }
 
-module.exports = { registerWalletWebhook, registerWalletRoutes, createBotForwarder, internalToken, botHookSecret };
+module.exports = { registerWalletWebhook, registerWalletRoutes, createBotForwarder, internalToken, hostedWalletToken, botHookSecret };

@@ -5,6 +5,7 @@ const path = require("node:path");
 const { fork } = require("node:child_process");
 require("./loadenv").loadEnv();
 const { pilotTenant } = require("./shared-tenants");
+const { hostedWalletToken } = require("./walletapi");
 
 const statusFile = process.env.DISCORD_HOSTED_PILOT_STATUS_FILE;
 const dataFile = path.resolve(process.env.DATA_FILE || "data.json");
@@ -79,6 +80,10 @@ async function reconcile() {
                 OWNER_ID: binding.owner,
                 ADMIN_IDS: binding.owner,
                 GUILD_ID: binding.guildId,
+                PANEL_INTERNAL_URL: "http://127.0.0.1:" + (process.env.PANEL_PORT || process.env.PORT || 8080),
+                PANEL_INTERNAL_TOKEN: hostedWalletToken(binding.licenseId, binding.guildId),
+                PANEL_LICENSE_ID: binding.licenseId,
+                HOSTED_WORLD_DEPOSIT: process.env.HOSTED_WORLD_DEPOSIT || "",
                 HOSTED_PILOT_BINDING: JSON.stringify({ dataFile, licenseId: binding.licenseId, dbName: binding.dbName }),
             },
         });

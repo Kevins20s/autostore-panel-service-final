@@ -115,6 +115,6 @@ async function depositScript() {
         h("div", { class: "deposit-layout" },
             card(h("h2", {}, guideText("Konfigurasi", "Configuration")),
                 h("p", { class: "mut" }, guideText("Webhook diproses di browser dan tidak disimpan panel. Jaga kerahasiaan script hasil salinan.", "Webhook values are processed in your browser. Keep the generated script private.")),
-                h("p", { class: "mut" }, guideText("Gunakan dengan Bot sendiri yang menerima log donasi dari /setchannel. Bot GevraStore hosting belum menerima deposit dari pesan donasi.", "Use this with your own bot configured to receive donation logs via /setchannel. Hosted GevraStore does not process donation messages yet.")), form),
+                h("p", { class: "mut" }, guideText("Atur channel donasi lewat /setchannel. Di Bot GevraStore, isi juga donationwebhookid dengan bagian angka dari URL webhook donasi, tanpa token.", "Set the donation channel via /setchannel. For hosted GevraStore, set donationwebhookid to the numeric part of the donation webhook URL, without the token.")), form),
             card(h("h2", {}, guideText("Pratinjau Lua", "Lua preview")), preview)));
 }

@@ -39,7 +39,7 @@ function createWallet(opts) {
     };
 
     // ---------------------------------------------------------------- Deposit
-    async function createDeposit({ licenseId, amount, discordId = "", hostedWL }) {
+    async function createDeposit({ licenseId, amount, discordId = "", hostedWL, hostedTenantId }) {
         if (!autoko.enabled) throw new WalletError("Pembayaran otomatis belum aktif.", 503);
         if (isFrozen(licenseId)) throw new WalletError("Pembayaran otomatis toko ini sedang dibekukan penjual.", 403);
         const amt = needInt(amount, "Nominal");
@@ -57,6 +57,7 @@ function createWallet(opts) {
         const fee = feeOf(amt);
         const dep = { orderId: newOrderId(), licenseId, discordId: did, amount: amt, fee, net: amt - fee, status: "pending", createdAt: t, expiresAt: t + depositTtlMs, botDeliveredAt: null, botAttempts: 0 };
         if (hostedWL !== undefined) dep.hostedWL = hostedWL;
+        if (hostedTenantId) dep.hostedTenantId = hostedTenantId;
         await c.deposits.insertOne(dep);
         try {
             const q = await autoko.createQris({ orderId: dep.orderId, amount: amt, expiresAt: dep.expiresAt });

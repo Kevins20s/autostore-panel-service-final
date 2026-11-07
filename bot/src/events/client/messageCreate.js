@@ -4,12 +4,25 @@ const Bal = require("../../Schema/balance.js");
 const channel = require("../../Schema/SettingChannel.js");
 const depo = require("../../Schema/deposition.js");
 const { WL, DL, BGL } = require("../../config/configemoji.json");
+const { creditWorldDeposit } = require("../../utils/hostedWorldDeposit");
 
 module.exports = {
     name: "Catch Of Donation Embeds"
 };
 
 client.on("messageCreate", async (message) => {
+    if (process.env.HOSTED_PILOT_BINDING) {
+        if (process.env.HOSTED_WORLD_DEPOSIT !== "1" || !message.webhookId) return;
+        try {
+            const settings = await channel.findOne({});
+            const result = await creditWorldDeposit(message, settings);
+            if (result) {
+                const user = await client.users.fetch(result.discordId);
+                await user.send(`Deposit world masuk: ${result.amount} WL. Saldo sekarang ${result.balance} WL.`);
+            }
+        } catch (error) { console.error("[WORLD DEPOSIT]", error.code || error.name); }
+        return;
+    }
     let donation = await channel
         .findOne({})
         .then((d) => {

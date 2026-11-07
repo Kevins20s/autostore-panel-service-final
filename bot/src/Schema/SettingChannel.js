@@ -3,6 +3,7 @@ const { Schema, model } = require("mongoose")
 const schema = new Schema({
     ChanelTesti: String,
     ChannelDonation: String,
+    DonationWebhookId: String,
     ChannelStock: String,
     ChannelRestock: String,
     MessageID: String,

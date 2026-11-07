@@ -69,6 +69,7 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
                   updateOne: async (query, update) => {
                       assert.strictEqual(query.DiscordID, discordId);
                       data.balance += update.$inc.Balance;
+                      return { matchedCount: 1 };
                   },
               },
           };
@@ -76,13 +77,14 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
       let legacyCalls = 0;
       const { w, close } = await setup({ creditHosted, forwardToBot: async () => { legacyCalls++; return true; } });
       const a = await w.createDeposit({ licenseId: L, amount: 20000, discordId, hostedWL: 100 });
-      const b = await w.createDeposit({ licenseId: L2, amount: 20000, discordId, hostedWL: 150 });
+      const b = await w.createDeposit({ licenseId: L2, amount: 20000, discordId, hostedWL: 150, hostedTenantId: "guild-b" });
       await w.handlePaid({ orderId: a.orderId, amount: 20000 });
       await w.handlePaid({ orderId: a.orderId, amount: 20000 });
-      assert.strictEqual(databases.has(hostedDbName("autostore", L2)), false);
+      assert.strictEqual(databases.has(hostedDbName("autostore", "guild-b")), false);
       await w.handlePaid({ orderId: b.orderId, amount: 20000 });
       assert.strictEqual(databases.get(hostedDbName("autostore", L)).balance, 100);
-      assert.strictEqual(databases.get(hostedDbName("autostore", L2)).balance, 150);
+      assert.strictEqual(databases.get(hostedDbName("autostore", "guild-b")).balance, 150);
+      assert.strictEqual(databases.has(hostedDbName("autostore", L2)), false);
       assert.strictEqual(legacyCalls, 0);
       console.log("ok  deposit GevraStore dikreditkan ke database lisensi yang benar"); await close(); }
 

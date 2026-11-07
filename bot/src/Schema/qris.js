@@ -47,6 +47,9 @@ const schema = new Schema({
     type: String,
     default: "manual", // manual | auto (QRIS otomatis lewat panel)
   },
+  panelManaged: { type: Boolean, default: false },
+  notificationPending: { type: Boolean, default: false },
+  statusCheckedAt: { type: Date, default: () => new Date(0) },
   createdAt: {
     type: Date,
     default: Date.now,

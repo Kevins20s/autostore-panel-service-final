@@ -1,7 +1,7 @@
 const { InteractionType, EmbedBuilder } = require("discord.js");
 const mongoose = require("mongoose");
 const { Owner, Admin } = require("../../config/config.json");
-const { WL, COLOR, imageUrl } = require("../../config/configemoji.json");
+const { WL, COLOR, imageUrl, ARROW, Benar, CROWN, Dolar, BALANCE, Buy, Warning } = require("../../config/configemoji.json");
 const Balance = require("../../Schema/balance.js");
 const Stock = require("../../Schema/shop.js");
 const Product = require("../../Schema/list.js");
@@ -62,7 +62,7 @@ async function purchase({ code, qty, discordId }, session) {
         orderNumber: count.Order, discordId, growId: buyer.GrowIDNow || buyer.GrowID || "",
         code, productName: product.name, qty, total,
     }], options);
-    return { orderNumber: count.Order, product, qty, total, balance: buyer.Balance, data: stock.map(item => item.data).join("\n") };
+    return { orderNumber: count.Order, product, qty, total, baseTotal: price * qty, balance: buyer.Balance, data: stock.map(item => item.data).join("\n") };
 }
 
 async function handlePurchase(interaction) {
@@ -89,31 +89,45 @@ async function handlePurchase(interaction) {
         return;
     }
 
-    const { orderNumber, product, total, balance, data } = result;
-    const amount = `${total.toFixed(1)} ${WL}`;
+    const { orderNumber, product, total, baseTotal, balance, data } = result;
     const files = [{ attachment: Buffer.from(data), name: `order-${orderNumber}.txt` }];
+    const receipt = new EmbedBuilder()
+        .setTitle(`${CROWN} Purchase Details ${CROWN}`)
+        .setDescription(`**•━❪${Benar}❫━•Status: ` + "\`\`\`Success\`\`\`**" +
+            `\n**•━❪${Dolar}❫━• Price:** ${WL}` + "**\`\`\`" + total.toFixed(1) + " \`\`\`**" +
+            `\n**•━❪${BALANCE}❫━• Balance:** ${WL}` + "**\`\`\`" + balance.toFixed(1) + "\`\`\`**" +
+            "\n**Thank You For Pruchasing!**")
+        .setTimestamp().setColor(COLOR)
+        .setFooter({ text: "Check your message!", iconURL: interaction.user.displayAvatarURL({ dynamic: true }) });
+    const dm = new EmbedBuilder()
+        .setTitle(`${CROWN} Purchase Details ${CROWN}`)
+        .setDescription(`**•━❪${Buy}❫━• Product: __${product.name}__**\n**•━❪${Buy}❫━• Amount: __${qty}__**\n**•━❪${Dolar}❫━• Price:** ${total.toFixed(1)} ${WL}\n\n${Warning} **This Ur Order** ${Warning}\n` +
+            "\`\`\`\n" + data.slice(0, 2000) + "\n\`\`\`\n**Thanks You For Pruchasing!**")
+        .setTimestamp().setColor(COLOR)
+        .setFooter({ text: `${interaction.user.username} Order`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) });
     let deliveredByDm = true;
     try {
-        await interaction.user.send({ content: `Pesanan #${orderNumber} · ${product.name} × ${qty} · ${amount}`, files });
+        await interaction.user.send({ content: `This Is <@${interaction.user.id}> Order\n# NO REPS NO WARRANTY`, embeds: [dm], files });
     } catch { deliveredByDm = false; }
     const reply = deliveredByDm
-        ? { content: `Pesanan #${orderNumber} berhasil. Cek DM. Total ${amount} · Sisa saldo ${balance} WL.` }
-        : { content: `Pesanan #${orderNumber} berhasil. DM tidak tersedia, unduh file pesanan di sini.`, files };
+        ? { embeds: [receipt] }
+        : { content: `Pesanan #${orderNumber} berhasil. DM tidak tersedia, unduh file pesanan di sini.`, embeds: [receipt], files };
     await interaction.editReply(reply).catch(() => console.error("[PURCHASE] Balasan Discord gagal untuk order", orderNumber));
 
     const member = interaction.guild.members.cache.get(interaction.user.id);
     if (member && product.role && !member.roles.cache.has(product.role)) {
         await member.roles.add(product.role).catch(() => console.error("[PURCHASE] Gagal memberikan role untuk order", orderNumber));
     }
+    const priceLabel = total < baseTotal ? `~~${baseTotal.toFixed(1)}~~ ${total}` : total.toFixed(1);
     const embed = new EmbedBuilder().setTitle("#Order Number: " + orderNumber)
-        .setDescription(`Buyer: <@${interaction.user.id}>\nProduct: ${product.name}\nQuantity: ${qty}\nTotal: ${amount}`)
+        .setDescription(`${ARROW} Buyer: **<@${interaction.user.id}>**\n${ARROW} Product: **${product.name}**\n${ARROW} Quantity: **${qty}**\n${ARROW} Total Price: **${priceLabel}** ${WL}\n\n**Thanks For Purchasing Our Product** ${Benar}`)
         .setColor(COLOR).setTimestamp().setImage(imageUrl);
     await channel.send({ embeds: [embed], allowedMentions: { parse: [] } })
         .catch(() => console.error("[PURCHASE] Testimoni gagal untuk order", orderNumber));
     for (const id of new Set([Owner, ...(Admin || [])].filter(Boolean))) {
         try {
             const staff = await client.users.fetch(id);
-            await staff.send({ content: `Pesanan #${orderNumber} untuk <@${interaction.user.id}>`, files });
+            await staff.send({ content: `This Is <@${interaction.user.id}> Order`, files });
         } catch { console.error("[PURCHASE] Notifikasi admin gagal untuk order", orderNumber); }
     }
 }

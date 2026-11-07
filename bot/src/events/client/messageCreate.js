@@ -17,8 +17,17 @@ client.on("messageCreate", async (message) => {
             const settings = await channel.findOne({});
             const result = await creditWorldDeposit(message, settings);
             if (result) {
-                const user = await client.users.fetch(result.discordId);
-                await user.send(`Deposit world masuk: ${result.amount} WL. Saldo sekarang ${result.balance} WL.`);
+                const emoji = { worldlock: WL, diamondlock: DL, bluegemlock: BGL }[result.unit];
+                try {
+                    const user = await client.users.fetch(result.discordId);
+                    await user.send({ embeds: [{
+                        description: `- Your Has Been Deposit For **${result.quantity} ${emoji}**\n- Now You Have **${result.balance}** ${WL}`,
+                    }] });
+                } catch { console.error("[WORLD DEPOSIT] DM gagal dikirim."); }
+                await message.reply({
+                    content: `Successfully Adding **${result.quantity} ${emoji}** to **${result.growId}**\nYour **${result.growId}** Have **${result.balance}** ${WL}`,
+                    allowedMentions: { parse: [], repliedUser: false },
+                });
             }
         } catch (error) { console.error("[WORLD DEPOSIT]", error.code || error.name); }
         return;

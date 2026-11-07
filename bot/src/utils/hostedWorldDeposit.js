@@ -22,7 +22,8 @@ async function creditWorldDeposit(message, settings) {
             { $inc: { Balance: amount, Deposit: amount } }, { session, new: true });
         if (!buyer) return null;
         await receipts.insertOne(receipt, { session });
-        return { discordId: buyer.DiscordID, balance: buyer.Balance, amount };
+        return { discordId: buyer.DiscordID, balance: buyer.Balance, amount,
+            growId, quantity: donation[1], unit: donation[2].replace(/\s/g, "").toLowerCase() };
     });
 }
 

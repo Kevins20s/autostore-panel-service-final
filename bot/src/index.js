@@ -87,6 +87,15 @@ const { startWebhookServer } = require("./webhookServer.js");
 if (!hostedBinding) startWebhookServer(client);
 
 if (hostedBinding) {
+    const { syncHostedDepositLogs } = require("./utils/hostedDepositLogs");
+    let syncingLogs = false;
+    setInterval(async () => {
+        if (syncingLogs || !hostedActive() || !client.isReady() || mongoose.connection.readyState !== 1) return;
+        syncingLogs = true;
+        try { await syncHostedDepositLogs(); }
+        catch (error) { console.error("[HOSTED LOGS]", error.code || error.name); }
+        finally { syncingLogs = false; }
+    }, 15000).unref();
     const report = () => {
         if (!hostedActive()) return process.exit(0);
         const online = commandsReady && mongoose.connection.readyState === 1 &&

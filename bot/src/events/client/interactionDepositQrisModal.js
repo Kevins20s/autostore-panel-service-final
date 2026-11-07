@@ -56,13 +56,12 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
 
     // Hosted deposits are credited by the panel transaction, with no manual
     // approval button for the same payment.
-    if (panel.hostedWL !== undefined) return interaction.editReply({ embeds: [embed], files });
-
     let qrisDoc;
     try {
         qrisDoc = await Qris.create({
             orderId: panel.orderId,
             mode: "auto",
+            panelManaged: panel.hostedWL !== undefined,
             discordId: interaction.user.id,
             growId: wallet.GrowIDNow,
             grossAmount: panel.amount,
@@ -73,6 +72,19 @@ async function handleAutoDeposit(interaction, wallet, panel, nominal, pricePerWL
         return interaction.editReply({
             content: `${Warning} Gagal menyimpan transaksi deposit. Coba lagi beberapa saat lagi.`,
         });
+    }
+
+    if (qrisDoc.panelManaged) {
+        const sent = await interaction.user.send({ embeds: [embed], files }).catch(() => null);
+        if (sent) {
+            await Qris.updateOne({ orderId: panel.orderId }, { $set: {
+                dmChannelId: sent.channelId, dmMessageId: sent.id,
+            } });
+        }
+        await sendDepositLog(qrisDoc);
+        return sent ? interaction.editReply({
+            content: "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
+        }) : interaction.editReply({ embeds: [embed], files });
     }
     let sentMessage;
     try {

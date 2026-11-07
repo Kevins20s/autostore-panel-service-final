@@ -71,6 +71,19 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
     // ---- API internal untuk bot milik pembeli ----
     const rate = new Map();
     const tooFast = (id) => { const t = Date.now(), a = (rate.get(id) || []).filter((x) => x > t - 60e3); a.push(t); rate.set(id, a); return a.length > 30; };
+    app.get("/internal/wallet/hosted-deposit/:orderId", async (req, res) => {
+        res.set("Cache-Control", "no-store");
+        if (!directOnly(req)) return res.sendStatus(404);
+        const id = String(req.headers["x-license-id"] || "");
+        const guildId = String(req.headers["x-hosted-guild"] || "");
+        const l = findLicense(id);
+        const tenant = pilotTenant(l);
+        const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+        if (!tenant || tenant.guildId !== guildId || !safeEq(token, hostedWalletToken(id, guildId))) return res.sendStatus(401);
+        if (!wallet) return res.sendStatus(503);
+        try { res.json(await wallet.hostedDepositStatus(id, tenant.licenseId, req.params.orderId)); }
+        catch (error) { send(res)(error); }
+    });
     app.post("/internal/wallet/deposit", async (req, res) => {
         if (!directOnly(req)) return res.sendStatus(404);
         const id = String(req.headers["x-license-id"] || "");

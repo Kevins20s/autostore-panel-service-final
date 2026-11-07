@@ -89,7 +89,7 @@ async function sendDepositLog(trx) {
 
         const message = await channel.send({
             embeds: [buildLogEmbed(trx, "PENDING")],
-            components: [buildAdminButtons(trx.orderId)],
+            components: trx.panelManaged ? [] : [buildAdminButtons(trx.orderId)],
         });
 
         await Qris.updateOne(
@@ -112,25 +112,27 @@ async function updateDepositLog(trx, statusKey) {
     try {
         if (!trx.logChannelId || !trx.logMessageId) {
             console.log("[DEBUG QRIS] updateDepositLog: SKIP, logChannelId/logMessageId kosong di dokumen trx.");
-            return;
+            return false;
         }
 
         const channel = await client.channels.fetch(trx.logChannelId).catch((err) => {
             console.error("[DEBUG QRIS] updateDepositLog: gagal fetch channel:", err.message);
             return null;
         });
-        if (!channel) return;
+        if (!channel) return false;
 
         const message = await channel.messages.fetch(trx.logMessageId).catch((err) => {
             console.error("[DEBUG QRIS] updateDepositLog: gagal fetch message log:", err.message);
             return null;
         });
-        if (!message) return;
+        if (!message) return false;
 
         await message.edit({ embeds: [buildLogEmbed(trx, statusKey)], components: [] });
         console.log("[DEBUG QRIS] updateDepositLog: berhasil edit log jadi", statusKey);
+        return true;
     } catch (err) {
         console.error("Gagal update log deposit QRIS:", err);
+        return false;
     }
 }
 
@@ -173,6 +175,7 @@ async function editMessageSafely(message, embed) {
  * @param {String} [processedBy] - Discord ID admin/owner yang menekan tombol
  */
 async function creditDeposit(trx, message, processedBy) {
+    if (trx.panelManaged) return false;
     console.log("[DEBUG QRIS] creditDeposit dipanggil untuk orderId:", trx.orderId, "| processedBy:", processedBy);
 
     const updated = await Qris.findOneAndUpdate(
@@ -216,6 +219,7 @@ async function creditDeposit(trx, message, processedBy) {
  * @param {String} [processedBy] - Discord ID admin/owner yang menekan tombol
  */
 async function cancelDeposit(trx, message, processedBy) {
+    if (trx.panelManaged) return false;
     console.log("[DEBUG QRIS] cancelDeposit dipanggil untuk orderId:", trx.orderId, "| processedBy:", processedBy);
 
     const updated = await Qris.findOneAndUpdate(

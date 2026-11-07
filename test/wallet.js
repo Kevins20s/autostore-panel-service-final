@@ -82,6 +82,11 @@ const bank = { bankName: "BCA", accountNo: "1234567890", accountName: "Budi Sant
       await w.handlePaid({ orderId: a.orderId, amount: 20000 });
       assert.strictEqual(databases.has(hostedDbName("autostore", "guild-b")), false);
       await w.handlePaid({ orderId: b.orderId, amount: 20000 });
+      const status = await w.hostedDepositStatus(L2, "guild-b", b.orderId);
+      assert.strictEqual(status.credited, true);
+      assert.strictEqual(status.wl, 150);
+      await bad(w.hostedDepositStatus(L, "guild-b", b.orderId), /tidak ditemukan/, 404);
+      await bad(w.hostedDepositStatus(L2, L2, b.orderId), /tidak ditemukan/, 404);
       assert.strictEqual(databases.get(hostedDbName("autostore", L)).balance, 100);
       assert.strictEqual(databases.get(hostedDbName("autostore", "guild-b")).balance, 150);
       assert.strictEqual(databases.has(hostedDbName("autostore", L2)), false);

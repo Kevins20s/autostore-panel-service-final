@@ -133,6 +133,13 @@ function createWallet(opts) {
         return rows.map((d) => ({ orderId: d.orderId, discordId: d.discordId, amount: d.amount, fee: d.fee, net: d.net, status: d.status, createdAt: d.createdAt, paidAt: d.paidAt || null, expiresAt: d.expiresAt, delivered: !!d.botDeliveredAt }));
     }
 
+    async function hostedDepositStatus(licenseId, hostedTenantId, orderId) {
+        const c = await getCols();
+        const dep = await c.deposits.findOne({ licenseId, hostedTenantId, orderId });
+        if (!dep) throw new WalletError("Pesanan deposit tidak ditemukan.", 404);
+        return { status: dep.status, credited: !!dep.botDeliveredAt, amount: dep.amount, wl: dep.hostedWL };
+    }
+
     // ---------------------------------------------------------------- Rekening & penarikan
     const bankView = (b) => b && { bankName: b.bankName, accountName: b.accountName, accountNoMasked: "••••" + String(b.accountNo).slice(-4) };
 
@@ -280,7 +287,7 @@ function createWallet(opts) {
         return diffs;
     }
 
-    return { createDeposit, handlePaid, summary, listDeposits, setBank, requestWithdrawal, listWithdrawals, adminWithdrawals, adminComplete, adminReject, adminOverview, balanceOf, sweep, reconcile, config: { holdMs, minDeposit, minWithdraw, withdrawFee, feePercent, feeFlat } };
+    return { createDeposit, handlePaid, summary, listDeposits, hostedDepositStatus, setBank, requestWithdrawal, listWithdrawals, adminWithdrawals, adminComplete, adminReject, adminOverview, balanceOf, sweep, reconcile, config: { holdMs, minDeposit, minWithdraw, withdrawFee, feePercent, feeFlat } };
 }
 
 module.exports = { createWallet, WalletError, rp };

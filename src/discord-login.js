@@ -50,7 +50,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
         if (response.status === 401 || response.status === 403) return null;
         if (!response.ok) throw new Error("Discord guild lookup failed");
         const candidates = (await response.json()).filter(guild => DISCORD_ID.test(guild.id) &&
-            (!hostingConfigured || eligibleHostedGuild(guild.id)));
+            (!hostingConfigured || eligibleHostedGuild(guild.id, req.lic)));
         const managed = candidates.filter(guild =>
             guild.owner === true || (/^\d+$/.test(guild.permissions) && (BigInt(guild.permissions) & CAN_INSTALL) !== 0n));
         const guilds = managed.filter(guild => !hostedGuildClaimed(guild.id, req.lic.id, licenses()));
@@ -81,19 +81,41 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
         if (!response.ok) throw new Error("Bot membership lookup failed");
         return true;
     }
+    async function installedGuildIds(guilds) {
+        const remaining = new Set(guilds.map(guild => guild.id));
+        const found = new Set();
+        const params = new URLSearchParams({ limit: "200" });
+        while (remaining.size) {
+            const response = await fetch(API + "/users/@me/guilds?" + params, {
+                headers: { Authorization: "Bot " + botToken },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (!response.ok) throw new Error("Bot guild listing failed");
+            const page = await response.json();
+            for (const guild of page) {
+                if (remaining.delete(guild.id)) found.add(guild.id);
+            }
+            if (page.length < 200) break;
+            const next = page.at(-1).id;
+            if (next === params.get("after")) break;
+            params.set("after", next);
+        }
+        return found;
+    }
     app.get("/api/discord-install/servers", noStore, buyer, async (req, res) => {
         if (!eligible(req.lic)) return res.sendStatus(403);
         try {
             const listing = await manageableServers(req);
             if (!listing) { clearInstall(res); return res.json({ reconnect: true }); }
             const { guilds, emptyReason } = listing;
-            const servers = await Promise.all(guilds.map(async ({ id, name }) => {
+            const installedIds = canActivate ? await installedGuildIds(guilds) : new Set();
+            const servers = guilds.map(({ id, name }) => {
                 const params = new URLSearchParams({
                     client_id: botId, scope: "bot applications.commands", permissions: botPermissions,
                     integration_type: "0", guild_id: id, disable_guild_select: "true",
                 });
-                return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: canActivate && await installed(id) };
-            }));
+                return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: installedIds.has(id) };
+            });
             res.json({ servers, canActivate, setup: statusFor(req.lic), emptyReason });
         } catch {
             res.status(502).json({ error: "Daftar server Discord belum bisa dimuat. Coba lagi." });

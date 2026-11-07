@@ -18,7 +18,7 @@ const env = {
     DISCORD_HOSTED_BOT_CLIENT_ID: appId,
     DISCORD_CATALOG_PILOT_TOKEN: "test", DISCORD_CATALOG_PILOT_MONGO_URL: "mongodb://unused",
     DISCORD_HOSTED_PILOT_LICENSE_ID: "pilot-a", DISCORD_HOSTED_TEST_LICENSE_IDS: "pilot-b",
-    DISCORD_HOSTED_PILOT_GUILD_IDS: guildA + "," + guildB,
+    DISCORD_HOSTED_PILOT_GUILD_IDS: guildA, DISCORD_HOSTED_TEST_MANAGED_GUILDS: "1",
     DISCORD_HOSTED_PILOT_DB_NAMESPACE: "existing",
     DISCORD_HOSTED_PILOT_STATUS_FILE: "/status.json", PUBLIC_URL: "https://example.com",
 };
@@ -51,10 +51,15 @@ async function testRouting() {
         { id: guildA, name: "Guild A", owner: true }, { id: guildB, name: "Guild B", owner: true },
     ];
     let discordGuilds = managedGuilds;
-    global.fetch = async url => ({
-        ok: true,
-        json: async () => String(url).includes("/users/@me/guilds") ? discordGuilds : {},
-    });
+    const installed = new Set([guildA]);
+    global.fetch = async (url, options) => {
+        if (String(url).includes("/users/@me/guilds")) {
+            const guilds = options.headers.Authorization.startsWith("Bot ")
+                ? [...installed].map(id => ({ id })) : discordGuilds;
+            return { ok: true, json: async () => guilds };
+        }
+        return installed.has(String(url).split("/").at(-1)) ? { ok: true } : { ok: false, status: 404 };
+    };
     const authenticated = (lic, body) => ({
         lic, body,
         headers: { cookie: "gs_discord_install=" + encodeURIComponent(encrypt({
@@ -65,10 +70,20 @@ async function testRouting() {
     const list = lic => invoke("get", "/api/discord-install/servers", authenticated(lic));
     try {
         discordGuilds = [{ id: "100000000000000010", owner: true }];
-        assert.equal((await list(b)).value.emptyReason, "no_available_membership");
+        assert.equal((await list(a)).value.emptyReason, "no_available_membership");
         discordGuilds = [{ id: guildB, permissions: "0" }];
         assert.equal((await list(b)).value.emptyReason, "missing_permission");
         discordGuilds = managedGuilds;
+        const candidate = (await list(b)).value.servers.find(server => server.id === guildB);
+        assert.ok(candidate, "A test buyer can list their own server outside the original pilot list");
+        assert.equal(candidate.installed, false);
+        const invite = new URL(candidate.invite);
+        assert.equal(invite.hostname, "discord.com");
+        assert.equal(invite.searchParams.get("guild_id"), guildB);
+        assert.equal(invite.searchParams.get("disable_guild_select"), "true");
+        assert.equal((await bind(b, guildB)).statusCode, 409);
+        installed.add(guildB);
+        assert.equal((await list(b)).value.servers.find(server => server.id === guildB).installed, true);
         const responses = await Promise.all([bind(a, guildA), bind(b, guildA)]);
         assert.deepEqual(responses.map(r => r.statusCode).sort(), [200, 409]);
         const winner = responses[0].statusCode === 200 ? a : b;
@@ -84,6 +99,7 @@ async function testRouting() {
     const ta = hostedTenant(a, licenses()), tb = hostedTenant(b, licenses());
     assert.equal(ta.dbName, hostedDbName("autostore", "existing-0"));
     assert.notEqual(ta.dbName, tb.dbName);
+    assert.equal(hostedTenant(b, licenses(), { ...env, DISCORD_HOSTED_TEST_MANAGED_GUILDS: "0" }), null);
     const conflict = { ...b, hostedBot: { guildId: guildA, enabled: false } };
     assert.equal(hostedTenant(a, [a, conflict]), null, "paused licenses keep their server reservation");
     assert.equal(hostedTenant({ ...a, id: "public-license" }, licenses()), null);

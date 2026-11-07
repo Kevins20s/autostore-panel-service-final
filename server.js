@@ -275,6 +275,7 @@ app.get("/api/me", buyer, (req, res) => {
         expiresAt: l.expiresAt, lifetime: !!l.lifetime, daysLeft: Math.max(0, Math.ceil((l.expiresAt - Date.now()) / DAY)),
         revoked: l.revoked, valid: valid(l), bot: runner.status(l.id), desired: l.desired,
         discordInstallEnabled: discordLogin.eligible(l),
+        discordLinked: !!l.discordLoginId,
         hostedBotConfigured: discordLogin.eligible(l) && !!l.hostedBot,
         hostedBot: discordLogin.eligible(l) ? discordLogin.statusFor(l) : null,
         webhookUrl: `${base}/hook/${l.id}`,

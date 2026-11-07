@@ -12,7 +12,12 @@ const dataFile = path.resolve(process.env.DATA_FILE || "data.json");
 const botDir = path.join(__dirname, "../bot");
 const token = process.env.DISCORD_CATALOG_PILOT_TOKEN;
 const clientId = process.env.DISCORD_HOSTED_BOT_CLIENT_ID;
-const knownGuilds = new Set((process.env.DISCORD_HOSTED_PILOT_GUILD_IDS || "").split(",").map(id => id.trim()).filter(Boolean));
+const fixedGuilds = new Set((process.env.DISCORD_HOSTED_PILOT_GUILD_IDS || "").split(",").map(id => id.trim()).filter(id => /^\d{17,20}$/.test(id)));
+const knownGuilds = new Set(fixedGuilds);
+try {
+    const previous = JSON.parse(fs.readFileSync(statusFile, "utf8"));
+    for (const id of previous.managedGuilds || []) if (/^\d{17,20}$/.test(id)) knownGuilds.add(id);
+} catch { /* The status file may not exist on first start. */ }
 const workers = new Map();
 const retryAt = new Map();
 const failures = new Map();
@@ -22,7 +27,8 @@ let nextWorkerStartAt = 0;
 let stopping = false;
 
 function publishStatus(bindings) {
-    fs.writeFileSync(statusFile + ".next", JSON.stringify({ at: Date.now(), guilds: Object.keys(bindings), bindings }), { mode: 0o600 });
+    fs.writeFileSync(statusFile + ".next", JSON.stringify({ at: Date.now(), guilds: Object.keys(bindings), bindings,
+        managedGuilds: [...knownGuilds] }), { mode: 0o600 });
     fs.renameSync(statusFile + ".next", statusFile);
 }
 
@@ -39,7 +45,7 @@ function currentBindings() {
         return bindings;
     } catch {
         console.error("[HOSTED] Data lisensi tidak bisa dibaca.");
-        return new Map();
+        return null;
     }
 }
 
@@ -54,7 +60,10 @@ async function clearCommands(id) {
             signal: AbortSignal.timeout(8000),
         });
         if (!response.ok && response.status !== 403 && response.status !== 404) throw new Error(String(response.status));
-        cleared.add(id);
+        if (fixedGuilds.has(id)) cleared.add(id);
+        else knownGuilds.delete(id);
+        retryAt.delete(id);
+        failures.delete(id);
     } catch (error) {
         console.error("[HOSTED] Gagal membersihkan command:", error.message);
         retryAt.set(id, Date.now() + 15000);
@@ -112,6 +121,8 @@ function reconcile() {
     if (stopping) return;
     const bindings = currentBindings();
     const online = Object.create(null);
+    if (!bindings) { publishStatus(online); return; }
+    for (const guildId of bindings.keys()) knownGuilds.add(guildId);
     for (const [guildId, worker] of workers) {
         const binding = bindings.get(guildId);
         if (!binding || worker.key !== bindingKey(binding)) {

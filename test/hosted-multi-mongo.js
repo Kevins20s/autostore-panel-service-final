@@ -70,7 +70,7 @@ async function main() {
         MASTER_KEY: "e".repeat(64), DISCORD_CATALOG_PILOT_MONGO_URL: url,
         DISCORD_HOSTED_PILOT_DB_NAMESPACE: "test-legacy-" + nonce,
         DISCORD_HOSTED_PILOT_LICENSE_ID: idA, DISCORD_HOSTED_TEST_LICENSE_IDS: idB,
-        DISCORD_HOSTED_PILOT_GUILD_IDS: guilds.join(","),
+        DISCORD_HOSTED_PILOT_GUILD_IDS: guilds[0], DISCORD_HOSTED_TEST_MANAGED_GUILDS: "1",
     });
     const { MongoClient } = require("mongodb");
     const express = require("express");

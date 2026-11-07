@@ -87,7 +87,7 @@ const gsEnglish = {
   "Tambah bot ke server": "Add bot to server",
   "Cek pemasangan bot": "Check bot installation",
   "Cek ulang daftar server": "Refresh server list",
-  "Akun Discord ini belum menjadi anggota server yang tersedia untuk lisensimu. Masuk ke server uji, lalu cek ulang.": "This Discord account has not joined a server available to your license. Join the test server, then refresh the list.",
+  "Belum ada server yang tersedia untuk akun Discord ini. Bergabung ke server yang ingin dipakai, lalu cek ulang.": "No server is available to this Discord account yet. Join the server you want to use, then refresh the list.",
   "Akun Discord ini sudah masuk server, tetapi belum punya izin Kelola Server. Minta izin dari pemilik server, lalu cek ulang.": "This Discord account is in the server but lacks the Manage Server permission. Ask the server owner for access, then refresh the list.",
   "Server yang bisa kamu kelola sudah terhubung ke lisensi lain.": "The servers you can manage are already linked to another license.",
   "Hubungkan Discord, pilih server, lalu konfirmasi pemasangan di Discord.": "Connect Discord, choose a server, then confirm installation in Discord.",

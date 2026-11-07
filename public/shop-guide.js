@@ -35,6 +35,15 @@ const commandDocs = [
 
 const guideText = (id, en) => gsLanguage === "en" ? en : id;
 
+const commandCategories = [
+    ["Toko & tampilan", "Store & display", "shopping-bag", ["help", "leaderboard", "setchannel", "setrestockchannel", "setrealtime", "startrealtime"]],
+    ["Produk & stok", "Products & stock", "package", ["addproduct", "addstock", "changecode", "changename", "changekategori", "changerole", "changetype", "checkstock", "removestock", "removeproduct"]],
+    ["Harga & diskon", "Prices & discounts", "credit-card", ["setprice", "setdiscount", "removediscount", "setbulkdiscount", "removebulkdiscount"]],
+    ["Pelanggan & saldo", "Customers & balances", "users", ["send", "checkuser", "addbalance", "removebalance"]],
+    ["Deposit & pembayaran", "Deposits & payments", "wallet", ["setdepo", "setqris", "setwlprice", "setapi"]],
+    ["Administrasi", "Administration", "settings", ["setmaintenance", "resetcount", "uptime"]],
+];
+
 const commandFields = {
     code: ["Kode produk", "Product code", "Kode yang tercantum di Produk & stok.", "The code listed under Products & stock.", "VOUCHER01"],
     newcode: ["Kode baru", "New code", "Masukkan kode produk baru yang belum dipakai.", "Enter a new product code that is not already in use.", "VOUCHER02"],
@@ -65,42 +74,64 @@ const commandFields = {
 };
 
 function commandGuide() {
-    const results = h("div", { class: "guide-grid" });
+    const results = h("div", { class: "guide-sections" });
     const count = h("span", { class: "mut", "aria-live": "polite" });
     const searchLabel = guideText("Cari command atau fungsi", "Search commands or descriptions");
     const search = h("input", { type: "search", placeholder: searchLabel, "aria-label": searchLabel });
     const fieldFor = (command, key) => commandFields[command === "addproduct" && key === "code" ? "newcode" : key];
-    function renderCommands() {
-        const query = search.value.trim().toLowerCase().replace(/^\//, "");
-        const matches = commandDocs.filter(([name, options, id, en]) => {
-            const fieldText = options ? options.split(" ").flatMap(option => fieldFor(name, option.replace(/\?$/, ""))) : [];
-            return [name, options, id, en, ...fieldText].join(" ").toLowerCase().includes(query);
-        });
-        count.textContent = guideText(`${matches.length} command`, `${matches.length} commands`);
-        results.replaceChildren(...matches.map(([name, options, id, en]) => card(
-            h("div", { class: "row sp" }, h("code", { class: "guide-command" }, "/" + name),
-                h("span", { class: "pill" }, ["help", "leaderboard"].includes(name) ? guideText("Semua pengguna", "Everyone") : "Admin")),
-            h("p", {}, guideText(id, en)),
-            options ? h("dl", { class: "guide-options" }, ...options.split(" ").map(option => {
-                const optional = option.endsWith("?");
-                const key = optional ? option.slice(0, -1) : option;
+    const optionList = options => options ? options.split(" ").map(option => ({
+        key: option.replace(/\?$/, ""), optional: option.endsWith("?"),
+    })) : [];
+    function commandCard([name, options, id, en]) {
+        const fields = optionList(options);
+        const details = fields.length ? h("details", { class: "guide-details" },
+            h("summary", {}, guideText("Arti kolom & contoh", "Field help & examples")),
+            h("dl", { class: "guide-options" }, ...fields.map(({ key, optional }) => {
                 const [label, labelEn, description, descriptionEn, example] = fieldFor(name, key);
                 return h("div", {},
                     h("dt", {}, h("strong", {}, guideText(label, labelEn)), h("code", {}, key),
                         h("span", { class: "guide-option-status" }, optional ? guideText("Opsional", "Optional") : guideText("Wajib", "Required"))),
                     h("dd", {}, guideText(description, descriptionEn),
                         h("small", { class: "mut" }, guideText("Contoh", "Example"), " ", h("code", {}, example))));
-            })) : h("p", { class: "mut" }, guideText("Bisa langsung dijalankan.", "Run without filling in any fields.")),
-            h("button", { type: "button", class: "sm", onclick: () => copyText("/" + name) }, guideText("Salin command", "Copy command"))
-        )));
-        if (!matches.length) results.append(card(h("p", { class: "mut" }, guideText("Command tidak ditemukan.", "No commands found."))));
+            }))) : h("span", { class: "mut guide-no-options" }, guideText("Bisa langsung dijalankan.", "Run without filling in any fields."));
+        const copyLabel = guideText("Salin command", "Copy command");
+        return h("article", { class: "guide-card" },
+            h("div", { class: "guide-card-heading" },
+                h("div", { class: "guide-signature" }, h("h3", {}, h("code", { class: "guide-command" }, "/" + name)),
+                    ...fields.map(({ key, optional }) => h("code", { class: "guide-chip", title: optional ? guideText("Opsional", "Optional") : guideText("Wajib", "Required") },
+                        optional ? "[" + key + "]" : "<" + key + ">"))),
+                h("span", { class: "pill" }, ["help", "leaderboard"].includes(name) ? guideText("Semua pengguna", "Everyone") : "Admin")),
+            h("p", { class: "guide-description" }, guideText(id, en)),
+            h("div", { class: "guide-card-actions" }, details,
+                h("button", { type: "button", class: "sm", "aria-label": copyLabel + " /" + name, onclick: () => copyText("/" + name) }, copyLabel)));
+    }
+    function renderCommands() {
+        const query = search.value.trim().toLowerCase().replace(/^\//, "");
+        const matches = new Map(commandDocs.filter(([name, options, id, en]) => {
+            const fieldText = optionList(options).flatMap(({ key }) => fieldFor(name, key));
+            return [name, options, id, en, ...fieldText].join(" ").toLowerCase().includes(query);
+        }).map(command => [command[0], command]));
+        count.textContent = guideText(`${matches.size} command`, `${matches.size} ${matches.size === 1 ? "command" : "commands"}`);
+        const sections = commandCategories.flatMap(([id, en, icon, names]) => {
+            const commands = names.filter(name => matches.has(name));
+            if (!commands.length) return [];
+            return h("section", { class: "card guide-section" },
+                h("h2", {}, navIcon(icon), guideText(id, en)),
+                h("div", { class: "guide-grid" }, ...commands.map(name => commandCard(matches.get(name)))));
+        });
+        results.replaceChildren(...sections);
+        if (!sections.length) results.append(card(h("p", { class: "mut" }, guideText("Command tidak ditemukan.", "No commands found."))));
     }
     search.addEventListener("input", renderCommands);
     renderCommands();
     return h("div", { class: "guide-page" },
-        head("Slash Command List", guideText("Pilih command di Discord, lalu isi kolom sesuai panduan. Label seperti code dan role mengikuti nama kolom di Discord.", "Select a command in Discord and use this guide to fill in its fields. Labels like code and role match the fields in Discord.")),
-        h("p", { class: "guide-access mut" }, guideText("Command berlabel Admin bisa digunakan oleh Owner atau akun yang terdaftar sebagai Admin bot.", "Commands marked Admin can be used by the Owner or accounts listed as bot admins.")),
-        h("div", { class: "row sp guide-toolbar" }, search, count), results);
+        card(h("div", { class: "guide-intro" },
+            head("Slash Command List", guideText("Cari command berdasarkan fungsi, lalu buka contoh untuk melihat cara mengisi kolomnya di Discord.", "Find a command by function, then open its examples to see how to fill in the fields in Discord.")),
+            h("div", { class: "row sp gap guide-toolbar" }, search, count),
+            h("p", { class: "guide-access mut" },
+                h("code", {}, guideText("<wajib>", "<required>")), " ", h("code", {}, guideText("[opsional]", "[optional]")), " · ",
+                guideText("Command Admin tersedia untuk Owner dan Admin bot.", "Admin commands are available to the bot owner and bot admins.")))),
+        results);
 }
 
 function luaDepositScript(template, values) {

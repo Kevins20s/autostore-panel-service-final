@@ -1,87 +1,171 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GevraStore Panel</title><meta name="description" content="Panel GevraStore: kelola bot, produk, dan stok tokomu dengan key dari penjual."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Masuk dengan key dari penjual untuk mengelola bot dan toko kamu."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png?v=gevrastore-logo"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/svg+xml" href="/gevrastore-logo.svg"><link rel="apple-touch-icon" href="/logo.png?v=gevrastore-logo"><link rel="stylesheet" href="/style.css?v=gevrastore-logo"><script src="/ui-extras.js"></script></head>
+<title>GevraStore Panel</title><meta name="description" content="GevraStore AutoStore untuk Discord. Kelola katalog, stok, pesanan, dan pembayaran QRIS dari satu panel."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Buka toko di Discord dan kelola katalog, stok, serta pesanan dari panel GevraStore."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png?v=gevrastore-logo"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/svg+xml" href="/gevrastore-logo.svg"><link rel="apple-touch-icon" href="/logo.png?v=gevrastore-logo"><link rel="stylesheet" href="/style.css?v=landing-refresh"><link rel="stylesheet" href="/landing.css?v=landing-refresh"><script src="/ui-extras.js"></script></head>
 <body>
 <div id="login" class="landing hide">
   <header class="landing-nav landing-shell">
-    <a class="landing-brand" href="/"><img class="gevrastore-logo" src="/gevrastore-logo.svg" alt="" width="34" height="34">GevraStore</a>
-    <nav aria-label="Navigasi utama"><a href="#fitur">Fitur</a><a href="#showcase">Showcase</a><a href="#paket">Harga</a></nav>
-    <a class="landing-btn landing-outline" href="#masuk">Masuk</a>
+    <a class="landing-brand" href="/"><img class="gevrastore-logo" src="/gevrastore-logo.svg" alt="" width="38" height="38">GevraStore</a>
+    <nav aria-label="Navigasi utama">
+      <a href="#fitur">Fitur</a><a href="#showcase">Cara kerja</a><a href="#paket">Harga</a><a href="#bantuan">FAQ</a>
+    </nav>
+    <a class="landing-btn landing-outline landing-nav-login" href="#masuk">Masuk <span aria-hidden="true">↗</span></a>
   </header>
   <main class="landing-shell">
-    <section class="landing-hero">
-      <div>
-        <p class="landing-tag landing-kicker">GevraStore / Panel toko Discord</p>
-        <h1>Jualan di Discord. <em>Kelola dari GevraStore.</em></h1>
-        <p>Isi stok, ubah harga, dan pantau pesanan dari satu dashboard. Pilih lisensi dan siapkan toko lewat web.</p>
-        <div class="landing-actions"><a class="landing-btn" href="#paket">Pilih lisensi <span aria-hidden="true">↗</span></a><a class="landing-btn landing-outline" href="#showcase">Jelajahi showcase</a></div>
+    <section class="landing-hero" aria-labelledby="heroTitle">
+      <div class="landing-hero-copy">
+        <p class="landing-eyebrow"><i></i> AutoStore untuk Discord</p>
+        <h1 id="heroTitle">Buka toko di Discord.<em>Kelola dari satu panel.</em></h1>
+        <p>Atur produk dan stok dari web. Pelangganmu bisa memilih produk, membayar, dan menerima pesanan langsung di Discord.</p>
+        <div class="landing-actions">
+          <a class="landing-btn" href="#paket">Lihat paket <span aria-hidden="true">↗</span></a>
+          <a class="landing-btn landing-outline" href="#showcase">Lihat cara kerja <span aria-hidden="true">↓</span></a>
+        </div>
+        <ul class="landing-hero-points"><li>QRIS &amp; Growtopia</li><li>Pengiriman via DM</li><li>Hosting bot 24/7</li></ul>
       </div>
-      <div class="landing-preview" aria-label="Cuplikan dashboard dengan data contoh">
-        <div class="landing-preview-top"><strong>GevraStore <span>/</span> Dashboard</strong><span>Data contoh</span></div>
+      <div class="landing-preview" aria-label="Pratinjau dashboard dengan data contoh">
+        <div class="landing-preview-bar">
+          <span class="landing-window-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>GevraStore / Dashboard</span><span class="landing-chip">Data contoh</span>
+        </div>
         <div class="landing-preview-body">
-          <p class="landing-tag">Ringkasan toko</p>
-          <div class="landing-metrics"><div><span>Produk</span><strong>08</strong></div><div><span>Stok tersedia</span><strong>124</strong></div><div><span>Terjual</span><strong>56</strong></div></div>
-          <div class="landing-trend" aria-hidden="true">
-            <span>Contoh aktivitas penjualan</span>
-            <svg viewBox="0 0 300 66" preserveAspectRatio="none"><path d="M0 54 L35 48 L65 51 L94 35 L126 43 L157 22 L186 33 L216 15 L250 23 L278 10 L300 4 L300 66 L0 66 Z"/><polyline points="0,54 35,48 65,51 94,35 126,43 157,22 186,33 216,15 250,23 278,10 300,4"/></svg>
+          <div class="landing-preview-heading">
+            <div><span class="landing-preview-label">Dashboard toko</span><strong>Ringkasan penjualan</strong></div>
+            <span class="landing-chip landing-chip-mint">Bot online</span>
           </div>
-          <div class="landing-preview-row"><b>Voucher Digital</b><span>42 unit</span></div>
-          <div class="landing-preview-row"><b>Paket Premium</b><span>18 unit</span></div>
+          <div class="landing-metrics">
+            <div><span>Pesanan</span><strong>56</strong></div><div><span>Stok tersedia</span><strong>124</strong></div><div><span>Penjualan</span><strong>Rp840.000</strong></div>
+          </div>
+          <div class="landing-trend">
+            <div><b>Aktivitas penjualan</b><span>7 hari terakhir</span></div>
+            <svg viewBox="0 0 420 112" preserveAspectRatio="none" aria-hidden="true">
+              <defs><linearGradient id="landingChartFill" x2="0" y2="1"><stop stop-color="currentColor" stop-opacity=".25"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+              <path class="landing-chart-grid" d="M0 27H420M0 53H420M0 79H420M0 105H420"/>
+              <path fill="url(#landingChartFill)" d="M0 92C29 91 37 72 65 76S106 94 137 69 177 53 206 60 252 79 277 48 320 32 343 40 377 29 420 13V112H0Z"/>
+              <path class="landing-chart-line" d="M0 92C29 91 37 72 65 76S106 94 137 69 177 53 206 60 252 79 277 48 320 32 343 40 377 29 420 13"/>
+            </svg>
+          </div>
+          <div class="landing-preview-order">
+            <span class="landing-order-icon" aria-hidden="true">✓</span>
+            <div><b>Voucher Digital</b><span>Pesanan terakhir · QRIS</span></div>
+            <span class="landing-chip landing-chip-mint">Terkirim</span>
+          </div>
         </div>
       </div>
     </section>
-    <section class="landing-section" id="fitur">
-      <p class="landing-tag">01 / Fitur</p><h2>Semua yang kamu kelola sehari-hari.</h2>
-      <div class="landing-grid">
-        <article><span>01</span><h3>Produk &amp; stok</h3><p>Susun katalog, atur harga dan diskon, lalu tambah persediaan dari panel.</p></article>
-        <article><span>02</span><h3>Pesanan &amp; pelanggan</h3><p>Lihat riwayat penjualan, cari pelanggan, dan kelola saldo toko.</p></article>
-        <article><span>03</span><h3>Bot &amp; pengaturan</h3><p>Hubungkan bot dan database, atur kurs, serta sesuaikan emoji dan banner toko.</p></article>
+
+    <section class="landing-section" id="fitur" aria-labelledby="featureTitle">
+      <div class="landing-section-heading">
+        <div><p class="landing-eyebrow">01 / Fitur</p><h2 id="featureTitle">Kelola toko tanpa pindah-pindah.</h2></div>
+        <p>Urus katalog, pembayaran, dan pelanggan dari dashboard yang sama.</p>
+      </div>
+      <div class="landing-grid landing-features">
+        <article>
+          <svg class="landing-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4m-9 4v10M7.5 5l9 4"/></svg>
+          <h3>Produk &amp; stok</h3><p>Susun katalog, atur harga dan diskon, lalu tambah stok dari web. Stok berkurang saat pesanan diproses.</p>
+        </article>
+        <article>
+          <svg class="landing-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5m0 8v5h-5m-8 0H3v-5m5-8h2v2H8zm6 0h2v2h-2zm-6 6h2v2H8zm6 0h2m-2 3h3"/></svg>
+          <h3>Pembayaran QRIS</h3><p>Aktifkan QRIS otomatis untuk top up pelanggan atau checkout langsung, sesuai model toko.</p>
+        </article>
+        <article>
+          <svg class="landing-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 6-8 12L4 9l8-6ZM4 9h16m-8-6 3 6-3 12-3-12 3-6Z"/></svg>
+          <h3>Deposit Growtopia</h3><p>Terima WL, DL, dan BGL lewat world tokomu. Tersedia script deposit anti fake donate dengan dukungan Vend.</p>
+        </article>
+        <article>
+          <svg class="landing-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12h-9l-4 4v-4H4zM8 9h8m-8 4h5"/></svg>
+          <h3>Pengiriman via DM</h3><p>Bot mengirim produk digital lewat DM Discord setelah pesanan berhasil.</p>
+        </article>
+        <article>
+          <svg class="landing-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 16v-4m5 4V8m5 8V5"/></svg>
+          <h3>Ringkasan penjualan</h3><p>Pantau penjualan WL dan Rupiah, lihat produk terlaris, serta cek riwayat pesanan.</p>
+        </article>
+        <article>
+          <svg class="landing-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><path d="M8 3v4m8 3v4m-6 3v4"/></svg>
+          <h3>Tampilan toko Discord</h3><p>Pilih dari empat model katalog, lalu sesuaikan emoji dan banner untuk tokomu.</p>
+        </article>
       </div>
     </section>
-    <section class="landing-section" id="mode-bot">
-      <p class="landing-tag">Pilihan bot</p><h2>Pilih cara menjalankan tokomu.</h2>
-      <div class="landing-grid">
-        <article><span>Akses terbatas</span><h3>Pakai Bot GevraStore</h3><p>Untuk lisensi yang sudah mendapat akses. Hubungkan Discord, pilih server, dan aktifkan bot dari panel.</p></article>
-        <article><span>Tersedia</span><h3>Pakai bot sendiri</h3><p>Hosting bot tersedia di GevraStore. Siapkan aplikasi bot Discord dan MongoDB milikmu untuk dihubungkan ke panel.</p><a href="#paket">Lihat paket</a></article>
+
+    <section class="landing-section" id="showcase" aria-labelledby="showcaseTitle">
+      <div class="landing-section-heading">
+        <div><p class="landing-eyebrow">02 / Showcase</p><h2 id="showcaseTitle">Begini alur belanjanya.</h2></div>
+        <p>Ikuti contoh pembelian voucher dengan QRIS otomatis, dari katalog sampai produk diterima.</p>
+      </div>
+      <div class="landing-showcase">
+        <div class="landing-demo-tabs" role="tablist" aria-label="Tahap pembelian">
+          <button id="demoCatalogTab" type="button" role="tab" aria-controls="demoCatalog" aria-selected="true"><span>01</span><b>Pilih produk</b></button>
+          <button id="demoPaymentTab" type="button" role="tab" aria-controls="demoPayment" aria-selected="false" tabindex="-1"><span>02</span><b>Bayar pesanan</b></button>
+          <button id="demoDeliveryTab" type="button" role="tab" aria-controls="demoDelivery" aria-selected="false" tabindex="-1"><span>03</span><b>Terima via DM</b></button>
+        </div>
+        <div class="landing-demo-window">
+          <div class="landing-demo-header"><img class="gevrastore-logo" src="/gevrastore-logo.svg" alt="" width="30" height="30"><b>GevraStore</b><span class="landing-chip">Simulasi</span></div>
+          <section id="demoCatalog" class="landing-demo-panel" role="tabpanel" aria-labelledby="demoCatalogTab" tabindex="0">
+            <p class="landing-preview-label">Katalog Discord</p><h3>Voucher Digital</h3><p>Pembeli melihat harga dan stok, lalu memilih jumlah yang ingin dibeli.</p>
+            <div class="landing-demo-receipt"><div><span>Harga satuan</span><b>Rp15.000</b></div><div><span>Stok</span><b>42 unit</b></div><div><span>Jumlah dibeli</span><b>1</b></div></div>
+          </section>
+          <section id="demoPayment" class="landing-demo-panel" role="tabpanel" aria-labelledby="demoPaymentTab" tabindex="0" hidden>
+            <p class="landing-preview-label">Pembayaran</p><h3>Checkout QRIS</h3><p>Bot membuat QRIS sesuai nominal pesanan dan memeriksa pembayarannya secara otomatis.</p>
+            <div class="landing-demo-receipt"><div><span>Total bayar</span><b>Rp15.000</b></div><div><span>Metode</span><b>QRIS</b></div><div><span>Status</span><b class="landing-mint">Lunas</b></div></div>
+          </section>
+          <section id="demoDelivery" class="landing-demo-panel" role="tabpanel" aria-labelledby="demoDeliveryTab" tabindex="0" hidden>
+            <p class="landing-preview-label">Pesan pribadi Discord</p><h3>Pesanan terkirim</h3><p>Voucher dikirim lewat DM, pesanan masuk riwayat, dan stok diperbarui.</p>
+            <div class="landing-demo-receipt"><div><span>Produk</span><b>Voucher Digital × 1</b></div><div><span>Pengiriman</span><b class="landing-mint">DM Discord</b></div><div><span>Stok tersisa</span><b>41 unit</b></div></div>
+          </section>
+        </div>
       </div>
     </section>
-    <section class="landing-section landing-showcase" id="showcase">
-      <div><p class="landing-tag">02 / Showcase</p><h2>Lihat alur toko dalam satu pesanan.</h2><p>Contoh pembelian voucher dari produk dipilih sampai stok berkurang.</p></div>
-      <div class="landing-story">
-        <details open><summary>01 · Produk tersedia</summary><p>Voucher Digital tampil dengan harga dan 42 unit stok.</p></details>
-        <details><summary>02 · Pesanan tercatat</summary><p>Pelanggan membeli satu voucher. Pesanan muncul di riwayat toko.</p></details>
-        <details><summary>03 · Produk terkirim</summary><p>Voucher dikirim lewat DM Discord dan stok tersisa 41 unit.</p></details>
+
+    <section class="landing-section" id="mode-bot" aria-labelledby="botTitle">
+      <div class="landing-section-heading">
+        <div><p class="landing-eyebrow">03 / Bot &amp; hosting</p><h2 id="botTitle">Pilih bot untuk tokomu.</h2></div>
+        <p>Siapkan satu server Discord, lalu pilih cara menjalankan toko dari panel.</p>
+      </div>
+      <div class="landing-grid landing-bots">
+        <article><span class="landing-chip landing-chip-mint">Hosting cloud 24/7</span><h3>Bot milikmu</h3><p>Gunakan aplikasi bot Discord dan MongoDB milikmu. Hubungkan keduanya dari panel untuk menjalankan bot di cloud GevraStore.</p></article>
+        <article><span class="landing-chip">Untuk lisensi yang mendapat akses</span><h3>Bot GevraStore</h3><p>Hubungkan akun Discord, pilih server yang kamu kelola, lalu aktifkan bot. Hosting dan database disiapkan GevraStore.</p></article>
       </div>
     </section>
-    <section class="landing-section" id="paket">
-      <p class="landing-tag">03 / Lisensi</p><h2>Pilih paket untuk tokomu.</h2>
-      <p>Bayar lewat QRIS atau Diamond Lock (DL). Kunci lisensi muncul setelah pembayaran dikonfirmasi.</p>
+
+    <section class="landing-section landing-pricing" id="paket" aria-labelledby="planTitle">
+      <div class="landing-section-heading">
+        <div><p class="landing-eyebrow">04 / Lisensi</p><h2 id="planTitle">Pilih paket sesuai kebutuhan.</h2></div>
+        <p>Bayar dengan QRIS atau Diamond Lock (DL). Kunci lisensi muncul setelah pembayaran terkonfirmasi.</p>
+      </div>
       <p id="landingPlanStatus" class="landing-loading" role="status">Memuat paket…</p>
       <div class="landing-grid landing-plans" id="landingPlans" aria-busy="true">
         <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
         <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
+        <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
+        <div class="landing-plan-skeleton" aria-hidden="true"><span class="skel skel-line"></span><span class="skel skel-title"></span><span class="skel skel-line"></span></div>
       </div>
-      <a class="landing-btn landing-outline" href="/beli.html">Buka halaman pembelian</a>
+      <div class="landing-pricing-foot"><p>Semua paket mencakup dashboard, hosting bot milikmu, dan script deposit.</p><a class="landing-text-link" href="/beli.html">Buka halaman pembelian <span aria-hidden="true">↗</span></a></div>
     </section>
-    <section class="landing-section landing-showcase" id="bantuan">
-      <div><p class="landing-tag">04 / Bantuan</p><h2>Sebelum mulai.</h2></div>
+
+    <section class="landing-section landing-faq" id="bantuan" aria-labelledby="faqTitle">
+      <div><p class="landing-eyebrow">05 / Bantuan</p><h2 id="faqTitle">Pertanyaan umum.</h2></div>
       <div class="landing-story">
         <details><summary>Apa yang perlu disiapkan?</summary><p>Siapkan server Discord. Jika memakai bot sendiri, siapkan juga aplikasi bot dan MongoDB. Jika lisensimu mendapat akses Bot GevraStore, cukup hubungkan Discord dan pilih server.</p></details>
+        <details><summary>Kapan kunci lisensi muncul?</summary><p>QRIS otomatis menampilkan key setelah pembayaran terdeteksi. Untuk pembayaran DL atau QRIS manual, key muncul setelah penjual mengonfirmasi pembayaran.</p></details>
+        <details><summary>Apakah pelanggan perlu membuka web?</summary><p>Pelanggan belanja lewat katalog Discord. Pemilik toko memakai panel web untuk mengelola produk, stok, dan pesanan.</p></details>
         <details><summary>Bagaimana cara memperpanjang lisensi?</summary><p>Buka menu Langganan di panel, pilih paket perpanjangan, dan ikuti langkah pembayaran.</p></details>
       </div>
     </section>
-    <section class="landing-section landing-access" id="masuk">
-      <div><p class="landing-tag">Akses pelanggan</p><h2>Masuk ke GevraStore.</h2><p>Gunakan kunci lisensi untuk membuka panel tokomu.</p></div>
+
+    <section class="landing-section landing-access" id="masuk" aria-labelledby="accessTitle">
+      <div><img class="gevrastore-logo" src="/gevrastore-logo.svg" alt="" width="56" height="56"><p class="landing-eyebrow">Akses pelanggan</p><h2 id="accessTitle">Masuk ke panel toko.</h2><p>Gunakan kunci lisensi untuk melanjutkan ke dashboard GevraStore.</p></div>
       <div class="landing-login">
         <label class="login-key-label" for="key">Kunci lisensi</label>
         <div class="key-wrap"><input id="key" type="password" placeholder="AS-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"></div>
-        <button class="landing-btn" id="btnLogin" type="button">Masuk</button>
+        <button class="landing-btn" id="btnLogin" type="button">Masuk ke panel</button>
         <div id="loginMsg" class="msg" role="status"></div>
-        <p><a href="/beli.html">Beli lisensi</a> · <span id="contactSlot">Hubungi penjual</span></p>
+        <p><a href="/beli.html">Beli lisensi</a><span aria-hidden="true">·</span><span id="contactSlot">Hubungi penjual</span></p>
       </div>
     </section>
   </main>
-  <footer class="landing-footer landing-shell"><strong>GevraStore</strong><a href="#bantuan">Bantuan</a><a href="#masuk">Masuk</a></footer>
+  <footer class="landing-footer landing-shell">
+    <a class="landing-brand" href="/"><img class="gevrastore-logo" src="/gevrastore-logo.svg" alt="" width="30" height="30">GevraStore</a>
+    <nav aria-label="Navigasi footer"><a href="#fitur">Fitur</a><a href="#paket">Harga</a><a href="#bantuan">Bantuan</a><a href="#masuk">Masuk</a></nav>
+  </footer>
 </div>
 <div id="app" class="app hide">
   <aside class="side">
@@ -92,8 +176,8 @@
   <main class="content"><div id="view"></div></main>
 </div>
 <div id="toast"></div>
-<script src="/i18n.js?v=dashboard-audit"></script>
+<script src="/i18n.js?v=landing-refresh"></script>
 <script src="/shop-guide.js?v=dashboard-audit"></script><script src="/app.js?v=gevrastore-logo"></script>
 <script src="/login-extras.js"></script>
-<script src="/landing.js"></script>
+<script src="/landing.js?v=landing-refresh"></script>
 </body></html>

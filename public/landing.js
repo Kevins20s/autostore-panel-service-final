@@ -1,7 +1,44 @@
+(function () {
+    const tabs = [...document.querySelectorAll(".landing-demo-tabs [role=tab]")];
+    const select = (active) => {
+        tabs.forEach(tab => {
+            const selected = tab === active;
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+            document.getElementById(tab.getAttribute("aria-controls")).hidden = !selected;
+        });
+    };
+    tabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => select(tab));
+        tab.addEventListener("keydown", event => {
+            const previous = (index + tabs.length - 1) % tabs.length;
+            const following = (index + 1) % tabs.length;
+            const next = {
+                ArrowLeft: previous,
+                ArrowUp: previous,
+                ArrowRight: following,
+                ArrowDown: following,
+                Home: 0,
+                End: tabs.length - 1,
+            }[event.key];
+            if (next === undefined) return;
+            event.preventDefault();
+            select(tabs[next]);
+            tabs[next].focus();
+        });
+    });
+})();
+
 (async () => {
     const list = document.getElementById("landingPlans");
     const status = document.getElementById("landingPlanStatus");
     const rupiah = new Intl.NumberFormat(gsLocale, { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
+    const descriptions = {
+        autostore: "Mulai dan kelola toko Discord selama 30 hari.",
+        autostore90: "Tiga bulan akses panel untuk toko yang sedang berkembang.",
+        autostore365: "Setahun akses panel dengan satu pembayaran.",
+        autostoreLifetime: "Akses lisensi tanpa masa kedaluwarsa.",
+    };
     const element = (tag, value) => {
         const node = document.createElement(tag);
         node.textContent = value;
@@ -13,16 +50,26 @@
         const { packages } = await response.json();
         const cards = packages.map(plan => {
             const card = document.createElement("article");
+            const heading = document.createElement("div");
+            heading.className = "landing-plan-heading";
+            heading.append(element("h3", plan.name), element("p", gsT(descriptions[plan.id] || "Akses panel GevraStore.")));
+            if (plan.id === "autostore365") {
+                const badge = element("span", gsT("Paling hemat"));
+                badge.className = "landing-chip landing-chip-mint landing-plan-badge";
+                heading.append(badge);
+                card.classList.add("landing-plan-featured");
+            }
             const link = element("a", gsT("Pilih paket"));
             link.href = "/beli.html?" + new URLSearchParams({ paket: plan.id });
-            link.className = "landing-btn";
+            link.className = plan.id === "autostore365" ? "landing-btn" : "landing-btn landing-outline";
             link.setAttribute("aria-label", gsT("Pilih paket") + " " + plan.name);
-            const price = element("strong", rupiah.format(plan.price));
-            price.className = "landing-price";
+            const price = document.createElement("div");
+            price.className = "landing-plan-price";
+            price.append(element("strong", rupiah.format(plan.price)), element("span", gsPlanPeriod(plan)));
             const dl = element("span", gsT("Memuat kurs DL…"));
             dl.className = "plan-dl-price";
             dl.dataset.dlPrice = plan.price;
-            card.append(element("h3", plan.name), price, element("p", gsPlanPeriod(plan)), dl, link);
+            card.append(heading, price, dl, link);
             return card;
         });
         list.replaceChildren(...cards);

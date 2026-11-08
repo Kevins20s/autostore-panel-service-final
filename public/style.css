@@ -1067,91 +1067,6 @@ html[data-theme="light"] .app .side .panel-nav-group a.on::before { background: 
 }
 
 /* Public storefront */
-.landing {
-  --landing-bg: #08161c;
-  --landing-panel: #10242b;
-  --landing-soft: #16363e;
-  --landing-line: #30515b;
-  --landing-text: #edfff8;
-  --landing-muted: #b2cdc8;
-  --landing-accent: #65efd0;
-  --landing-accent-hover: #98ffe7;
-  --landing-button-text: #09211c;
-  --landing-detail: #ffb37d;
-  min-height: 100vh;
-  background: var(--landing-bg);
-  color: var(--landing-text);
-}
-html[data-theme="light"] .landing {
-  --landing-bg: #090e18;
-  --landing-panel: #000;
-  --landing-soft: #161e2a;
-  --landing-line: #263343;
-  --landing-text: #e7e2d9;
-  --landing-muted: #9b9283;
-  --landing-accent: #ea8b9a;
-  --landing-accent-hover: #ef9aa8;
-  --landing-detail: #59a4dc;
-  --landing-button-text: #000;
-}
-.landing-shell { width: min(1180px, calc(100% - 64px)); margin-inline: auto; }
-.landing a { text-underline-offset: 4px; }
-.landing-nav, .landing-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; min-height: 76px; }
-.landing-nav { border-bottom: 1px solid var(--landing-line); padding-right: 54px; }
-.landing-brand { display: inline-flex; align-items: center; gap: 9px; margin-right: auto; font-size: 19px; font-weight: 800; text-decoration: none; }
-.landing-brand img { border-radius: 7px; }
-.landing-nav nav { display: flex; flex-wrap: wrap; gap: 18px; }
-.landing-nav nav a, .landing-footer a { color: var(--landing-muted); text-decoration: none; }
-.landing-nav nav a:hover, .landing-footer a:hover { color: var(--landing-text); text-decoration: underline; }
-.landing-btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 10px 16px; min-height: 42px; border: 1px solid var(--landing-accent); border-radius: 7px; background: var(--landing-accent); color: var(--landing-button-text); font-weight: 750; text-decoration: none; }
-.landing-btn:hover { background: var(--landing-accent-hover); border-color: var(--landing-accent-hover); }
-.landing-outline { background: transparent; color: var(--landing-text); border-color: var(--landing-line); }
-.landing-outline:hover { background: var(--landing-soft); border-color: var(--landing-accent); }
-.landing-hero { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr); align-items: center; gap: clamp(25px, 6vw, 82px); padding-block: clamp(45px, 8vw, 110px); background: radial-gradient(ellipse at 82% 46%, var(--landing-soft), transparent 60%); }
-.landing .landing-kicker { display: inline-block; padding: 7px 10px; border: 1px solid var(--landing-line); border-radius: 5px; color: var(--landing-detail); }
-.landing h1, .landing h2 { margin: 8px 0 14px; font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; font-weight: 740; letter-spacing: -.052em; line-height: 1.04; }
-.landing h1 { font-size: clamp(43px, 6.1vw, 83px); }
-.landing h1 em { display: block; color: var(--landing-accent); font-style: normal; font-weight: inherit; }
-.landing h2 { font-size: clamp(30px, 4.3vw, 53px); }
-.landing p { margin: 0; color: var(--landing-muted); }
-.landing .landing-tag { color: var(--landing-accent); font: 700 12px/1.45 ui-monospace, monospace; letter-spacing: .09em; text-transform: uppercase; }
-.landing-hero p:not(.landing-tag) { max-width: 44ch; font-size: 16px; }
-.landing-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 25px; }
-.landing-preview { min-width: 0; overflow: hidden; border: 1px solid var(--landing-line); border-radius: 18px; background: var(--landing-panel); box-shadow: 0 24px 70px rgb(0 0 0 / .22); }
-.landing-preview-top, .landing-preview-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; }
-.landing-preview-top { padding: 13px 16px; border-bottom: 1px solid var(--landing-line); }
-.landing-preview-top span, .landing-preview-row span, .landing-metrics span { color: var(--landing-muted); }
-.landing-preview-body { padding: clamp(12px, 3vw, 24px); }
-.landing-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
-.landing-metrics > div { padding: 8px; background: var(--landing-soft); border: 1px solid var(--landing-line); border-radius: 6px; }
-.landing-metrics span { display: block; font-size: 12px; }
-.landing-metrics strong { display: block; color: var(--landing-accent); font-size: clamp(20px, 3vw, 30px); font-variant-numeric: tabular-nums; }
-.landing-preview-row { border-top: 1px solid var(--landing-line); padding: 10px 0; }
-.landing-trend { padding: 10px; margin: 10px 0; border: 1px solid var(--landing-line); border-radius: 8px; color: var(--landing-detail); font-size: 12px; }
-.landing-trend svg { display: block; width: 100%; height: 62px; margin-top: 8px; }
-.landing-trend path { fill: currentColor; opacity: .1; }
-.landing-trend polyline { fill: none; stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; }
-.landing-section { border-top: 1px solid var(--landing-line); padding-block: clamp(30px, 6vw, 70px); scroll-margin-top: 12px; }
-.landing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 225px), 1fr)); gap: 12px; margin-top: 20px; }
-.landing-grid article, .landing-login { padding: 18px; background: var(--landing-panel); border: 1px solid var(--landing-line); border-radius: 10px; }
-.landing-grid article > span { color: var(--landing-accent); font: 700 12px ui-monospace, monospace; }
-.landing-grid h3 { margin: 5px 0; font-size: 18px; }
-.landing-showcase, .landing-access { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 40px; }
-.landing-story details { padding: 13px; border-bottom: 1px solid var(--landing-line); background: var(--landing-panel); }
-.landing-story summary { cursor: pointer; font-weight: 700; }
-.landing-story details p { margin-top: 7px; }
-.landing-plans { margin-bottom: 14px; }
-.landing-price { display: block; color: var(--landing-accent); font-size: 24px; }
-.landing-plans article .landing-btn { margin-top: 12px; }
-.landing-login .key-wrap { position: relative; }
-.landing-login #key { width: 100%; padding-right: 49px; background: var(--landing-bg); color: var(--landing-text); border-color: var(--landing-line); }
-.landing-login .key-eye { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); width: 37px; height: 37px; padding: 7px; background: transparent; border: 0; color: var(--landing-muted); }
-.landing-login .key-eye svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; }
-.landing-login #btnLogin { width: 100%; margin: 10px 0; }
-.landing-login a { color: var(--landing-accent); }
-.landing-footer { border-top: 1px solid var(--landing-line); }
-.landing-footer strong { margin-right: auto; }
-.landing :focus-visible { outline: 2px solid var(--landing-accent); outline-offset: 3px; }
 html[data-theme="dark"] {
   --bg: #08161c;
   --bg2: #142e36;
@@ -1165,45 +1080,34 @@ html[data-theme="dark"] {
 }
 html[data-theme="dark"] :is(.buy, .adm) button.pri { background: var(--ac); border-color: var(--ac); color: var(--bg); }
 html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2); border-color: var(--ac2); }
-.landing-loading { margin-top: 12px !important; }
-.landing-loading:empty { display: none; }
-.landing-plan-skeleton { display: grid; align-content: center; gap: 12px; min-height: 150px; padding: 18px; border: 1px solid var(--landing-line); border-radius: 10px; background: var(--landing-panel); }
 .skel {
   background-image: linear-gradient(100deg, rgb(150 190 185 / .09) 25%, rgb(200 245 235 / .24) 50%, rgb(150 190 185 / .09) 75%);
   background-size: 250% 100%;
 }
 .buy-pkgs .skel-card { height: 62px; }
-.landing-btn, .app .panel-action, :is(.app, .buy, .adm) button.pri {
+.app .panel-action, :is(.app, .buy, .adm) button.pri {
   transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
-:is(.landing-btn, .app .panel-action, .app button.pri, .buy button.pri, .adm button.pri):not(:disabled):active { transform: scale(.97); }
-.landing-grid article, .landing-preview, .buy-pkg, .app .stat, .adm-stat {
+:is(.app .panel-action, .app button.pri, .buy button.pri, .adm button.pri):not(:disabled):active { transform: scale(.97); }
+.buy-pkg, .app .stat, .adm-stat {
   transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
 @media (hover: hover) and (pointer: fine) {
-  :is(.landing-btn, .app .panel-action, .app button.pri, .buy button.pri, .adm button.pri):not(:disabled):hover { transform: translateY(-2px); }
-  :is(.landing-btn, .app .panel-action, .app button.pri, .buy button.pri, .adm button.pri):not(:disabled):active { transform: scale(.97); }
-  .landing-grid article:hover, .landing-preview:hover, .buy-pkg:hover, .app .stat:hover, .adm-stat:hover {
+  :is(.app .panel-action, .app button.pri, .buy button.pri, .adm button.pri):not(:disabled):hover { transform: translateY(-2px); }
+  :is(.app .panel-action, .app button.pri, .buy button.pri, .adm button.pri):not(:disabled):active { transform: scale(.97); }
+  .buy-pkg:hover, .app .stat:hover, .adm-stat:hover {
     transform: translateY(-3px);
-    border-color: var(--landing-accent, var(--ac));
+    border-color: var(--ac);
     box-shadow: 0 12px 30px rgb(0 0 0 / .17);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.landing-btn, .panel-action, button.pri, .landing-grid article, .landing-preview, .buy-pkg, .stat, .adm-stat, .skel) {
+  :is(.panel-action, button.pri, .buy-pkg, .stat, .adm-stat, .skel) {
     transition: none !important;
     animation: none !important;
     transform: none !important;
   }
 }
-@media (max-width: 760px) {
-  .landing-shell { width: calc(100% - 32px); }
-  .landing-nav { gap: 12px; padding: 10px 0; }
-  .landing-nav nav { order: 3; flex-basis: 100%; }
-  .landing-hero, .landing-showcase, .landing-access { grid-template-columns: 1fr; }
-  .landing-footer { padding-bottom: 54px; }
-}
-
 /* Workspaces and checkout flow */
 .side nav::before { display: none; }
 .nav-group { display: grid; gap: 3px; }
@@ -1410,15 +1314,11 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 @media (max-width: 580px) {
   .plan-picker .buy-pkgs, .buy .order-review { grid-template-columns: minmax(0, 1fr); }
 }
-.landing-login .discord-login { width: 100%; margin-bottom: 12px; }
-.landing-login .discord-note { margin-bottom: 10px; }
 @media (max-width: 760px) {
   .language-select { top: auto; bottom: 16px; }
 }
 
 .desk-header.head { margin-bottom: 0; }
-.landing-nav { padding-right: 150px; }
-@media (max-width: 760px) { .landing-nav { padding-right: 0; } }
 
 .setup-checklist { list-style: none; margin: 14px 0 0; padding: 0; }
 .setup-checklist li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }

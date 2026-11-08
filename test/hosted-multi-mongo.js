@@ -13,8 +13,6 @@ const testimonyId = "100000000000000098";
 const role = "100000000000000097";
 const guilds = ["100000000000000001", "100000000000000002"];
 const code = "SAME-SKU";
-const profileEmoteId = "100000000000000089";
-const profileEmote = `<:test_profile:${profileEmoteId}>`;
 
 function botDependency(name) {
     return require(require.resolve(name, { paths: [path.join(root, "bot")] }));
@@ -68,16 +66,10 @@ async function runBuyer({ url, dbName, guildId }) {
         }
         assert.equal((await accounts.findOne({ DiscordID: buyerId })).BalanceRp, 9250);
         let privateReply;
-        const guild = { name: "Synthetic store", emojis: { cache: new Map() } };
-        if (guildId === guilds[0]) {
-            guild.client = { application: { emojis: { fetch: async () => new Map([
-                [profileEmoteId, { toString: () => profileEmote }],
-            ]) } } };
-        }
         async function clickStorefront(customId, isPrivate = true) {
             let acknowledged;
             await handleStorefront({
-                customId, guildId, guild, isButton: () => true,
+                customId, guildId, guild: { name: "Synthetic store" }, isButton: () => true,
                 user: { id: buyerId, displayAvatarURL: () => "https://example.com/avatar.png" },
                 message: { flags: { has: flag => flag === MessageFlags.Ephemeral && isPrivate } },
                 deferReply: async options => {
@@ -90,9 +82,7 @@ async function runBuyer({ url, dbName, guildId }) {
             assert.equal(acknowledged, isPrivate ? "update" : "new");
             return privateReply.embeds[0].toJSON();
         }
-        const profile = await clickStorefront("storefront_profile", false);
-        assert.equal(profile.title, (guildId === guilds[0] ? profileEmote : "👤") + " Profil Kamu");
-        assert.equal(privateReply.components.at(-1).toJSON().components[0].emoji.name, guildId === guilds[0] ? "test_profile" : "👤");
+        assert.match((await clickStorefront("storefront_profile", false)).title, /Profil/);
         assert.match((await clickStorefront("storefront_balance")).description, /Saldo Rupiah/);
         assert.match((await clickStorefront("storefront_history:2")).title, /Riwayat/);
         assert.match((await clickStorefront("storefront_profile")).title, /Profil/);
@@ -192,7 +182,6 @@ async function main() {
         const firstReads = await Promise.all(Array.from({ length: 40 }, (_, i) =>
             request(i % tenants.length, "GET", "/shop/products")));
         assert.ok(firstReads.every(result => result.products.length === 0));
-        await client.db(tenants[0].dbName).collection("storefronts").insertOne({ _id: guilds[0], emojis: { profile: profileEmote } });
         await Promise.all(tenants.map(async (tenant, i) => {
             await request(i, "POST", "/shop/products", { code, name: "Store " + i, type: "yes", role, price: 10 });
             await request(i, "POST", "/shop/products/" + code + "/stock", { text: "STOCK-" + i });

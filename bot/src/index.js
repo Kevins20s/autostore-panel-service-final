@@ -42,7 +42,7 @@ let IncludedIntents = Object.entries(GatewayIntentBits).reduce(
 const BotClient = hostedBinding ? HostedClient : Client;
 let client = new BotClient({
     intents: hostedBinding
-        ? [GatewayIntentBits.Guilds, GatewayIntentBits.GuildEmojisAndStickers, ...(process.env.HOSTED_WORLD_DEPOSIT === "1"
+        ? [GatewayIntentBits.Guilds, ...(process.env.HOSTED_WORLD_DEPOSIT === "1"
             ? [GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] : [])]
         : IncludedIntents,
     partials: [Partials.Channel, Partials.Message],

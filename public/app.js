@@ -1569,7 +1569,7 @@ async function storeCustomBanner() {
             try { url = new URL(value); } catch { url = null; }
             preview.replaceChildren();
             if (url?.protocol !== "https:" || url.username || url.password) return;
-            const img = h("img", { src: url.href, alt: gsT("Preview banner") });
+            const img = h("img", { referrerpolicy: "no-referrer", src: url.href, alt: gsT("Preview banner") });
             img.onerror = () => { if (img.isConnected) preview.replaceChildren(h("p", { class: "mut" }, gsT("Gambar tidak dapat dimuat"))); };
             preview.append(img);
         };

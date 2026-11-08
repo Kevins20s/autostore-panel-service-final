@@ -710,6 +710,7 @@ const gsEnglish = {
   "Pesanan": "Orders",
   "Konfigurasi": "Configuration",
   "Pengaturan toko": "Store settings",
+  "Tampilan Toko": "Store Appearance",
   "Akun": "Account",
   "Langganan": "Subscription",
   "Panduan setup": "Setup guide",

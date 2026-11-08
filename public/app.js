@@ -595,77 +595,173 @@ function balanceModal(u, mode, reload) {
         }) }, gsT("Simpan"))));
 }
 
-// ---------- Settings ----------
-function storefrontSettings(storefront, productQris) {
-    const text = (id, en) => gsLanguage === "en" ? en : id;
-    const model = h("select", { disabled: !storefront.guildId },
-        h("option", { value: "classic" }, text("Klasik · katalog lengkap", "Classic · full catalog")),
-        h("option", { value: "model1" }, text("Model 1 · menu ringkas", "Model 1 · compact menu")),
-        h("option", { value: "model2" }, text("Model 2 · dua dropdown", "Model 2 · two dropdowns")),
-        productQris ? h("option", { value: "model3" }, text("Model 3 · katalog QRIS", "Model 3 · QRIS catalog")) : null);
-    model.value = storefront.model;
-    const preview = h("div", { class: "storefront-preview" });
-    const draw = () => {
-        const compact = model.value === "model1";
-        const qris = model.value === "model3";
-        const menuDropdown = model.value === "model2";
-        const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
-            : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
-        preview.replaceChildren(...[
-            h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
-                qris ? h("div", { class: "storefront-preview-product" },
-                    h("div", {}, h("strong", {}, "👑 SOFTWARE PREMIUM"), h("div", {}, "Desc: Full Source"),
-                        h("div", {}, "Stock: 3 ✅"), h("div", {}, "Price: Rp200.000"), h("div", {}, "Product Sold: 0")),
-                    h("div", { class: "storefront-preview-actions" }, h("span", { class: "green" }, "🛒 Buy")))
-                    : h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
-            qris ? h("p", { class: "mut" }, text("Isi harga Rupiah di Produk & stok, lalu aktifkan QRIS otomatis di Pembayaran.",
-                "Set a rupiah price in Products & stock, then enable automatic QRIS in Payments.")) : null,
-            qris ? h("p", { class: "mut" }, text("Pembeli menekan Buy, mengisi jumlah, lalu konfirmasi untuk membuka QRIS.",
-                "Buyers press Buy, enter the quantity, then confirm to open QRIS.")) : null,
-            menuDropdown ? h("div", { class: "storefront-preview-select" },
-                "🛒 Click here to select menu", h("span", { "aria-hidden": "true" }, "⌄")) : null,
-            qris ? null : h("div", { class: "storefront-preview-select" },
-                "🛒 Select product to buy...", h("span", { "aria-hidden": "true" }, "⌄")),
-            menuDropdown || qris ? null : h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
-                h("span", { class: compact || index === 3 ? "green" : null }, label))),
-            compact ? h("details", { class: "storefront-profile-preview" },
-                h("summary", {}, text("Lihat pratinjau My Profile", "Preview My Profile")),
-                h("div", { class: "storefront-preview-embed" }, h("strong", {}, "Profil Kamu"),
-                    h("span", {}, "Discord · @Pelanggan　 |　 GrowID · GrowBuyer　 |　 Balance WL · 100 WL　 |　 Balance Rp · Rp9.250"),
-                    h("span", {}, "Total Spent · 25 WL　 |　 Total Deposit · 125 WL"),
-                    h("div", { class: "storefront-preview-actions" },
-                        h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
-                        h("span", {}, "👤 Profile"), h("span", {}, "💰 Balance"), h("span", {}, "📜 History"))))
-                : null,
-            qris ? null : h("details", { class: "storefront-profile-preview" },
-                h("summary", {}, compact ? text("Lihat contoh stok & pembayaran", "Preview stock & payments")
-                    : text("Lihat contoh dropdown beli", "Preview the buy dropdown")),
-                h("div", { class: "storefront-preview-embed" },
-                    h("span", {}, "✅ VOUCHER DIGITAL · Code: VOUCHER01 | Stock: 12"),
-                    h("span", {}, "❌ VOUCHER PREMIUM · Code: VOUCHER02 | Stock: 0"),
-                    h("span", {}, text("❌ Semua produk sedang habis", "❌ All products are sold out")),
-                    compact ? h("span", {}, text("Top Up WL langsung menambah WL. QRIS menambah saldo Rupiah yang bisa dikonversi lewat Convert Rp to WL.", "Growtopia top-ups credit WL. QRIS credits a rupiah balance that can be exchanged with Convert Rp to WL.")) : null)),
-        ].filter(Boolean));
-    };
-    draw();
-    model.addEventListener("change", draw);
-    const save = h("button", { class: "pri", type: "button", disabled: !storefront.guildId }, text("Simpan model toko", "Save storefront model"));
-    save.onclick = guard(async () => {
-        save.disabled = model.disabled = true;
-        try {
-            await api("PUT", "/api/shop/settings/storefront", { guildId: storefront.guildId, model: model.value });
-            toast(text("Model toko tersimpan.", "Storefront model saved."));
-        } finally {
-            save.disabled = model.disabled = false;
+// ---------- Storefront appearance ----------
+const STOREFRONT_MODELS = [
+    {
+        id: "classic", name: ["Klasik", "Classic"], label: ["Dropdown + tombol", "Dropdown + buttons"], icon: "dashboard",
+        description: ["Daftar produk dan tombol toko dalam satu pesan Discord.", "A product list and store controls in a single Discord message."],
+        features: [["Pilih produk dari dropdown untuk mulai membeli.", "Start a purchase from the product dropdown."],
+            ["Tombol Set GrowID, Balance, Deposit, dan Deposit QRIS langsung terlihat.", "Set GrowID, Balance, Deposit, and Deposit QRIS are always visible."]],
+        fit: ["Toko Growtopia yang ingin menampilkan akses saldo dan deposit sekaligus.", "Growtopia shops that want balance and deposits visible at a glance."],
+    },
+    {
+        id: "model1", name: ["Model 1", "Model 1"], label: ["Profil ringkas", "Compact profile"], icon: "users",
+        description: ["Dropdown beli dengan menu profil, top up, dan riwayat yang ringkas.", "A purchase dropdown with compact profile, top-up, and history actions."],
+        features: [["My Profile menampilkan GrowID, saldo, dan aktivitas pembeli.", "My Profile displays the buyer’s GrowID, balances, and activity."],
+            ["Top up QRIS mengisi saldo Rupiah yang bisa dikonversi ke WL.", "QRIS top-ups credit rupiah that buyers can convert to WL."]],
+        fit: ["Toko yang sering melayani pelanggan tetap dan pengisian saldo.", "Shops with regular buyers and frequent balance top-ups."],
+    },
+    {
+        id: "model2", name: ["Model 2", "Model 2"], label: ["Dua dropdown", "Two dropdowns"], icon: "sliders",
+        description: ["Menu pelanggan dan pemilihan produk tampil di dua dropdown terpisah.", "Customer actions and product selection appear in separate dropdowns."],
+        features: [["Satu dropdown untuk GrowID, saldo, dan deposit.", "One dropdown for GrowID, balance, and deposits."],
+            ["Dropdown beli menandai produk tersedia dan produk yang habis.", "The purchase dropdown marks available and sold-out products."]],
+        fit: ["Toko yang ingin merapikan katalog Discord dengan menu sederhana.", "Shops that want a tidy Discord catalog with a simple menu."],
+    },
+    {
+        id: "model3", name: ["Model 3", "Model 3"], label: ["Buy langsung QRIS", "Direct QRIS Buy"], icon: "credit-card",
+        description: ["Pembeli menekan Buy pada produk, mengisi jumlah, lalu membayar lewat QRIS.", "Buyers press Buy on a product, enter a quantity, then pay by QRIS."],
+        features: [["Tombol Buy langsung di samping setiap produk.", "Buy sits next to each product."],
+            ["Harga tetap dalam Rupiah dan QRIS muncul setelah konfirmasi jumlah.", "Fixed rupiah prices and a QRIS code after quantity confirmation."],
+            ["File pesanan dikirim lewat DM setelah lunas.", "The order file is sent by DM after payment."]],
+        fit: ["Toko script, aplikasi, atau akun yang menjual langsung dalam Rupiah.", "Shops that sell scripts, apps, or accounts directly in rupiah."],
+    },
+];
+const showcaseText = ([id, en]) => gsLanguage === "en" ? en : id;
+
+function storefrontPreview(model) {
+    const t = (id, en) => showcaseText([id, en]);
+    const compact = model.id === "model1";
+    const qris = model.id === "model3";
+    const menu = model.id === "model2";
+    const sample = qris ? [
+        { name: "SOFTWARE PREMIUM", detail: "Desc: Full Source", price: "Rp200.000", stock: 3, sold: 4 },
+        { name: "SCRIPT PRO", detail: "Desc: Instant Download", price: "Rp125.000", stock: 8, sold: 12 },
+    ] : [
+        { name: "VOUCHER DIGITAL", detail: "Code: VOUCHER01", price: "25 WL", stock: 12, sold: 4 },
+        { name: "DIAMOND LOCK PACK", detail: "Code: DLPACK01", price: "100 WL", stock: 8, sold: 12 },
+    ];
+    const picker = label => h("div", { class: "storefront-preview-select" }, label, h("span", { "aria-hidden": "true" }, "⌄"));
+    const actions = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
+        : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
+    return h("div", { class: "showcase-channel", "aria-label": t("Contoh pesan katalog Discord", "Sample Discord catalog message") },
+        h("div", { class: "showcase-channel-bar" }, h("span", { "aria-hidden": "true" }, "#"),
+            h("strong", {}, "katalog-toko"), h("span", { class: "showcase-channel-caption" }, t("Pratinjau Discord", "Discord preview"))),
+        h("div", { class: "showcase-message" },
+            h("img", { class: "showcase-avatar", src: "/logo.png", alt: "", width: 36, height: 36 }),
+            h("div", { class: "showcase-message-content" },
+                h("div", { class: "showcase-author" }, h("strong", {}, "GevraStore"), h("span", {}, "APP"),
+                    h("small", {}, t("Baru saja", "Just now"))),
+                h("div", { class: "storefront-preview-embed showcase-embed" },
+                    h("strong", { class: "showcase-embed-title" }, "PRODUCT LIST"),
+                    h("span", { class: "showcase-embed-meta" }, qris ? "Kurs: 1 DL = Rp9.000" : "Last Update: Baru saja · 1 DL = Rp9.000"),
+                    ...sample.map(p => h("div", { class: "storefront-preview-product" },
+                        h("div", {}, h("strong", {}, "👑 " + p.name), h("div", {}, p.detail),
+                            h("div", {}, "Stock: " + p.stock + " ✅"), h("div", {}, "Price: ", h("b", {}, p.price)),
+                            h("div", {}, "Product Sold: " + p.sold)),
+                        qris ? h("div", { class: "storefront-preview-actions" }, h("span", { class: "green" }, "🛒 Buy")) : null)),
+                    qris ? h("small", { class: "showcase-embed-meta" }, t("Last Update: baru saja", "Last Update: just now")) : null,
+                    h("div", { class: "showcase-banner" }, h("strong", {}, "GEVRASTORE"),
+                        h("span", {}, t("Katalog produk digital", "Digital product catalog")))),
+                menu ? picker("🛒 Click here to select menu") : null,
+                qris ? null : picker("🛒 Select product to buy..."),
+                menu || qris ? null : h("div", { class: "storefront-preview-actions" },
+                    ...actions.map((label, index) => h("span", { class: compact || index === 3 ? "green" : null }, label))),
+                compact ? h("details", { class: "storefront-profile-preview" },
+                    h("summary", {}, t("Lihat contoh My Profile", "View My Profile example")),
+                    h("div", { class: "storefront-preview-embed" }, h("strong", {}, t("Profil Kamu", "Your Profile")),
+                        h("span", {}, "Discord · @Buyer　|　GrowID · GrowBuyer"),
+                        h("span", {}, "Balance WL · 100 WL　|　Balance Rp · Rp9.250"),
+                        h("div", { class: "storefront-preview-actions" }, h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
+                            h("span", {}, "Profile"), h("span", {}, "Balance"), h("span", {}, "History")))) : null)));
+}
+
+async function storefrontAppearance() {
+    const s = await api("GET", "/api/shop/settings");
+    const t = (id, en) => showcaseText([id, en]);
+    const { guildId, model: current = "classic" } = s.storefront || {};
+    const models = STOREFRONT_MODELS.filter(model => model.id !== "model3" || s.productQris);
+    const modelFor = id => models.find(model => model.id === id) || models[0];
+    const nameOf = id => showcaseText(modelFor(id).name);
+    let active = modelFor(current).id;
+    let selected = active;
+    let saving = false;
+    const stage = h("div", { class: "showcase-stage" });
+    const status = h("p", { class: "mut", role: "status" });
+    const activeBadge = h("span", { class: "showcase-active" });
+    const save = h("button", { type: "button", class: "pri" }, t("Terapkan model", "Apply model"));
+    const choose = id => { selected = id; draw(); };
+    const tabItems = [...models, { id: "compare", name: ["Perbandingan", "Compare"], icon: "dashboard" }];
+    const tabs = tabItems.map(item => h("button", { type: "button", class: "showcase-tab", "data-model": item.id, onclick: () => choose(item.id) },
+        navIcon(item.icon), h("span", {}, showcaseText(item.name)),
+        item.label ? h("small", {}, showcaseText(item.label)) : null));
+    function compare() {
+        return h("section", { class: "card showcase-compare" }, h("h2", {}, t("Perbandingan model", "Compare storefront models")),
+            h("div", { class: "table-wrap" }, h("table", {},
+                h("thead", {}, h("tr", {}, ...[t("Model", "Model"), t("Cara memilih produk", "Product selection"),
+                    t("Pembayaran", "Payment"), t("Cocok untuk", "Best for"), ""].map(label => h("th", { scope: "col" }, label)))),
+                h("tbody", {}, ...models.map(model => h("tr", {}, h("th", { scope: "row" }, nameOf(model.id)),
+                    h("td", {}, model.id === "model3" ? "Buy" : t("Dropdown beli", "Purchase dropdown")),
+                    h("td", {}, model.id === "model3" ? "QRIS (Rp)" : t("Saldo WL", "WL balance")),
+                    h("td", {}, showcaseText(model.fit)),
+                    h("td", {}, h("button", { type: "button", class: "sm", onclick: () => { choose(model.id); tabs[models.indexOf(model)].focus(); } },
+                        t("Lihat pratinjau", "View preview")))))))));
+    }
+    function draw() {
+        for (const tab of tabs) {
+            tab.setAttribute("aria-pressed", String(tab.dataset.model === selected));
+            tab.disabled = saving;
         }
+        activeBadge.textContent = guildId ? t("Aktif · ", "Active · ") + nameOf(active)
+            : t("Server belum dipilih", "No server selected");
+        save.disabled = saving || !guildId || selected === active || selected === "compare";
+        if (selected === "compare") { stage.replaceChildren(compare()); return; }
+        const model = modelFor(selected);
+        status.textContent = !guildId ? t("Hubungkan server Discord untuk menerapkan model.", "Connect a Discord server to apply a model.")
+            : selected === active ? t("Model ini sedang dipakai toko.", "Your store is using this model.")
+                : t("Pratinjau saja sampai kamu menerapkan model.", "Preview only until you apply this model.");
+        stage.replaceChildren(h("div", { class: "showcase-layout" },
+            storefrontPreview(model),
+            h("div", { class: "showcase-info" },
+                h("section", { class: "card showcase-info-card" },
+                    h("span", { class: "showcase-kicker" }, nameOf(model.id)), h("h2", {}, showcaseText(model.label)),
+                    h("p", { class: "mut" }, showcaseText(model.description)),
+                    h("h3", {}, t("Keunggulan fitur", "Key features")),
+                    h("ul", { class: "showcase-features" }, ...model.features.map(feature =>
+                        h("li", {}, h("span", { "aria-hidden": "true" }, "✓"), showcaseText(feature))))),
+                h("section", { class: "card showcase-info-card" }, h("h3", {}, t("Cocok untuk", "Best for")),
+                    h("p", { class: "mut" }, showcaseText(model.fit)),
+                    model.id === "model3" ? h("a", { href: "#/products" }, t("Atur harga QRIS di Produk & stok", "Set QRIS prices in Products & stock")) : null),
+                h("div", { class: "showcase-apply" }, status, save,
+                    guildId ? null : h("a", { href: "#/bot" }, t("Buka Bot & Server", "Open Bot & Server"))))));
+    }
+    save.onclick = guard(async () => {
+        const model = selected;
+        saving = true;
+        draw();
+        try {
+            const saved = await api("PUT", "/api/shop/settings/storefront", { guildId, model });
+            active = saved.model;
+            toast(t("Model toko tersimpan.", "Storefront model saved."));
+        } finally { saving = false; draw(); }
     });
-    return card(h("h2", {}, text("Model tampilan toko", "Storefront model")),
-        h("p", { class: "mut" }, storefront.guildId
-            ? text("Katalog Discord yang sedang berjalan memakai model ini pada pembaruan berikutnya. Untuk katalog baru, jalankan /setrealtime lalu /startrealtime. Jika punya lebih dari 25 produk, bagi katalog per kategori.", "Running Discord catalogs apply this model on their next refresh. For a new catalog, run /setrealtime, then /startrealtime. If you have more than 25 products, split the catalog by category.")
-            : text("Isi ID Server Discord di Bot & Server sebelum menyimpan model toko.", "Enter your Discord server ID in Bot & Server before saving a storefront model.")),
-        field(text("Pilih model", "Choose a model"), model),
-        h("h3", { class: "storefront-preview-title" }, text("Pratinjau Discord", "Discord preview")), preview,
-        h("div", { class: "row mt" }, save));
+    draw();
+    return h("div", { class: "storefront-showcase" },
+        h("header", { class: "card showcase-head" },
+            h("div", {}, h("span", { class: "showcase-kicker" }, t("Katalog Discord", "Discord catalog")),
+                h("h1", {}, t("Tampilan Toko", "Store Appearance")),
+                h("p", { class: "mut" }, t("Lihat bagaimana pembeli melihat katalog, lalu pilih model untuk tokomu.",
+                    "See what buyers will see, then choose a layout for your store."))),
+            h("div", { class: "showcase-head-actions" }, activeBadge,
+                h("a", { class: "showcase-link", href: "#/settings" }, navIcon("settings"), t("Pengaturan", "Settings")),
+                h("a", { class: "showcase-link", href: "#/emojis" }, navIcon("palette"), t("Custom Emoji", "Custom Emoji")))),
+        h("section", { class: "showcase-instructions" }, navIcon("terminal"),
+            h("div", {}, h("strong", {}, t("Cara mengaktifkan tampilan di Discord", "How to apply the layout in Discord")),
+                h("p", {}, t("Pilih model dan tekan Terapkan model. Katalog aktif berubah pada pembaruan berikutnya. Untuk katalog baru, jalankan ",
+                    "Choose a model and press Apply model. Existing catalogs update on their next refresh. For a new catalog, run "),
+                    h("code", {}, "/setrealtime"), t(" lalu ", " then "), h("code", {}, "/startrealtime"), "."))),
+        h("div", { class: "showcase-tabs", role: "group", "aria-label": t("Model tampilan toko", "Storefront models") }, ...tabs),
+        stage);
 }
 
 async function settings() {
@@ -676,7 +772,6 @@ async function settings() {
     const rate = h("input", { value: s.pricePerWL ?? "", inputmode: "decimal" });
     const webhook = h("input", { value: s.donationWebhookId || "", inputmode: "numeric" });
     return h("div", {}, head("Settings", gsT("Pengaturan toko.")),
-        storefrontSettings(s.storefront || { guildId: "", model: "classic" }, s.productQris),
         card(h("h2", {}, "Maintenance"), h("p", { class: "mut" }, gsT("Saat aktif, pembelian di toko dinonaktifkan.")), h("label", { class: "sw" }, mt, gsT("Aktifkan mode maintenance"))),
         card(h("h2", {}, gsT("Kurs World Lock")), h("label", { class: "sw" }, live, gsT("Pakai harga live (gtid.pro), kurs manual jadi cadangan")),
             field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))),
@@ -1732,7 +1827,7 @@ const STORE_NAV = [
         ["products", gsT("Produk & stok"), "package"], ["users", gsT("Pelanggan"), "users"], ["payments", gsT("Pembayaran"), "wallet"]
     ]],
     [gsT("Konfigurasi"), [
-        ["bot", "Bot & server", "server"], ["settings", gsT("Pengaturan toko"), "settings"],
+        ["bot", "Bot & server", "server"], ["storefront", gsT("Tampilan Toko"), "monitor"], ["settings", gsT("Pengaturan toko"), "settings"],
         ["emojis", "Emoji", "palette"], ["banner", "Banner", "image"]
     ]],
     [gsT("Panduan"), [["tutorial", gsT("Panduan setup"), "book"], ["commands", "Slash Command List", "terminal"],
@@ -1753,6 +1848,7 @@ const NAV_ICON_PATHS = {
     settings: ['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z','M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 2.94-.08-.02a1.7 1.7 0 0 0-1.74.68l-.04.07h-3.4l-.04-.07a1.7 1.7 0 0 0-1.74-.68l-.08.02-1.7-2.94.06-.06A1.7 1.7 0 0 0 9.7 15l-.08-.03v-3.4l.08-.03a1.7 1.7 0 0 0-.34-1.88L9.3 9.6 11 6.66l.08.02a1.7 1.7 0 0 0 1.74-.68l.04-.07h3.4l.04.07a1.7 1.7 0 0 0 1.74.68l.08-.02 1.7 2.94-.06.06A1.7 1.7 0 0 0 19.4 11.5l.08.03v3.4z'],
     palette: ['M12 3a9 9 0 1 0 0 18h1.1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.8H18a3 3 0 0 0 3-3c0-4.9-4-8.9-9-8.9Z','M7.5 10h.01','M10 6.5h.01','M15 7.5h.01','M17 11h.01'],
     image: ['M4 4h16v16H4z','m4 15 4-4 4 4 3-3 5 5','M9 8h.01'],
+    monitor: ['M3 4h18v13H3z','M8 21h8','M12 17v4'],
     server: ['M4 4h16v6H4z','M4 14h16v6H4z','M8 7h.01','M8 17h.01','M12 7h4','M12 17h4'],
     book: ['M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22z','M4 4.5v15A2.5 2.5 0 0 1 6.5 17H20','M8 6h8'],
     terminal: ['M3 5h18v14H3z','m7 9 3 3-3 3','M13 15h4'],
@@ -1773,7 +1869,7 @@ function navIcon(name) {
     });
     return h("span", { class: "nav-icon nav-icon-" + name }, svg);
 }
-const VIEWS = { dashboard, products, users, sales: storeOrders, payments, settings, bot, tutorial, commands: commandGuide, "deposit-script": depositScript, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
+const VIEWS = { dashboard, products, users, sales: storeOrders, payments, storefront: storefrontAppearance, settings, bot, tutorial, commands: commandGuide, "deposit-script": depositScript, subscription, emojis: storeCustomEmojis, banner: storeCustomBanner, service: serviceDashboard, "service-settings": serviceSettings, "service-emojis": serviceEmojis, orders: serviceOrders };
 // Menu HP: sidebar jadi header ringkas dengan tombol buka/tutup menu.
 function syncNavToggle() { const b = $("navToggle"); if (b) b.setAttribute("aria-expanded", String(!!document.querySelector(".side")?.classList.contains("open"))); }
 function setupNavToggle() {

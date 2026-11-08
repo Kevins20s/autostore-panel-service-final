@@ -4,6 +4,7 @@ const collection = "storefronts";
 const models = Object.freeze({ classic: "classic", model1: "model1", model2: "model2", model3: "model3" });
 const qrisBuyPrefix = "storefront_qris_buy:";
 const qrisSelectId = "storefront_qris_select";
+const qrisPagePrefix = "storefront_qris_page:";
 const buttons = Object.freeze({
     profile: "storefront_profile", balance: "storefront_balance", history: "storefront_history",
     deposit: "storefront_deposit", qris: "storefront_qris", convert: "storefront_convert",
@@ -119,5 +120,5 @@ function componentEmoji(value) {
     return custom ? { animated: custom[1] === "a", name: custom[2], id: custom[3] } : { name: value };
 }
 
-module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, emojiFields,
+module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, emojiFields,
     customEmojiId, resolveEmojis, resolveStorefrontEmojis, interactionEmojis, componentEmoji };

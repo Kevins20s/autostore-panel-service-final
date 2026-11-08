@@ -2,7 +2,8 @@
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } = require("discord.js");
 const { serverId } = require("../../config/config.json");
-const { qrisBuyPrefix, qrisSelectId } = require("../../config/storefront");
+const { qrisBuyPrefix, qrisSelectId, qrisPagePrefix } = require("../../config/storefront");
+const { openQrisCatalogPage } = require("../../slashCommands/information/startrealtime");
 const { requestAutoDeposit, claimProductOrder, PanelError } = require("../../utils/panelWallet");
 const client = require("../../index");
 
@@ -11,6 +12,7 @@ const claimPrefix = "storefront_qris_claim:";
 async function handleProductQris(interaction) {
     if (!process.env.HOSTED_PILOT_BINDING || interaction.guildId !== serverId) return;
     const id = interaction.customId || "";
+    if (interaction.isButton() && id.startsWith(qrisPagePrefix)) return openQrisCatalogPage(interaction);
     const buy = interaction.isButton() && id.startsWith(qrisBuyPrefix);
     const select = interaction.isStringSelectMenu() && id === qrisSelectId;
     const claim = interaction.isButton() && id.startsWith(claimPrefix);

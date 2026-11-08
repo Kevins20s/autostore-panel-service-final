@@ -592,7 +592,7 @@ function storefrontSettings(storefront, productQris) {
     const draw = () => {
         const compact = model.value === "model1";
         const qris = model.value === "model3";
-        const twoMenus = qris || model.value === "model2";
+        const menuDropdown = qris || model.value === "model2";
         const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
             : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
         preview.replaceChildren(...[
@@ -604,11 +604,11 @@ function storefrontSettings(storefront, productQris) {
                     : h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
             qris ? h("p", { class: "mut" }, text("Isi harga Rupiah di Produk & stok, lalu aktifkan QRIS otomatis di Pembayaran.",
                 "Set a rupiah price in Products & stock, then enable automatic QRIS in Payments.")) : null,
-            twoMenus ? h("div", { class: "storefront-preview-select" },
+            menuDropdown ? h("div", { class: "storefront-preview-select" },
                 "🛒 Click here to select menu", h("span", { "aria-hidden": "true" }, "⌄")) : null,
-            h("div", { class: "storefront-preview-select" },
+            qris ? null : h("div", { class: "storefront-preview-select" },
                 "🛒 Select product to buy...", h("span", { "aria-hidden": "true" }, "⌄")),
-            twoMenus ? null : h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
+            menuDropdown ? null : h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
                 h("span", { class: compact || index === 3 ? "green" : null }, label))),
             compact ? h("details", { class: "storefront-profile-preview" },
                 h("summary", {}, text("Lihat pratinjau My Profile", "Preview My Profile")),
@@ -619,7 +619,7 @@ function storefrontSettings(storefront, productQris) {
                         h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
                         h("span", {}, "👤 Profile"), h("span", {}, "💰 Balance"), h("span", {}, "📜 History"))))
                 : null,
-            h("details", { class: "storefront-profile-preview" },
+            qris ? null : h("details", { class: "storefront-profile-preview" },
                 h("summary", {}, compact ? text("Lihat contoh stok & pembayaran", "Preview stock & payments")
                     : text("Lihat contoh dropdown beli", "Preview the buy dropdown")),
                 h("div", { class: "storefront-preview-embed" },
@@ -1214,7 +1214,10 @@ MODEL_EMOJI_GROUPS.model2 = [
     ["Dropdown menu", "Menu dropdown", STORE_MENU_EMOJIS.map(([key, label]) => [key, label, label])],
     ...MODEL_EMOJI_GROUPS.classic.slice(1),
 ];
-MODEL_EMOJI_GROUPS.model3 = MODEL_EMOJI_GROUPS.model2;
+MODEL_EMOJI_GROUPS.model3 = [
+    ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Tombol Buy", "Buy button"]]],
+    ...MODEL_EMOJI_GROUPS.model2.slice(1),
+];
 
 function storefrontEmojiPreview(model, selected, emojis, t) {
     const icon = (key) => h("span", { class: "emoji-preview-icon" + (key === selected ? " is-target" : ""),
@@ -1231,12 +1234,21 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
             h("div", { class: "emoji-preview-select" }, line(icon("inStock"), "Voucher Game · Code: GAME01 | Stock: 12"),
                 line(icon("outOfStock"), "Paket Premium · Code: PREM01 | Stock: 0")));
     }
+    if (model === "model3" && (selected === "cart" || CATALOG_EMOJI_FIELDS.some(([key]) => key === selected))) {
+        return message(["PRODUCT LIST"], line(icon("arrow"), "Kurs: 1", icon("wl"), "= Rp90"),
+            h("div", { class: "storefront-preview-product" },
+                h("div", {}, line(icon("crown"), h("strong", {}, "SOFTWARE PREMIUM"), icon("crown")),
+                    line(icon("arrow"), "Desc: Full Source"), line(icon("arrow"), selected === "stockEmpty" ? "Stock: 0" : "Stock: 3",
+                        icon(selected === "stockEmpty" ? "stockEmpty" : "stockAvailable")),
+                    line(icon("arrow"), "Price: Rp200.000"), line(icon("sold"), "Product Sold: 0")),
+                button("cart", "Buy")));
+    }
     if (selected === "cart" || selected === "warning") {
         return message([icon("warning"), "HOW TO BUY", icon("warning")],
             line(icon("arrow"), model === "model1" ? t("Buka My Profile untuk mengatur GrowID.", "Open My Profile to set your GrowID.")
                 : model === "model3" ? t("Pilih Buy untuk membayar lewat QRIS.", "Choose Buy to pay with QRIS.")
                 : model === "model2" ? t("Pilih Set GrowID di dropdown menu.", "Choose Set GrowID in the menu dropdown.") : "Click Button Set GrowID"),
-            line(icon("cart"), t("Pilih produk dari dropdown.", "Pick a product from the dropdown.")));
+            model === "model3" ? null : line(icon("cart"), t("Pilih produk dari dropdown.", "Pick a product from the dropdown.")));
     }
     if (CATALOG_EMOJI_FIELDS.some(([key]) => key === selected)) {
         return message([icon("crown"), "PRODUCT LIST", icon("crown")],

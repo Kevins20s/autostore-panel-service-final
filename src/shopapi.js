@@ -10,9 +10,8 @@ const ID_RE = /^\d{17,20}$/;
 const num = (v) => (typeof v === "number" ? v : Number(String(v ?? "").trim().replace(",", ".")));
 const okNum = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
 
-async function discordEmotes(guildId, token, botId) {
-    if (!token) return null;
-    const server = `/guilds/${guildId}`;
+async function discordEmotes(guildId, token, botId, sourceGuildId, discordUserId) {
+    if (!token) return { library: null };
     const get = async path => {
         try {
             const response = await fetch("https://discord.com/api/v10" + path, {
@@ -21,18 +20,37 @@ async function discordEmotes(guildId, token, botId) {
             return response.ok ? await response.json() : null;
         } catch { return null; }
     };
-    const [guild, application] = await Promise.all([
-        get(server + "/emojis"), ID_RE.test(botId) ? get(`/applications/${botId}/emojis`) : null,
+    const guildEmotes = async id => {
+        const server = `/guilds/${id}`;
+        const emojis = await get(server + "/emojis");
+        if (!Array.isArray(emojis)) return null;
+        const member = ID_RE.test(botId) && emojis.some(emoji => emoji.roles?.length) ? await get(server + "/members/" + botId) : null;
+        return emojis.filter(emoji => emoji.available !== false &&
+            (!emoji.roles?.length || emoji.roles.some(role => member?.roles?.includes(role))));
+    };
+    const extraGuild = async () => {
+        if (!ID_RE.test(sourceGuildId) || !ID_RE.test(discordUserId) || sourceGuildId === guildId) return null;
+        const [server, member] = await Promise.all([
+            get(`/guilds/${sourceGuildId}`), get(`/guilds/${sourceGuildId}/members/${discordUserId}`),
+        ]);
+        if (!server?.roles || !member) return null;
+        const roleIds = new Set([sourceGuildId, ...(member.roles || [])]);
+        const managePermissions = (1n << 3n) | (1n << 5n) | (1n << 30n);
+        const canManage = server.owner_id === discordUserId || server.roles.some(role =>
+            roleIds.has(role.id) && (BigInt(role.permissions) & managePermissions) !== 0n);
+        if (!canManage) return null;
+        const emojis = await guildEmotes(sourceGuildId);
+        return emojis ? { name: server.name, id: sourceGuildId, emojis } : null;
+    };
+    const [guild, application, extra] = await Promise.all([
+        guildEmotes(guildId), ID_RE.test(botId) ? get(`/applications/${botId}/emojis`) : null, extraGuild(),
     ]);
-    if (!Array.isArray(guild) && !Array.isArray(application?.items)) return null;
-    const guildList = Array.isArray(guild) ? guild : [];
-    const member = ID_RE.test(botId) && guildList.some(emoji => emoji.roles?.length) ? await get(server + "/members/" + botId) : null;
-    const roles = member?.roles || [];
-    const available = guildList.filter(emoji => emoji.available !== false &&
-        (!emoji.roles?.length || emoji.roles.some(role => roles.includes(role))));
+    if (!guild && !Array.isArray(application?.items) && !extra) return { library: null };
     const toEntry = source => ({ id, name, animated }) => ({ name, source, code: `<${animated ? "a" : ""}:${name}:${id}>` });
-    return [...(application?.items || []).map(toEntry("bot")), ...available.map(toEntry("server"))]
+    const library = [...(application?.items || []).map(toEntry("bot")), ...(guild || []).map(toEntry("server")),
+        ...(extra?.emojis || []).map(toEntry("external"))]
         .filter(emoji => customEmojiId(emoji.code)).sort((a, b) => a.name.localeCompare(b.name));
+    return { library, extraSource: extra && { id: extra.id, name: extra.name } };
 }
 
 module.exports = function createShopRouter({ valid, decrypt, licenses = () => [] }) {
@@ -57,7 +75,8 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             const config = hosted ? hosted.config : decrypt(l.config);
             req.shopGuildId = hosted?.guildId || config.guildId || "";
             req.shopDiscord = hosted
-                ? { token: process.env.DISCORD_CATALOG_PILOT_TOKEN, botId: process.env.DISCORD_HOSTED_BOT_CLIENT_ID }
+                ? { token: process.env.DISCORD_CATALOG_PILOT_TOKEN, botId: process.env.DISCORD_HOSTED_BOT_CLIENT_ID,
+                    sourceGuildId: process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID, discordUserId: l.discordLoginId }
                 : { token: config.botToken, botId: config.clientId };
             req.db = hosted
                 ? await getDb("hosted:" + hosted.tenantId, config.mongoUrl, hosted.dbName)
@@ -70,7 +89,10 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         next();
     });
     const c = (req, k) => req.db.collection(COL[k]);
-    const storeEmotes = req => discordEmotes(req.shopGuildId, req.shopDiscord.token, req.shopDiscord.botId);
+    const storeEmotes = req => {
+        const { token, botId, sourceGuildId, discordUserId } = req.shopDiscord;
+        return discordEmotes(req.shopGuildId, token, botId, sourceGuildId, discordUserId);
+    };
 
     // ---------- ringkasan ----------
     r.get("/summary", wrap(async (req, res) => {
@@ -347,13 +369,13 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
     r.get("/settings/storefront/emojis", wrap(async (req, res) => {
         const guildId = req.shopGuildId;
         if (!ID_RE.test(guildId)) return fail(res, "Pilih server di menu Bot & Server dulu.", 409);
-        const [storefront, library] = await Promise.all([
+        const [storefront, { library, extraSource }] = await Promise.all([
             req.db.collection(storefrontCollection).findOne({ _id: guildId }), storeEmotes(req),
         ]);
         const emotes = Object.fromEntries(Object.entries(storefront?.emojis || {}).filter(
             ([key, value]) => Object.hasOwn(emojiDefaults, key) && customEmojiId(value)
         ));
-        res.set("Cache-Control", "no-store").json({ guildId, emotes, library });
+        res.set("Cache-Control", "no-store").json({ guildId, emotes, library, extraSource: extraSource?.name || null });
     }));
     r.put("/settings/storefront/emojis", wrap(async (req, res) => {
         const { guildId, emojis } = req.body || {};
@@ -364,12 +386,15 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             ([key, value]) => !Object.hasOwn(emojiDefaults, key) || !customEmojiId(value)
         )) return fail(res, "Pilih emote custom Discord dari server toko.");
         const entries = Object.entries(emojis);
-        const library = entries.length ? await storeEmotes(req) : [];
+        const { library, extraSource } = entries.length ? await storeEmotes(req) : { library: [] };
         if (!library) return fail(res, "Daftar emote dari Discord belum tersedia. Coba lagi.", 502);
-        const byId = new Map(library.map(({ code }) => [customEmojiId(code), code]));
-        const normalized = Object.fromEntries(entries.map(([key, code]) => [key, byId.get(customEmojiId(code))]));
+        const byId = new Map(library.map(item => [customEmojiId(item.code), item]));
+        const normalized = Object.fromEntries(entries.map(([key, code]) => [key, byId.get(customEmojiId(code))?.code]));
         if (Object.values(normalized).some(code => !code)) return fail(res, "Ada emote yang sudah tidak tersedia. Muat ulang daftar emote.");
-        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { emojis: normalized } }, { upsert: true });
+        const usesExtraSource = Object.values(normalized).some(code => byId.get(customEmojiId(code))?.source === "external");
+        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: {
+            emojis: normalized, emojiSourceGuildId: usesExtraSource ? extraSource.id : null,
+        } }, { upsert: true });
         res.json({ emotes: normalized });
     }));
     r.put("/settings/donation-webhook", wrap(async (req, res) => {

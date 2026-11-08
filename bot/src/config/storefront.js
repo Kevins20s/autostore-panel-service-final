@@ -29,20 +29,21 @@ function applicationEmojis(guild) {
     return list;
 }
 
-async function resolveEmojis(config, guild) {
+function availableGuildEmoji(guild, id) {
+    const emoji = guild?.emojis?.cache.get(id);
+    if (emoji?.available && (!emoji.roles.cache.size || emoji.roles.cache.some(role => guild.members.me?.roles.cache.has(role.id)))) return emoji;
+}
+
+async function resolveEmojis(config, guild, sourceGuildId, permissions) {
     const emojis = { ...emojiDefaults };
     const configured = Object.keys(emojiDefaults).map(key => [key, customEmojiId(config?.[key])]).filter(([, id]) => id);
-    const owned = configured.some(([, id]) => !guild?.emojis?.cache.has(id)) ? await applicationEmojis(guild) : null;
+    const source = sourceGuildId && sourceGuildId === process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID && permissions?.has("UseExternalEmojis")
+        ? guild?.client?.guilds?.cache.get(sourceGuildId) : null;
+    const owned = configured.some(([, id]) => !guild?.emojis?.cache.has(id) && !source?.emojis?.cache.has(id))
+        ? await applicationEmojis(guild) : null;
     for (const [key, id] of configured) {
-        const appEmoji = owned?.get(id);
-        if (appEmoji) {
-            emojis[key] = appEmoji.toString();
-            continue;
-        }
-        const emoji = guild?.emojis?.cache.get(id);
-        if (emoji?.available && (!emoji.roles.cache.size || emoji.roles.cache.some(role => guild.members.me?.roles.cache.has(role.id)))) {
-            emojis[key] = emoji.toString();
-        }
+        const emoji = availableGuildEmoji(guild, id) || owned?.get(id) || availableGuildEmoji(source, id);
+        if (emoji) emojis[key] = emoji.toString();
     }
     return emojis;
 }

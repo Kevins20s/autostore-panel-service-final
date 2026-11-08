@@ -1168,7 +1168,7 @@ async function modelEmojiEditor() {
     let settings;
     try { settings = await api("GET", endpoint); }
     catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
-    const { guildId, library } = settings;
+    const { guildId, library, extraSource } = settings;
     let values = { ...settings.emotes };
     const botCount = library?.filter(emote => emote.source === "bot").length || 0;
     const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS.map(([id, en, fields]) =>
@@ -1197,7 +1197,8 @@ async function modelEmojiEditor() {
     const source = h("select", { "aria-label": t("Sumber emote", "Emote source") },
         h("option", { value: "bot" }, t(`Koleksi bot (${botCount})`, `Bot collection (${botCount})`)),
         h("option", { value: "" }, t("Semua sumber", "All sources")),
-        h("option", { value: "server" }, t("Server toko", "Store server")));
+        h("option", { value: "server" }, t("Server toko", "Store server")),
+        extraSource ? h("option", { value: "external" }, extraSource) : null);
     const format = h("select", { "aria-label": t("Jenis emote", "Emote type") },
         h("option", { value: "" }, t("Semua jenis", "All types")),
         h("option", { value: "gif" }, t("Animasi GIF", "Animated GIF")),

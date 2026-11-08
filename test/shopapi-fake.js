@@ -10,6 +10,13 @@ const now = Date.now();
 const storefronts = new Map();
 const guildA = "123456789012345678", guildB = "223456789012345678";
 const botId = "323456789012345678", serverEmoteId = "423456789012345678", botEmoteId = "523456789012345678";
+const sourceGuild = "723456789012345678", sourceEmoteId = "823456789012345678";
+const sourceCode = `<a:source_gem:${sourceEmoteId}>`;
+Object.assign(process.env, {
+    DISCORD_HOSTED_PILOT_LICENSE_ID: "", DISCORD_HOSTED_TEST_LICENSE_IDS: `${guildA},${guildB}`,
+    DISCORD_HOSTED_PILOT_GUILD_IDS: `${guildA},${guildB}`, DISCORD_CATALOG_PILOT_MONGO_URL: "mongodb://tiruan",
+    DISCORD_HOSTED_BOT_CLIENT_ID: botId, DISCORD_CATALOG_PILOT_TOKEN: "synthetic", DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID: sourceGuild,
+});
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = (url, options) => {
     if (!url.startsWith("https://discord.com/api/v10/")) return nativeFetch(url, options);
@@ -19,12 +26,17 @@ globalThis.fetch = (url, options) => {
         { id: serverEmoteId, name: "gem", animated: true }, { id: "623456789012345678", name: "locked", roles: [guildA] },
     ]));
     if (path.endsWith(`/guilds/${guildB}/emojis`)) return Promise.resolve(Response.json([]));
+    if (path.endsWith(`/guilds/${sourceGuild}`)) return Promise.resolve(Response.json({ name: "Source store", roles: [{ id: guildA, permissions: "32" }] }));
+    if (path.endsWith(`/guilds/${sourceGuild}/members/${guildA}`)) return Promise.resolve(Response.json({ roles: [guildA] }));
+    if (path.endsWith(`/guilds/${sourceGuild}/members/${guildB}`)) return Promise.resolve(Response.json({ roles: [] }));
+    if (path.endsWith(`/guilds/${sourceGuild}/emojis`)) return Promise.resolve(Response.json([{ id: sourceEmoteId, name: "source_gem", animated: true }]));
     return Promise.resolve(new Response(null, { status: 404 }));
 };
 const cols = {
     mts: { findOne: async () => null },
     wlrates: { findOne: async () => null },
     apisettings: { findOne: async () => null },
+    setchannels: { findOne: async () => null },
     storefronts: {
         findOne: async ({ _id }) => storefronts.get(_id),
         updateOne: async ({ _id }, { $set }) => storefronts.set(_id, { ...storefronts.get(_id), ...$set }),
@@ -53,7 +65,7 @@ const createShopRouter = require("../src/shopapi");
 const app = express(); app.use(express.json());
 app.use("/api/shop", (req, res, next) => {
     const guildId = req.get("X-Test-Store") === "B" ? guildB : guildA;
-    req.lic = { id: guildId, config: { guildId, mongoUrl: "mongodb://tiruan", clientId: botId, botToken: "synthetic" } };
+    req.lic = { id: guildId, expiresAt: now + 60000, discordLoginId: guildId, hostedBot: { enabled: true, guildId } };
     next();
 }, createShopRouter({ valid: () => true, decrypt: config => config }));
 const srv = http.createServer(app).listen(0, async () => {
@@ -95,8 +107,10 @@ const srv = http.createServer(app).listen(0, async () => {
         const settings = { profile: botEmote, qris: custom };
         const initial = (await j("GET", emojiPath)).j;
         assert.deepStrictEqual(initial.emotes, {});
-        assert.deepStrictEqual(initial.library.map(({ source, code }) => [source, code]), [["bot", botEmote], ["server", custom]]);
+        assert.deepStrictEqual(initial.library.map(({ source, code }) => [source, code]), [["bot", botEmote], ["server", custom], ["external", sourceCode]]);
+        assert.strictEqual(initial.extraSource, "Source store");
         assert.deepStrictEqual((await j("GET", emojiPath, null, "B")).j.library.map(x => x.code), [botEmote]);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildB, emojis: { qris: sourceCode } }, "B")).s, 400);
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: settings }, "B")).s, 409);
         for (const emojis of [{ profile: "👑" }, { profile: "<:invalid:123>" }, { profile: "<:locked:623456789012345678>" }, { unknown: custom }]) {
             assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis })).s, 400);
@@ -113,6 +127,13 @@ const srv = http.createServer(app).listen(0, async () => {
         const resolved = await resolveEmojis(settings, guild);
         assert.strictEqual(resolved.profile, botEmote);
         assert.deepStrictEqual(componentEmoji(resolved.qris), { animated: true, name: "gem", id: serverEmoteId });
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: { profile: sourceCode } })).s, 200);
+        assert.strictEqual(storefronts.get(guildA).emojiSourceGuildId, sourceGuild);
+        guild.client.guilds = { cache: new Map([[sourceGuild, {
+            emojis: { cache: new Map([[sourceEmoteId, { available: true, roles: { cache: new Map() }, toString: () => sourceCode }]]) },
+        }]]) };
+        assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => true })).profile, sourceCode);
+        assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => false })).profile, emojiDefaults.profile);
         console.log("ok  emoji Model 1: simpan per server, reset, validasi, dan fallback emoji Discord");
         console.log("\nSemua tes shopapi (tiruan) lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }

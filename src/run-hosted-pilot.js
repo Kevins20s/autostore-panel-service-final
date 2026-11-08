@@ -92,6 +92,7 @@ function startWorker(binding) {
             PANEL_INTERNAL_URL: "http://127.0.0.1:" + (process.env.PANEL_PORT || process.env.PORT || 8080),
             PANEL_INTERNAL_TOKEN: hostedWalletToken(licenseId, guildId),
             PANEL_LICENSE_ID: licenseId,
+            DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID: process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID || "",
             HOSTED_WORLD_DEPOSIT: process.env.HOSTED_WORLD_DEPOSIT || "",
             HOSTED_PILOT_BINDING: JSON.stringify({ dataFile, licenseId, dbName, legacy: binding.legacy }),
         },

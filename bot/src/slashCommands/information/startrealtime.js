@@ -152,7 +152,9 @@ async function renderCatalog(message, guildId, kategori) {
     ]);
     const MT = !!maintenance;
     const compact = storefront?.model === models.model1;
-    const emojis = compact ? await resolveEmojis(storefront.emojis, message.guild) : null;
+    const permissions = compact && storefront.emojiSourceGuildId && message.guild?.members.me
+        ? message.channel?.permissionsFor(message.guild.members.me) : null;
+    const emojis = compact ? await resolveEmojis(storefront.emojis, message.guild, storefront.emojiSourceGuildId, permissions) : null;
 
     // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
     const { pricePerWL, pricePerDL } = await getEffectiveWLPrice();

@@ -373,7 +373,7 @@ async function products() {
                 h("td", {}, h("span", { class: "pill " + (ready ? "ok" : "no") }, ready ? gsT("Siap jual") : priced ? gsT("Stok kosong") : gsT("Atur harga"))),
                 h("td", {}, h("div", { class: "row gap" },
                     h("button", { class: "sm", onclick: () => stockModal(p, load) }, gsT("Stok")),
-                    h("button", { class: "sm", onclick: () => discountModal(p, load) }, gsT("Diskon")),
+                    isQris() ? null : h("button", { class: "sm", onclick: () => discountModal(p, load) }, gsT("Diskon")),
                     h("button", { class: "sm", onclick: () => productModal(p, load, isQris()) }, isQris() && !priced ? qrisText("Isi harga QRIS", "Set QRIS price") : "Edit"),
                     h("button", { class: "sm bad", onclick: guard(async () => {
                         if (!(await gsConfirm(gsT`Hapus produk ${p.code}? Harga, diskon, dan ${p.stock} stok miliknya ikut terhapus.`, { danger: true, okText: gsT("Hapus produk") }))) return;
@@ -424,12 +424,17 @@ function productModal(p, reload, qrisModel) {
         field(gsT("ID Role Discord (diberikan ke pembeli)"), f.role, gsT("Aktifkan Developer Mode di Discord, klik kanan role, Copy Role ID.")),
         field(gsT("Kategori (opsional)"), f.kategori, gsT("Kosong = ALL.")),
         qrisModel ? priceIdrField : null,
-        field(gsT("Harga (dalam WL)"), f.price, gsT("Contoh: 20 atau 9,5. 100 WL = 1 DL.")),
+        qrisModel ? null : field(gsT("Harga (dalam WL)"), f.price, gsT("Contoh: 20 atau 9,5. 100 WL = 1 DL.")),
         qrisModel ? null : priceIdrField,
         h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => {
             const body = { code: f.code.value, name: f.name.value, type: f.type.value, role: f.role.value, kategori: f.kategori.value,
-                price: f.price.value, description: f.description.value };
+                description: f.description.value };
+            if (!qrisModel) body.price = f.price.value;
             if (qrisAvailable) body.priceIdr = f.priceIdr.value.trim();
+            if (qrisModel && !edit && !body.priceIdr) {
+                f.priceIdr.focus();
+                throw new Error(gsLanguage === "en" ? "Enter the QRIS price first." : "Isi harga QRIS terlebih dahulu.");
+            }
             if (edit) await api("PUT", "/api/shop/products/" + encodeURIComponent(p.code), body); else await api("POST", "/api/shop/products", body);
             toast(gsT("Tersimpan.")); m.close(); reload();
         }) }, gsT("Simpan"))));

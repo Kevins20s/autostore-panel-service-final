@@ -315,11 +315,12 @@ async function storeOrders() {
     async function load(reset) {
         if (reset) { skip = 0; body.replaceChildren(); }
         const r = await api("GET", `/api/shop/orders?skip=${skip}&q=${encodeURIComponent(q)}`);
-        sum.replaceChildren(stat(q ? gsT("Order cocok") : gsT("Total order"), fmt(r.total)), stat(gsT("Item terjual"), fmt(r.qty)), stat("Total (WL)", fmt(r.wl)));
+        sum.replaceChildren(stat(q ? gsT("Order cocok") : gsT("Total order"), fmt(r.total)), stat(gsT("Item terjual"), fmt(r.qty)), stat("Total (WL)", fmt(r.wl)),
+            ...(r.idr ? [stat("Total QRIS", rpf(r.idr))] : []));
         for (const o of r.orders) body.append(h("tr", {},
             h("td", {}, o.number != null ? "#" + o.number : "-"), h("td", {}, when(o.at)),
             h("td", {}, h("div", {}, o.growId || "-"), h("div", { class: "mut mono" }, o.discordId)),
-            h("td", {}, h("div", {}, o.name), h("div", { class: "mut" }, o.code)), h("td", {}, fmt(o.qty)), h("td", {}, fmt(o.total) + " WL")));
+            h("td", {}, h("div", {}, o.name), h("div", { class: "mut" }, o.code)), h("td", {}, fmt(o.qty)), h("td", {}, o.totalIdr ? rpf(o.totalIdr) : fmt(o.total) + " WL")));
         skip += r.orders.length;
         more.classList.toggle("hide", skip >= r.total);
         host.replaceChildren(body.children.length ? h("div", { class: "tbl" }, h("table", {}, h("thead", {}, h("tr", {}, ...["Order", gsT("Waktu"), gsT("Pembeli"), gsT("Produk"), gsT("Jumlah"), "Total"].map((x) => h("th", {}, x)))), body))
@@ -397,20 +398,27 @@ function productModal(p, reload) {
     const f = {
         code: h("input", { value: p?.code || "", disabled: edit, autocomplete: "off" }),
         name: h("input", { value: p?.name || "", autocomplete: "off" }),
+        description: h("input", { value: p?.description || "", maxlength: 180 }),
         type: h("select", {}, h("option", { value: "yes" }, gsT("yes — stok habis saat terjual (akun, RDP, VPN, dll)")), h("option", { value: "script" }, "script — satu isi utuh, tidak habis")),
         role: h("input", { value: p?.role || "", autocomplete: "off" }),
         kategori: h("input", { value: p && p.kategori !== "ALL" ? p.kategori : "", autocomplete: "off" }),
         price: h("input", { value: p?.price ?? "", autocomplete: "off", inputmode: "decimal" }),
+        priceIdr: h("input", { value: p?.priceIdr ?? "", autocomplete: "off", inputmode: "numeric" }),
     };
     f.type.value = p?.type || "yes";
     const m = modal(edit ? gsT("Edit Produk") : gsT("Tambah Produk Baru"),
         field(gsT("Kode"), f.code, gsT("Huruf, angka, - dan _. Tidak bisa diubah setelah dibuat.")),
         field(gsT("Nama produk"), f.name), field(gsT("Tipe"), f.type),
+        field(gsLanguage === "en" ? "Short description (optional)" : "Deskripsi singkat (opsional)", f.description),
         field(gsT("ID Role Discord (diberikan ke pembeli)"), f.role, gsT("Aktifkan Developer Mode di Discord, klik kanan role, Copy Role ID.")),
         field(gsT("Kategori (opsional)"), f.kategori, gsT("Kosong = ALL.")),
         field(gsT("Harga (dalam WL)"), f.price, gsT("Contoh: 20 atau 9,5. 100 WL = 1 DL.")),
+        me?.hostedBotConfigured ? field("Harga QRIS (Rp)", f.priceIdr, gsLanguage === "en"
+            ? "Model 3 uses a fixed price. Enter 200000 for Rp200.000." : "Harga tetap untuk Model 3. Isi 200000 untuk Rp200.000.") : null,
         h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => {
-            const body = { code: f.code.value, name: f.name.value, type: f.type.value, role: f.role.value, kategori: f.kategori.value, price: f.price.value };
+            const body = { code: f.code.value, name: f.name.value, type: f.type.value, role: f.role.value, kategori: f.kategori.value,
+                price: f.price.value, description: f.description.value };
+            if (me?.hostedBotConfigured) body.priceIdr = f.priceIdr.value.trim();
             if (edit) await api("PUT", "/api/shop/products/" + encodeURIComponent(p.code), body); else await api("POST", "/api/shop/products", body);
             toast(gsT("Tersimpan.")); m.close(); reload();
         }) }, gsT("Simpan"))));
@@ -572,22 +580,30 @@ function balanceModal(u, mode, reload) {
 }
 
 // ---------- Settings ----------
-function storefrontSettings(storefront) {
+function storefrontSettings(storefront, productQris) {
     const text = (id, en) => gsLanguage === "en" ? en : id;
     const model = h("select", { disabled: !storefront.guildId },
         h("option", { value: "classic" }, text("Klasik · katalog lengkap", "Classic · full catalog")),
         h("option", { value: "model1" }, text("Model 1 · menu ringkas", "Model 1 · compact menu")),
-        h("option", { value: "model2" }, text("Model 2 · dua dropdown", "Model 2 · two dropdowns")));
+        h("option", { value: "model2" }, text("Model 2 · dua dropdown", "Model 2 · two dropdowns")),
+        productQris ? h("option", { value: "model3" }, text("Model 3 · katalog QRIS", "Model 3 · QRIS catalog")) : null);
     model.value = storefront.model;
     const preview = h("div", { class: "storefront-preview" });
     const draw = () => {
         const compact = model.value === "model1";
-        const twoMenus = model.value === "model2";
+        const qris = model.value === "model3";
+        const twoMenus = qris || model.value === "model2";
         const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
             : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
         preview.replaceChildren(...[
             h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
-                h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
+                qris ? h("div", { class: "storefront-preview-product" },
+                    h("div", {}, h("strong", {}, "👑 SOFTWARE PREMIUM"), h("div", {}, "Desc: Full Source"),
+                        h("div", {}, "Stock: 3 ✅"), h("div", {}, "Price: Rp200.000"), h("div", {}, "Product Sold: 0")),
+                    h("div", { class: "storefront-preview-actions" }, h("span", { class: "green" }, "🛒 Buy")))
+                    : h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
+            qris ? h("p", { class: "mut" }, text("Isi harga Rupiah di Produk & stok, lalu aktifkan QRIS otomatis di Pembayaran.",
+                "Set a rupiah price in Products & stock, then enable automatic QRIS in Payments.")) : null,
             twoMenus ? h("div", { class: "storefront-preview-select" },
                 "🛒 Click here to select menu", h("span", { "aria-hidden": "true" }, "⌄")) : null,
             h("div", { class: "storefront-preview-select" },
@@ -642,7 +658,7 @@ async function settings() {
     const rate = h("input", { value: s.pricePerWL ?? "", inputmode: "decimal" });
     const webhook = h("input", { value: s.donationWebhookId || "", inputmode: "numeric" });
     return h("div", {}, head("Settings", gsT("Pengaturan toko.")),
-        storefrontSettings(s.storefront || { guildId: "", model: "classic" }),
+        storefrontSettings(s.storefront || { guildId: "", model: "classic" }, s.productQris),
         card(h("h2", {}, "Maintenance"), h("p", { class: "mut" }, gsT("Saat aktif, pembelian di toko dinonaktifkan.")), h("label", { class: "sw" }, mt, gsT("Aktifkan mode maintenance"))),
         card(h("h2", {}, gsT("Kurs World Lock")), h("label", { class: "sw" }, live, gsT("Pakai harga live (gtid.pro), kurs manual jadi cadangan")),
             field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))),
@@ -1198,6 +1214,7 @@ MODEL_EMOJI_GROUPS.model2 = [
     ["Dropdown menu", "Menu dropdown", STORE_MENU_EMOJIS.map(([key, label]) => [key, label, label])],
     ...MODEL_EMOJI_GROUPS.classic.slice(1),
 ];
+MODEL_EMOJI_GROUPS.model3 = MODEL_EMOJI_GROUPS.model2;
 
 function storefrontEmojiPreview(model, selected, emojis, t) {
     const icon = (key) => h("span", { class: "emoji-preview-icon" + (key === selected ? " is-target" : ""),
@@ -1217,6 +1234,7 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
     if (selected === "cart" || selected === "warning") {
         return message([icon("warning"), "HOW TO BUY", icon("warning")],
             line(icon("arrow"), model === "model1" ? t("Buka My Profile untuk mengatur GrowID.", "Open My Profile to set your GrowID.")
+                : model === "model3" ? t("Pilih Buy untuk membayar lewat QRIS.", "Choose Buy to pay with QRIS.")
                 : model === "model2" ? t("Pilih Set GrowID di dropdown menu.", "Choose Set GrowID in the menu dropdown.") : "Click Button Set GrowID"),
             line(icon("cart"), t("Pilih produk dari dropdown.", "Pick a product from the dropdown.")));
     }
@@ -1228,7 +1246,7 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
             line(icon("arrow"), "Stock: 0", icon("stockEmpty")));
     }
     if (["growIdButton", "balanceButton", "depositButton", "qris"].includes(selected)) {
-        if (model === "model2") return message(["🛒 Click here to select menu"],
+        if (model === "model2" || model === "model3") return message(["🛒 Click here to select menu"],
             h("div", { class: "emoji-preview-select" }, ...STORE_MENU_EMOJIS.map(([key, label, description]) =>
                 line(icon(key), h("strong", {}, label), description))));
         const actions = model === "model1"
@@ -1283,7 +1301,7 @@ async function modelEmojiEditor() {
     try { settings = await api("GET", endpoint); }
     catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
     const { guildId, library, extraSource, model, defaults } = settings;
-    const modelLabel = { model1: "Model 1", model2: "Model 2", classic: t("Klasik", "Classic") }[model];
+    const modelLabel = { model1: "Model 1", model2: "Model 2", model3: "Model 3", classic: t("Klasik", "Classic") }[model];
     let values = { ...settings.emotes };
     const botCount = library?.filter(emote => emote.source === "bot").length || 0;
     const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS[model].map(([id, en, fields]) =>
@@ -1660,7 +1678,8 @@ async function payments() {
         h("p", { class: "mut" }, gsT("Mengganti rekening yang sudah ada menahan penarikan selama 24 jam demi keamanan.")),
         h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/wallet/bank", { bankName: bn.value, accountNo: an.value, accountName: nm.value }); toast(gsT("Rekening tersimpan.")); again(); }) }, s.bank ? gsT("Ganti rekening") : gsT("Simpan rekening"))));
 
-    const txRows = tx.transactions.map((t) => h("tr", {}, h("td", { class: "mono" }, t.orderId), h("td", {}, t.discordId || "-"), h("td", {}, rpf(t.amount)),
+    const txRows = tx.transactions.map((t) => h("tr", {}, h("td", {}, h("div", { class: "mono" }, t.orderId),
+        t.productCode ? h("div", { class: "mut" }, t.productCode) : null), h("td", {}, t.discordId || "-"), h("td", {}, rpf(t.amount)),
         h("td", {}, t.status === "paid" ? rpf(t.net) : "-"), h("td", {}, pillOf(TX_STATUS, t.status)), h("td", {}, when(t.paidAt || t.createdAt))));
     const txCard = card(h("h2", {}, gsT("Transaksi QRIS")), h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ...["Order", gsT("User Discord"), gsT("Nominal"), gsT("Masuk saldo"), "Status", gsT("Waktu")].map((x) => h("th", {}, x)))),
         h("tbody", {}, ...(txRows.length ? txRows : [h("tr", {}, h("td", { colspan: "6" }, empty("clipboard", gsT("Belum ada transaksi"), gsT("Transaksi QRIS otomatis dari user tokomu akan tampil di sini."))))])))));

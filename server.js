@@ -75,9 +75,10 @@ const walletDb = createWalletDb();
 const autoko = createAutoko();
 const hostedMongoUrl = process.env.DISCORD_CATALOG_PILOT_MONGO_URL;
 const creditHosted = require("./src/shared-deposit").createHostedCredit({ mongoUrl: hostedMongoUrl });
+const productQris = require("./src/product-qris").createProductQris({ mongoUrl: hostedMongoUrl, botToken: process.env.DISCORD_CATALOG_PILOT_TOKEN });
 const forwardToBot = createBotForwarder({ findLicense, isRunning: (id) => runner.status(id) === "running" });
 const wallet = walletDb.enabled ? createWallet({
-    getCols: walletDb.getCols, autoko, forwardToBot, creditHosted, notify: createNotifier(), publicUrl: process.env.PUBLIC_URL || "",
+    getCols: walletDb.getCols, autoko, forwardToBot, creditHosted, productQris, notify: createNotifier(), publicUrl: process.env.PUBLIC_URL || "",
     isFrozen: (id) => !!findLicense(id)?.walletFrozen,
     holdMs: numEnv("WALLET_HOLD_HOURS", 3) * 3600e3,
     feePercent: numEnv("WALLET_FEE_PERCENT", 0), feeFlat: numEnv("WALLET_FEE_FLAT", 0),
@@ -248,7 +249,7 @@ const orders = createOrders({
     autoko, autoOrders: process.env.ORDER_AUTO === "1", getLicense: findLicense, extendLicense,
 });
 registerOrderRoutes(app, { admin, buyer, orders, ttlMin: ORDER_TTL_MIN, turnstile });
-registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store });
+registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin, licenses, findLicense, valid, store });
 const discordLogin = require("./src/discord-login")(app, { buyer, valid, save: store.save, licenses });
 console.log("[PANEL] Pembayaran key di /beli:", orders.autoEnabled() ? "QRIS otomatis aktif (cadangan: QRIS statis)" : "QRIS statis + konfirmasi admin", "| CAPTCHA:", turnstile.enabled ? "Turnstile aktif" : "nonaktif");
 console.log("[PANEL] Notifikasi pesanan:", notifier.channels.join(", ") || "belum diatur (isi TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");

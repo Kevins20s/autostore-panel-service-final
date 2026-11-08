@@ -154,6 +154,7 @@ async function main() {
     const { hostedTenant } = require("../src/shared-tenants");
     const { hostedWalletToken, registerWalletRoutes } = require("../src/walletapi");
     const { createHostedCredit } = require("../src/shared-deposit");
+    const { createProductQris } = require("../src/product-qris");
     const { createWalletDb } = require("../src/walletdb");
     const { createWallet } = require("../src/wallet");
     const { createAutoko } = require("../src/autoko");
@@ -166,7 +167,19 @@ async function main() {
     const walletName = "gevra_test_wallet_" + nonce;
     const walletDb = createWalletDb({ url, dbName: walletName });
     const autoko = createAutoko({ AUTOKO_MODE: "mock" });
-    const wallet = createWallet({ getCols: walletDb.getCols, autoko, minDeposit: 100, creditHosted: createHostedCredit({ mongoUrl: url }) });
+    const delivered = [], testimonies = [], roles = [];
+    const productQris = createProductQris({ mongoUrl: url, botToken: "synthetic", discordFetch: async (url, init) => {
+        const pathname = new URL(url).pathname;
+        if (pathname.endsWith("/users/@me/channels")) return Response.json({ id: buyerId });
+        if (pathname.endsWith("/channels/" + testimonyId)) return Response.json({ guild_id: guilds[0] });
+        if (pathname.endsWith("/channels/" + testimonyId + "/messages")) testimonies.push(JSON.parse(init.body).embeds[0]);
+        if (pathname.endsWith("/roles/" + role)) roles.push(pathname.split("/")[4]);
+        if (pathname.endsWith("/channels/" + buyerId + "/messages")) delivered.push(await init.body.get("files[0]").text());
+        return new Response(null, { status: 204 });
+    } });
+    let time = Date.now();
+    const wallet = createWallet({ getCols: walletDb.getCols, autoko, minDeposit: 100, now: () => time,
+        creditHosted: createHostedCredit({ mongoUrl: url }), productQris });
     const app = express();
     app.use(express.json());
     const buyer = (req, res, next) => {
@@ -176,7 +189,7 @@ async function main() {
     };
     const valid = license => license.expiresAt > Date.now();
     app.use("/shop", buyer, createShopRouter({ valid, licenses, decrypt: () => { throw Error("Unexpected own-bot config"); } }));
-    registerWalletRoutes(app, { wallet, autoko, buyer, admin: (_req, res) => res.sendStatus(401), licenses, findLicense, valid, store: { save() {} } });
+    registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin: (_req, res) => res.sendStatus(401), licenses, findLicense, valid, store: { save() {} } });
     const http = app.listen(0, "127.0.0.1");
     const client = new MongoClient(url);
     let children = [];
@@ -254,6 +267,53 @@ async function main() {
             assert.equal(await db.collection("worlddepositreceipts").countDocuments(), 1);
         }));
         console.log("OK: two isolated stores; concurrent QRIS and conversion, interrupted credit retry, stock, world deposit and reports");
+        await Promise.all(tenants.map(async (tenant, i) => {
+            await request(i, "PUT", "/shop/settings/storefront", { guildId: tenant.guildId, model: "model3" });
+            await request(i, "PUT", "/shop/products/" + code, { name: "Store " + i, role, type: "yes", description: "Full source", priceIdr: 12000 + i });
+            await request(i, "POST", "/shop/products/" + code + "/stock", { text: "QR-STOCK-" + i });
+        }));
+        const internal = (tenant, route, body) => fetch(origin + "/internal/wallet/" + route, {
+            method: "POST", headers: { "Content-Type": "application/json", "X-License-Id": tenant.licenseId,
+                "X-Hosted-Guild": tenant.guildId, Authorization: "Bearer " + hostedWalletToken(tenant.licenseId, tenant.guildId) },
+            body: JSON.stringify(body),
+        });
+        const buy = tenant => internal(tenant, "deposit", { productCode: code, amount: 1000, discordId: buyerId });
+        const competing = await Promise.all([buy(tenants[0]), buy(tenants[0]), buy(tenants[1])]);
+        assert.deepEqual(competing.slice(0, 2).map(r => r.status).sort(), [200, 409]);
+        assert.equal(competing[2].status, 200);
+        const direct = await Promise.all([competing.find(r => r.status === 200), competing[2]].map(r => r.json()));
+        assert.deepEqual(direct.map(r => r.amount), [12000, 12001]);
+        assert.ok(direct.every(r => r.qrPng));
+        const claim = (tenant, order, discordId = buyerId) => internal(tenant, "hosted-product/" + order.orderId + "/claim", { discordId });
+        assert.equal((await claim(tenants[0], direct[0])).status, 409);
+        assert.equal((await claim(tenants[1], direct[0])).status, 404);
+        assert.equal((await claim(tenants[0], direct[0], guilds[1])).status, 404);
+        assert.equal((await wallet.handlePaid({ orderId: direct[0].orderId }, { background: true })).reason, "amount_missing");
+        await Promise.all(direct.flatMap(order => [1, 2].map(() => wallet.handlePaid({ orderId: order.orderId, amount: order.amount }))));
+        assert.deepEqual(delivered.sort(), ["QR-STOCK-0", "QR-STOCK-1"]);
+        assert.equal(testimonies.length, 1);
+        assert.match(testimonies[0].description, /Rp12.000/);
+        assert.deepEqual(roles.sort(), guilds);
+        for (const [i, order] of direct.entries()) {
+            const db = client.db(tenants[i].dbName);
+            const account = await db.collection("bals").findOne({ DiscordID: buyerId });
+            assert.equal(account.BalanceRp, 70);
+            const orderPage = await request(i, "GET", "/shop/orders");
+            assert.equal(orderPage.total, 2);
+            assert.equal(orderPage.idr, order.amount);
+            assert.equal(orderPage.wl, 10);
+            assert.equal((await (await claim(tenants[i], order)).json()).data, "QR-STOCK-" + i);
+        }
+        await request(0, "POST", "/shop/products/" + code + "/stock", { text: "EXPIRED-QR-STOCK" });
+        const expired = await buy(tenants[0]);
+        assert.equal(expired.status, 200);
+        const expiredOrder = await expired.json();
+        time = expiredOrder.expiresAt + 6 * 60e3;
+        autoko.getStatus = async () => ({ paid: false, status: "Expired" });
+        await wallet.sweep();
+        assert.equal(await client.db(tenants[0].dbName).collection("shops").countDocuments({ code }), 1);
+        assert.equal((await claim(tenants[0], expiredOrder)).status, 409);
+        console.log("OK: direct product QRIS, quoted price, concurrent stock reservation, delivery, access checks and expired stock recovery");
     } finally {
         for (const child of children) if (child.connected) child.kill();
         http.close();

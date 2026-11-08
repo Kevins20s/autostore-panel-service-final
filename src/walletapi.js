@@ -63,7 +63,7 @@ function registerWalletWebhook(app, { wallet, autoko, getOrders = () => null }) 
     });
 }
 
-function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, findLicense, valid, store, qr }) {
+function registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin, licenses, findLicense, valid, store, qr }) {
     const QRCode = qr || require("qrcode");
     const send = (res) => errorResponder(res);
     const h = (fn) => async (req, res) => { res.setHeader("Cache-Control", "no-store"); try { res.json(await fn(req)); } catch (e) { send(res)(e); } };
@@ -96,6 +96,18 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         try { res.json(await wallet.cancelHostedDeposit(id, tenant.tenantId, req.params.orderId)); }
         catch (error) { send(res)(error); }
     });
+    app.post("/internal/wallet/hosted-product/:orderId/claim", async (req, res) => {
+        res.set("Cache-Control", "no-store");
+        if (!directOnly(req)) return res.sendStatus(404);
+        const id = String(req.headers["x-license-id"] || "");
+        const guildId = String(req.headers["x-hosted-guild"] || "");
+        const tenant = hostedTenant(findLicense(id), licenses());
+        const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+        if (!tenant || tenant.guildId !== guildId || !safeEq(token, hostedWalletToken(id, guildId))) return res.sendStatus(401);
+        if (!wallet) return res.sendStatus(503);
+        try { res.json(await wallet.claimProductOrder(id, tenant.tenantId, req.params.orderId, String(req.body?.discordId || ""))); }
+        catch (error) { send(res)(error); }
+    });
     app.post("/internal/wallet/deposit", async (req, res) => {
         if (!directOnly(req)) return res.sendStatus(404);
         const id = String(req.headers["x-license-id"] || "");
@@ -114,8 +126,14 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
         try {
             const input = { licenseId: l.id, amount: req.body?.amount, discordId: req.body?.discordId };
             const currency = req.body?.creditCurrency;
+            let product;
             if (currency !== undefined && currency !== rupiahCredit) throw new WalletError("Mata uang saldo tidak valid.");
-            if (currency === rupiahCredit) {
+            if (req.body?.productCode !== undefined) {
+                if (!hosted || !productQris || currency !== undefined) throw new WalletError("QRIS produk tersedia untuk Bot GevraStore.", 409);
+                const code = String(req.body.productCode);
+                product = await productQris.quote(hosted, code);
+                Object.assign(input, { amount: product.priceIdr, hostedTenantId: hosted.tenantId, productOrder: { guildId, code } });
+            } else if (currency === rupiahCredit) {
                 input.creditCurrency = currency;
                 if (hosted) input.hostedTenantId = hosted.tenantId;
             } else if (hosted) {
@@ -127,9 +145,10 @@ function registerWalletRoutes(app, { wallet, autoko, buyer, admin, licenses, fin
                 Object.assign(input, { hostedWL, hostedTenantId: hosted.tenantId });
             }
             const d = await wallet.createDeposit(input);
-            const qrPng = d.qrString ? (await QRCode.toBuffer(d.qrString, { type: "png", width: 512, margin: 2 })).toString("base64") : null;
+            const qrPng = d.qrString ? (await QRCode.toBuffer(d.qrString, { type: "png", width: 512, margin: product ? 4 : 2 })).toString("base64") : null;
             res.json({ mode: "auto", orderId: d.orderId, amount: d.amount, expiresAt: d.expiresAt, qrPng, qrImageUrl: d.qrImageUrl,
-                ...(currency === rupiahCredit ? { creditCurrency: currency, panelManaged: !!hosted }
+                ...(product ? { productName: product.name }
+                    : currency === rupiahCredit ? { creditCurrency: currency, panelManaged: !!hosted }
                     : hosted ? { hostedWL: input.hostedWL } : {}) });
         } catch (e) { send(res)(e); }
     });

@@ -9,6 +9,7 @@ const schema = new Schema({
   productName: String,
   qty: Number,
   total: Number, // jumlah WL yang dipotong dari saldo
+  totalIdr: Number,
   createdAt: { type: Date, default: Date.now, index: true },
 });
 

@@ -1507,6 +1507,7 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .storefront-preview-actions .green { background: #00854d; }
 .storefront-preview-actions .primary { background: #5865f2; }
 .storefront-preview-embed { display: grid; gap: 7px; padding: 12px; border-left: 3px solid #5865f2; border-radius: 6px; background: #292b33; font-size: 13px; }
+.storefront-preview-product { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding-top: 9px; border-top: 1px solid #484951; }
 .storefront-profile-preview summary { width: fit-content; padding-block: 5px; cursor: pointer; font-size: 13px; }
 
 .tutorial-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }

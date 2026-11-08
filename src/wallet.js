@@ -18,7 +18,8 @@ const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ")
 
 function createWallet(opts) {
     const {
-        getCols, autoko, notify = async () => {}, forwardToBot = async () => false, creditHosted = async () => false, isFrozen = () => false, now = Date.now,
+        getCols, autoko, notify = async () => {}, forwardToBot = async () => false, creditHosted = async () => false,
+        productQris, isFrozen = () => false, now = Date.now,
         holdMs = 3 * 3600e3, feePercent = 0, feeFlat = 0,
         minDeposit = 1000, maxDeposit = 5_000_000, depositTtlMs = 15 * 60e3,
         minWithdraw = 10000, withdrawFee = 0, bankCooldownMs = 24 * 3600e3,
@@ -40,7 +41,7 @@ function createWallet(opts) {
     };
 
     // ---------------------------------------------------------------- Deposit
-    async function createDeposit({ licenseId, amount, discordId = "", hostedWL, hostedTenantId, creditCurrency }) {
+    async function createDeposit({ licenseId, amount, discordId = "", hostedWL, hostedTenantId, creditCurrency, productOrder }) {
         if (!autoko.enabled) throw new WalletError("Pembayaran otomatis belum aktif.", 503);
         if (isFrozen(licenseId)) throw new WalletError("Pembayaran otomatis toko ini sedang dibekukan penjual.", 403);
         const amt = needInt(amount, "Nominal");
@@ -50,6 +51,9 @@ function createWallet(opts) {
         const t = now(), live = { status: "pending", expiresAt: { $gt: t } };
         if ((await c.deposits.countDocuments({ licenseId, ...live })) >= maxOpenDeposits) throw new WalletError("Terlalu banyak QRIS yang belum dibayar. Tunggu sebentar lalu coba lagi.", 429);
         const did = clean(discordId, 25);
+        if (productOrder && (!productQris || !hostedTenantId || hostedWL !== undefined || creditCurrency !== undefined || !/^\d{17,20}$/.test(did))) {
+            throw new WalletError("Pesanan QRIS produk tidak valid.");
+        }
         if (creditCurrency !== undefined && (creditCurrency !== rupiahCredit || hostedWL !== undefined || !/^\d{17,20}$/.test(did))) {
             throw new WalletError("Mata uang saldo atau akun Discord tidak valid.");
         }
@@ -63,13 +67,21 @@ function createWallet(opts) {
         if (hostedWL !== undefined) dep.hostedWL = hostedWL;
         if (hostedTenantId) dep.hostedTenantId = hostedTenantId;
         if (creditCurrency === rupiahCredit) dep.creditCurrency = creditCurrency;
+        if (productOrder) dep.productOrder = productOrder;
         await c.deposits.insertOne(dep);
         try {
+            if (productOrder) await productQris.reserve(dep);
             const q = await autoko.createQris({ orderId: dep.orderId, amount: amt, expiresAt: dep.expiresAt });
             await c.deposits.updateOne({ orderId: dep.orderId }, { $set: { providerRef: q.providerRef || null } });
             return { orderId: dep.orderId, amount: amt, expiresAt: dep.expiresAt, qrString: q.qrString || null, qrImageUrl: q.qrImageUrl || null };
         } catch (e) {
             await c.deposits.updateOne({ orderId: dep.orderId }, { $set: { status: "failed", error: String(e.message).slice(0, 200) } });
+            if (productOrder) {
+                try {
+                    await productQris.release(dep);
+                    await c.deposits.updateOne({ orderId: dep.orderId }, { $set: { stockReleasedAt: now() } });
+                } catch { /* sweep retries failed releases */ }
+            }
             throw e instanceof WalletError ? e : new WalletError(e.status === 503 ? e.message : "Gagal membuat QRIS. Coba lagi sebentar lagi.", e.status === 503 ? 503 : 502);
         }
     }
@@ -78,14 +90,17 @@ function createWallet(opts) {
         let ok = false;
         const isHosted = dep.hostedWL !== undefined || !!dep.hostedTenantId;
         try {
-            ok = isHosted ? await creditHosted(dep)
+            ok = dep.productOrder ? await productQris.deliver(dep)
+                : isHosted ? await creditHosted(dep)
                 : await forwardToBot(dep.licenseId, { status: "completed", externalId: dep.orderId, amount: dep.amount,
                     ...(dep.creditCurrency === rupiahCredit ? { creditCurrency: dep.creditCurrency } : {}) });
         } catch { ok = false; }
         if (ok) { await c.deposits.updateOne({ orderId: dep.orderId }, { $set: { botDeliveredAt: now() } }); return true; }
         const upd = await c.deposits.findOneAndUpdate({ orderId: dep.orderId }, { $inc: { botAttempts: 1 } }, { returnDocument: "after" });
         if (upd && upd.botAttempts === maxBotAttempts)
-            await tell("⚠️ Deposit sudah dibayar tapi belum masuk ke bot pembeli", [`Order: ${dep.orderId}`, `Nominal: ${rp(dep.amount)}`,
+            await tell(dep.productOrder ? "⚠️ Pesanan QRIS sudah dibayar, pengiriman perlu diperiksa"
+                : "⚠️ Deposit sudah dibayar tapi belum masuk ke bot pembeli", [`Order: ${dep.orderId}`, `Nominal: ${rp(dep.amount)}`,
+                dep.productOrder ? "Cek stok pesanan dan DM pembeli." :
                 !isHosted ? "Admin toko pembeli bisa menekan tombol Success di log donasi Discord sebagai jalan keluar." : "Cek koneksi database toko GevraStore dan transaksi deposit."]);
         return false;
     }
@@ -95,6 +110,7 @@ function createWallet(opts) {
         const c = await getCols();
         const dep = await c.deposits.findOne({ orderId });
         if (!dep) return { ok: false, reason: "unknown_order" };
+        if (dep.productOrder && background && amount == null) return { ok: false, reason: "amount_missing" };
         if (amount != null && Number(amount) !== dep.amount) {
             const updated = await c.deposits.updateOne({ orderId, status: { $ne: "paid" } },
                 { $set: { status: "mismatch", mismatchAmount: Number(amount) } });
@@ -137,7 +153,8 @@ function createWallet(opts) {
     async function listDeposits(licenseId, { limit = 50 } = {}) {
         const c = await getCols();
         const rows = await c.deposits.find({ licenseId, status: { $ne: "failed" } }).sort({ createdAt: -1 }).limit(Math.min(200, Math.max(1, limit))).toArray();
-        return rows.map((d) => ({ orderId: d.orderId, discordId: d.discordId, amount: d.amount, fee: d.fee, net: d.net, status: d.status, createdAt: d.createdAt, paidAt: d.paidAt || null, expiresAt: d.expiresAt, delivered: !!d.botDeliveredAt }));
+        return rows.map((d) => ({ orderId: d.orderId, discordId: d.discordId, amount: d.amount, fee: d.fee, net: d.net, status: d.status, createdAt: d.createdAt, paidAt: d.paidAt || null, expiresAt: d.expiresAt, delivered: !!d.botDeliveredAt,
+            ...(d.productOrder ? { productCode: d.productOrder.code } : {}) }));
     }
 
     async function hostedDepositStatus(licenseId, hostedTenantId, orderId) {
@@ -148,11 +165,19 @@ function createWallet(opts) {
             ...(dep.creditCurrency === rupiahCredit ? { creditCurrency: dep.creditCurrency } : {}) };
     }
 
+    async function claimProductOrder(licenseId, hostedTenantId, orderId, discordId) {
+        const c = await getCols();
+        const dep = await c.deposits.findOne({ licenseId, hostedTenantId, orderId, discordId });
+        if (!productQris || !dep?.productOrder) throw new WalletError("Pesanan produk tidak ditemukan.", 404);
+        if (dep.status !== "paid") throw new WalletError("Pembayaran belum terkonfirmasi. Coba lagi setelah QRIS dibayar.", 409);
+        return productQris.claim(dep);
+    }
+
     async function cancelHostedDeposit(licenseId, hostedTenantId, orderId) {
         const c = await getCols();
         const query = { licenseId, hostedTenantId, orderId };
         const dep = await c.deposits.findOne(query);
-        if (!dep) throw new WalletError("Pesanan deposit tidak ditemukan.", 404);
+        if (!dep || dep.productOrder) throw new WalletError("Pesanan deposit tidak ditemukan.", 404);
         if (dep.status === "paid" || dep.botDeliveredAt) throw new WalletError("Pembayaran sudah diterima.", 409);
         const updated = await c.deposits.updateOne({ ...query, status: { $in: ["pending", "expired"] } },
             { $set: { status: "cancelled", cancelledAt: now() } });
@@ -278,8 +303,29 @@ function createWallet(opts) {
                 try {
                     out.checked++;
                     const s = await autoko.getStatus(d.orderId);
-                    if (s && s.paid) await handlePaid({ orderId: d.orderId });
+                    if (s && s.paid) await handlePaid({ orderId: d.orderId, amount: s.amount ?? null });
                 } catch (e) { if (e.status === 501) break; console.error("[WALLET] cek status gagal:", e.message); }
+            }
+        }
+        if (productQris) {
+            const stale = await c.deposits.find({
+                productOrder: { $exists: true }, stockReleasedAt: null,
+                $or: [{ status: "failed" }, { status: "expired", expiresAt: { $lte: t - 5 * 60e3 } }],
+            }).limit(20).toArray();
+            for (const d of stale) {
+                try {
+                    if (d.status !== "failed" && d.providerRef) {
+                        const status = await autoko.getStatus(d.orderId);
+                        if (status?.paid) {
+                            await handlePaid({ orderId: d.orderId, amount: status.amount ?? null });
+                            continue;
+                        }
+                        const terminal = /^(expired|cancelled|canceled|failed)$/i.test(status?.status || "");
+                        if (!terminal && (status?.paid !== false || t < d.expiresAt + 2 * 3600e3)) continue;
+                    }
+                    await productQris.release(d);
+                    await c.deposits.updateOne({ orderId: d.orderId }, { $set: { stockReleasedAt: t } });
+                } catch (error) { console.error("[WALLET] gagal mengembalikan stok QRIS:", error.code || error.name); }
             }
         }
         return out;
@@ -307,7 +353,7 @@ function createWallet(opts) {
         return diffs;
     }
 
-    return { createDeposit, handlePaid, summary, listDeposits, hostedDepositStatus, cancelHostedDeposit, setBank, requestWithdrawal, listWithdrawals, adminWithdrawals, adminComplete, adminReject, adminOverview, balanceOf, sweep, reconcile, config: { holdMs, minDeposit, minWithdraw, withdrawFee, feePercent, feeFlat } };
+    return { createDeposit, handlePaid, summary, listDeposits, hostedDepositStatus, claimProductOrder, cancelHostedDeposit, setBank, requestWithdrawal, listWithdrawals, adminWithdrawals, adminComplete, adminReject, adminOverview, balanceOf, sweep, reconcile, config: { holdMs, minDeposit, minWithdraw, withdrawFee, feePercent, feeFlat } };
 }
 
 module.exports = { createWallet, WalletError, rp };

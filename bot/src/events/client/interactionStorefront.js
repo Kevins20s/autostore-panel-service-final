@@ -80,7 +80,7 @@ async function showHistory(interaction, embed, requestedPage, emojis) {
         const name = escapeMarkdown(String(order.productName || order.code || "Produk").slice(0, 100));
         const date = order.createdAt instanceof Date ? ` · <t:${Math.floor(order.createdAt.getTime() / 1000)}:f>` : "";
         embed.addFields({ name: "#" + (order.orderNumber ?? "—"),
-            value: `**${name}** ×${number.format(order.qty ?? 0)} · ${formatWL(order.total)}\n\`success\`${date}` });
+            value: `**${name}** ×${number.format(order.qty ?? 0)} · ${order.totalIdr ? "Rp" + number.format(order.totalIdr) : formatWL(order.total)}\n\`success\`${date}` });
     }
     if (pages === 1) return [];
     return [row(

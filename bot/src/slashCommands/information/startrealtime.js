@@ -7,6 +7,14 @@ let {
     ApplicationCommandOptionType,
     ButtonBuilder,
     StringSelectMenuBuilder,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SectionBuilder,
+    SeparatorBuilder,
+    MediaGalleryBuilder,
+    MessageFlags,
+    escapeMarkdown,
+    resolveColor,
 } = require("discord.js");
 let shop = require("../../Schema/shop.js");
 let mt = require("../../Schema/maintenance.js");
@@ -17,7 +25,7 @@ let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
 const { imageUrl2, COLOR } = require("../../config/configemoji.json");
-const { collection, models, buttons, menuId, menuActions, emojiFields, resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
+const { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, emojiFields, resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
 
 const jobs = new Map();
 const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
@@ -61,7 +69,7 @@ async function resumeRealtime(client) {
     const catalogs = await RealtimeChannel.find({ messageId: { $type: "string" } }).lean();
     for (const target of catalogs) {
         const message = await catalogMessage(client, serverId, target);
-        const published = message?.components.some(row => row.components.some(item => item.customId === "Howmanys"));
+        const published = message?.components.some(row => row.components?.some(item => ["Howmanys", qrisSelectId].includes(item.customId)));
         // Legacy catalogs did not save an interval. Resume only if they were already published.
         if (message && (validDelay(target.intervalSeconds) || published) && !jobs.has(serverId + ":" + target.kategori)) {
             scheduleCatalog(client, serverId, target.kategori, target, validDelay(target.intervalSeconds) ? target.intervalSeconds : 60);
@@ -69,18 +77,66 @@ async function resumeRealtime(client) {
     }
 }
 
-function buySelectRow(options, maintenance, emojis) {
+function buySelectRow(options, maintenance, emojis, qris = false) {
     const available = options.filter(option => option.hasStock);
     const soldOut = !available.length;
     const displayed = (options.length > 25 ? [...available, ...options.filter(option => !option.hasStock)] : options).slice(0, 25)
         .map(({ hasStock, ...option }) => ({ ...option, emoji: componentEmoji(hasStock ? emojis.inStock : emojis.outOfStock) }));
     const icon = soldOut ? emojis.outOfStock : emojis.cart;
     const placeholderIcon = componentEmoji(icon).id ? (soldOut ? "❌" : "🛒") : icon;
-    const select = new StringSelectMenuBuilder().setCustomId("Howmanys")
-        .setPlaceholder(maintenance ? "Under Maintenance" : placeholderIcon + (soldOut ? " Semua produk sedang habis" : " Select product to buy..."))
+    const select = new StringSelectMenuBuilder().setCustomId(qris ? qrisSelectId : "Howmanys")
+        .setPlaceholder(maintenance ? "Under Maintenance" : placeholderIcon + (soldOut
+            ? (qris ? " Tidak ada produk yang bisa dibeli" : " Semua produk sedang habis") : " Select product to buy..."))
         .setDisabled(maintenance || soldOut)
         .addOptions(displayed.length ? displayed : [{ label: "Semua produk sedang habis", value: "none" }]);
     return new ActionRowBuilder().addComponents(select);
+}
+
+const display = content => new TextDisplayBuilder().setContent(content);
+const banner = () => new MediaGalleryBuilder().addItems({
+    media: { url: /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//.test(imageUrl2) ? imageUrl2.split("?")[0] : imageUrl2 },
+});
+
+async function editModernCatalog(message, container, rows) {
+    await message.edit({
+        flags: message.flags.bitfield | MessageFlags.IsComponentsV2,
+        content: null, embeds: [],
+        components: [container, ...rows],
+        allowedMentions: { parse: [] },
+    });
+}
+
+function productCards({ title, header, footer, products, maintenance, emojis }) {
+    const container = new ContainerBuilder().setAccentColor(resolveColor(COLOR)).addTextDisplayComponents(display(`## ${title}\n${header}`));
+    for (const product of products.slice(0, 7)) {
+        const { name, code, description, priceIdr, sold, stock } = product;
+        const price = priceIdr ? `**Rp${priceIdr.toLocaleString("id-ID")}**` : "Belum diatur";
+        const details = [
+            `${emojis.crown} **${escapeMarkdown(name.toUpperCase())}** ${emojis.crown}`,
+            `${emojis.arrow} ${description ? "Desc: " + escapeMarkdown(description) : "Code: " + escapeMarkdown(code)}`,
+            `${emojis.arrow} Stock: **${stock}** ${stock ? emojis.stockAvailable : emojis.stockEmpty}`,
+            `${emojis.arrow} Price: ${price}`,
+            `${emojis.sold} Product Sold: **${sold}**`,
+        ];
+        const buy = new ButtonBuilder().setCustomId(qrisBuyPrefix + code).setLabel("Buy")
+            .setEmoji(componentEmoji(emojis.cart)).setStyle(ButtonStyle.Success).setDisabled(maintenance || !stock || !priceIdr);
+        container.addSeparatorComponents(new SeparatorBuilder()).addSectionComponents(
+            new SectionBuilder().addTextDisplayComponents(display(details.join("\n"))).setButtonAccessory(buy));
+    }
+    if (products.length > 7) container.addTextDisplayComponents(display("-# Produk lainnya tersedia di dropdown atau katalog per kategori."));
+    if (!products.length) container.addTextDisplayComponents(display("Belum ada produk."));
+    return container.addSeparatorComponents(new SeparatorBuilder()).addTextDisplayComponents(display(footer)).addMediaGalleryComponents(banner());
+}
+
+function editLegacyCatalog(message, embed, rows) {
+    if (!message.flags.has(MessageFlags.IsComponentsV2)) {
+        return message.edit({ content: null, embeds: [embed], components: rows });
+    }
+    // Discord keeps the Components V2 flag after Model 3 has been used on this message.
+    const container = new ContainerBuilder().setAccentColor(resolveColor(COLOR)).addTextDisplayComponents(display("## " + embed.data.title));
+    const chunks = embed.data.description.match(/[\s\S]{1,1800}(?:\n|$)|[\s\S]{1,1800}/g);
+    for (const chunk of chunks) container.addTextDisplayComponents(display(chunk));
+    return editModernCatalog(message, container.addMediaGalleryComponents(banner()), rows);
 }
 
 function compactActionRow(maintenance, emojis) {
@@ -167,6 +223,7 @@ async function renderCatalog(message, guildId, kategori) {
     const MT = !!maintenance;
     const model = storefrontModel(storefront);
     const compact = model === models.model1;
+    const qris = model === models.model3;
     const permissions = storefront?.[emojiFields(model).source] && message.guild?.members.me
         ? message.channel?.permissionsFor(message.guild.members.me) : null;
     const emojis = await resolveStorefrontEmojis(storefront, message.guild, permissions);
@@ -174,7 +231,7 @@ async function renderCatalog(message, guildId, kategori) {
     // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
     const { pricePerWL, pricePerDL } = await getEffectiveWLPrice();
 
-    if (!compact) await order
+    if (!compact && !qris) await order
         .findOneAndUpdate({}, { $inc: { OdeOder: 1 } }, { upsert: true, new: true })
         .catch(console.error);
 
@@ -188,11 +245,12 @@ async function renderCatalog(message, guildId, kategori) {
     // ── Build product list ──
     let productBlocks = [];
     let selectOptions = [];
+    const cards = [];
     for (const code of getCodes) {
         const filter = { code: code.code };
         const [stock, priceDoc, discountDoc] = await Promise.all([
             shop.countDocuments({ ...filter, data: { $type: "string", $ne: "" } }),
-            Price.findOne(filter), disc.findOne(filter),
+            qris ? null : Price.findOne(filter), qris ? null : disc.findOne(filter),
         ]);
         const discount = discountDoc?.discount;
         let hasStock = stock > 0;
@@ -219,6 +277,8 @@ async function renderCatalog(message, guildId, kategori) {
         let statusEmoji = hasStock ? emojis.stockAvailable : emojis.stockEmpty;
         let stockText = hasStock ? `**${stock}** ${statusEmoji}` : `**0** ${statusEmoji}`;
         let soldText = `**${code.sold ?? 0}**`;
+        const priceIdr = Number.isSafeInteger(code.priceIdr) && code.priceIdr >= 1000 && code.priceIdr <= 1000000 ? code.priceIdr : null;
+        if (qris) cards.push({ name: code.name, code: code.code, description: code.description, priceIdr, sold: code.sold ?? 0, stock });
 
         productBlocks.push(
 `${emojis.crown} **${code.name.toUpperCase()}** ${emojis.crown}
@@ -231,14 +291,16 @@ ${DIVIDER}`
 
         selectOptions.push({
             label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
-            description: `Code: ${code.code} | Stock: ${stock}`.slice(0, 100),
+            description: `Code: ${code.code} | Stock: ${stock}${qris && !priceIdr ? " | Harga belum diatur" : ""}`.slice(0, 100),
             value: code.code,
-            hasStock,
+            hasStock: hasStock && (!qris || !!priceIdr),
         });
     }
 
     let howToBuySection = compact
         ? `${emojis.warning} **HOW TO BUY** ${emojis.warning}\n${emojis.arrow} Buka **My Profile** untuk mengatur GrowID.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown.`
+        : qris
+        ? `${emojis.warning} **HOW TO BUY**\n${emojis.cart} Pilih **Buy** atau dropdown untuk membayar lewat QRIS.\n${emojis.arrow} File pesanan dikirim setelah pembayaran terkonfirmasi.`
         : model === models.model2
         ? `${emojis.warning} **HOW TO BUY** ${emojis.warning}\n${emojis.arrow} Buka menu untuk **Set GrowID**, **Deposit**, atau cek **Balance**.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown beli.`
         :
@@ -253,6 +315,13 @@ ${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
         : `${emojis.arrow} Kurs: Harga belum tersedia`;
 
     let titleText = kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
+
+    const selectRow = buySelectRow(selectOptions, MT, emojis, qris);
+    if (qris) {
+        const container = productCards({ title: escapeMarkdown(titleText), header: `**Last Update:** ${format}\n${kursText}`,
+            footer: howToBuySection, products: cards, maintenance: MT, emojis });
+        return editModernCatalog(message, container, [storeMenuRow(MT, emojis), selectRow]);
+    }
 
     const header = `**Last Update:** ${format}\n${kursText}\n${DIVIDER}\n`;
     const footer = "\n" + howToBuySection;
@@ -269,11 +338,9 @@ ${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
         .setImage(imageUrl2)
         .setTimestamp();
 
-    const selectRow = buySelectRow(selectOptions, MT, emojis);
     if (compact || model === models.model2) {
         const components = compact ? [selectRow, compactActionRow(MT, emojis)] : [storeMenuRow(MT, emojis), selectRow];
-        await message.edit({ content: null, embeds: [productEmbed], components });
-        return;
+        return editLegacyCatalog(message, productEmbed, components);
     }
 
     let buttonRow = new ActionRowBuilder().addComponents(
@@ -320,9 +387,5 @@ ${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
             .setCustomId("deposit")
     );
 
-    await message.edit({
-        content: null,
-        embeds: [productEmbed],
-        components: [selectRow, MT ? maintenanceRow : buttonRow]
-    });
+    await editLegacyCatalog(message, productEmbed, [selectRow, MT ? maintenanceRow : buttonRow]);
 }

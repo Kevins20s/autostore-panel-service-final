@@ -75,7 +75,7 @@ const srv = http.createServer(app).listen(0, async () => {
     try {
         const o = await j("GET", "/orders?q=" + encodeURIComponent("a.b(")); // karakter regex harus di-escape
         assert.strictEqual(o.s, 200); assert.strictEqual(o.j.total, 2); assert.strictEqual(o.j.wl, 4900); assert.strictEqual(o.j.qty, 3);
-        assert.deepStrictEqual(o.j.orders[0], { number: 7, discordId: "111", growId: "Budi", code: "P2", name: "Akun B", qty: 2, total: 4000, at: now });
+        assert.deepStrictEqual(o.j.orders[0], { number: 7, discordId: "111", growId: "Budi", code: "P2", name: "Akun B", qty: 2, total: 4000, totalIdr: 0, at: now });
         assert.strictEqual(o.j.orders[1].number, null);
         console.log("ok  /orders: bentuk respons, ringkasan, pencarian aman");
 

@@ -123,6 +123,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             rate: { pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true },
             products: lists.map((p) => ({
                 code: p.code, name: p.name, type: p.type, role: p.role, kategori: p.kategori || "ALL", sold: p.sold || 0,
+                description: p.description || "", priceIdr: p.priceIdr ?? null,
                 price: priceBy[p.code] ?? null, stock: stockBy[p.code] || 0, discount: discBy[p.code] ?? null,
                 bulk: bulks.filter((b) => b.code === p.code).map((b) => ({ minQty: b.minQty, cut: b.cut })),
             })),
@@ -134,6 +135,18 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         const name = String(body?.name ?? "").trim();
         if (!name || name.length > 100) return { error: "Nama produk wajib diisi (maks 100 karakter)." };
         out.name = name;
+        if (body?.description !== undefined) {
+            const description = String(body.description ?? "").replace(/\s+/g, " ").trim();
+            if (description.length > 180) return { error: "Deskripsi produk maksimal 180 karakter." };
+            out.description = description;
+        }
+        if (body?.priceIdr !== undefined) {
+            const priceIdr = body.priceIdr === "" || body.priceIdr === null ? null : Number(body.priceIdr);
+            if (priceIdr !== null && (!Number.isSafeInteger(priceIdr) || priceIdr < 1000 || priceIdr > 1000000)) {
+                return { error: "Harga QRIS harus antara Rp1.000 dan Rp1.000.000." };
+            }
+            out.priceIdr = priceIdr;
+        }
         if (!["yes", "script"].includes(body?.type)) return { error: "Tipe harus yes atau script." };
         out.type = body.type;
         const role = String(body?.role ?? "").trim();
@@ -302,11 +315,11 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         const [total, rows, sum] = await Promise.all([
             col.countDocuments(filter),
             col.find(filter).sort({ createdAt: -1 }).skip(skip).limit(50).toArray(),
-            col.aggregate([{ $match: filter }, { $group: { _id: null, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } }]).toArray(),
+            col.aggregate([{ $match: filter }, { $group: { _id: null, qty: { $sum: "$qty" }, wl: { $sum: "$total" }, idr: { $sum: "$totalIdr" } } }]).toArray(),
         ]);
         res.json({
-            total, qty: sum[0]?.qty || 0, wl: sum[0]?.wl || 0,
-            orders: rows.map((o) => ({ number: o.orderNumber ?? null, discordId: o.discordId || "", growId: o.growId || "", code: o.code || "", name: o.productName || o.code || "", qty: o.qty || 0, total: o.total || 0, at: o.createdAt ? new Date(o.createdAt).getTime() : null })),
+            total, qty: sum[0]?.qty || 0, wl: sum[0]?.wl || 0, idr: sum[0]?.idr || 0,
+            orders: rows.map((o) => ({ number: o.orderNumber ?? null, discordId: o.discordId || "", growId: o.growId || "", code: o.code || "", name: o.productName || o.code || "", qty: o.qty || 0, total: o.total || 0, totalIdr: o.totalIdr || 0, at: o.createdAt ? new Date(o.createdAt).getTime() : null })),
         });
     }));
 
@@ -352,6 +365,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         ]);
         const channels = req.lic.hostedBot?.enabled ? await req.db.collection("setchannels").findOne({}) : null;
         res.json({ maintenance: !!mt?.mt, pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true,
+            productQris: !!req.shopDiscord.hosted,
             donationWebhookId: channels?.DonationWebhookId || "",
             storefront: {
                 guildId: req.shopGuildId,
@@ -364,6 +378,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             return fail(res, "Server toko belum diatur atau sudah berubah. Muat ulang halaman.", 409);
         }
         if (typeof model !== "string" || !Object.hasOwn(storefrontModels, model)) return fail(res, "Model toko tidak dikenal.");
+        if (model === storefrontModels.model3 && !req.shopDiscord.hosted) return fail(res, "Model 3 tersedia untuk Bot GevraStore.", 409);
         await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { model } }, { upsert: true });
         res.json({ model });
     }));

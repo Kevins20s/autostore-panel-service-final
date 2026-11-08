@@ -1,7 +1,9 @@
 "use strict";
 
 const collection = "storefronts";
-const models = Object.freeze({ classic: "classic", model1: "model1", model2: "model2" });
+const models = Object.freeze({ classic: "classic", model1: "model1", model2: "model2", model3: "model3" });
+const qrisBuyPrefix = "storefront_qris_buy:";
+const qrisSelectId = "storefront_qris_select";
 const buttons = Object.freeze({
     profile: "storefront_profile", balance: "storefront_balance", history: "storefront_history",
     deposit: "storefront_deposit", qris: "storefront_qris", convert: "storefront_convert",
@@ -25,6 +27,7 @@ const modelEmojiFields = {
     [models.classic]: { values: "classicEmojis", source: "classicEmojiSourceGuildId" },
     [models.model1]: { values: "emojis", source: "emojiSourceGuildId" },
     [models.model2]: { values: "model2Emojis", source: "model2EmojiSourceGuildId" },
+    [models.model3]: { values: "model3Emojis", source: "model3EmojiSourceGuildId" },
 };
 const emojiFields = model => modelEmojiFields[model];
 
@@ -51,7 +54,7 @@ function emojiDefaultsFor(model, hosted = false) {
         growIdButton: "<a:SHRules:1269199498320809996>", balanceButton: "<a:uang:1269199494063456256>",
         depositButton: "<a:planet2:1269199500673683466>", world: defaults.EARTH, bot: defaults.BOT,
         monitor: "<:monitor:1197853474973552691>", online: "<a:online:1197850211914088448>", offline: "<a:offline:1197850388846616586>",
-        ...(model === models.model2 ? { growIdButton: "⚙️", depositButton: "🌍", balanceButton: "💰" } : {}),
+        ...([models.model2, models.model3].includes(model) ? { growIdButton: "⚙️", depositButton: "🌍", balanceButton: "💰" } : {}),
     };
 }
 const emojiDefaults = Object.freeze(emojiDefaultsFor(models.model1));
@@ -104,7 +107,7 @@ async function interactionEmojis(interaction, model) {
     try {
         const storefront = await require("mongoose").connection.collection(collection).findOne({ _id: guildId });
         const active = storefrontModel(storefront);
-        if (!model || (model === models.classic && active === models.model2)) model = active;
+        if (!model || (model === models.classic && [models.model2, models.model3].includes(active))) model = active;
         return await resolveStorefrontEmojis(storefront, interaction.guild, interaction.appPermissions, model);
     } catch {
         return emojiDefaultsFor(model || models.classic);
@@ -116,5 +119,5 @@ function componentEmoji(value) {
     return custom ? { animated: custom[1] === "a", name: custom[2], id: custom[3] } : { name: value };
 }
 
-module.exports = { collection, models, buttons, menuId, menuActions, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, emojiFields,
+module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, emojiFields,
     customEmojiId, resolveEmojis, resolveStorefrontEmojis, interactionEmojis, componentEmoji };

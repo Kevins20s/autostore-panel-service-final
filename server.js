@@ -67,6 +67,7 @@ const runner = new Runner(
 const licenses = () => store.data.licenses;
 
 const valid = (l) => !l.revoked && l.expiresAt > Date.now();
+const awaitsActivation = (l) => Number.isSafeInteger(l.activationDays) && l.activationDays > 0;
 
 // ---- Wallet / QRIS otomatis (aktif kalau WALLET_MONGO_URL diisi) ----
 const numEnv = (k, d) => (process.env[k] !== undefined && process.env[k] !== "" && Number.isFinite(Number(process.env[k])) ? Number(process.env[k]) : d);
@@ -115,7 +116,8 @@ function issueLicense(name, type, days, { save = true, lifetime = false } = {}) 
     const key = newKey(type);
     licenses().push({
         id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
-        createdAt: Date.now(), expiresAt: lifetime ? Date.UTC(9999, 11, 31) : Date.now() + days * DAY, revoked: false, lifetime,
+        createdAt: Date.now(), expiresAt: lifetime ? Date.UTC(9999, 11, 31) : null, revoked: false, lifetime,
+        ...(lifetime ? {} : { activationDays: days }),
         port: store.data.nextPort++, config: null, desired: "stopped",
     });
     if (save) store.save();
@@ -239,11 +241,15 @@ app.use(express.json({ limit: "20kb" }));
 // ---- Pesanan key lewat web (QRIS manual) ----
 const notifier = createNotifier();
 const ORDER_TTL_MIN = Number(process.env.ORDER_TTL_MIN) > 0 ? Number(process.env.ORDER_TTL_MIN) : 30;
+function addLicenseDays(l, days) {
+    if (awaitsActivation(l)) l.activationDays += days;
+    else l.expiresAt = Math.max(l.expiresAt, Date.now()) + days * DAY;
+}
 // Perpanjangan: tambah masa aktif key lama (penyimpanan dilakukan oleh orders.confirm setelah ini).
 function extendLicense(id, days) {
     const l = findLicense(id);
     if (!l) throw new OrderError("Key pembeli ini sudah dihapus, perpanjangan tidak bisa diproses.", 409);
-    l.expiresAt = Math.max(l.expiresAt, Date.now()) + days * DAY;
+    addLicenseDays(l, days);
     reconcile(l);
     return l.expiresAt;
 }
@@ -262,6 +268,18 @@ app.post("/api/login", (req, res) => {
     const key = String(req.body?.key || "").trim().toUpperCase();
     const l = key && licenses().find((x) => x.keyHash === sha256(key));
     if (!l) { auth.recordFail(req.ip); return res.status(401).json({ error: "Key tidak ditemukan." }); }
+    if (awaitsActivation(l)) {
+        if (l.revoked) return res.status(403).json({ error: "Key dinonaktifkan." });
+        const days = l.activationDays;
+        l.expiresAt = Date.now() + days * DAY;
+        delete l.activationDays;
+        try { store.save(); }
+        catch (error) {
+            l.expiresAt = null;
+            l.activationDays = days;
+            throw error;
+        }
+    }
     auth.clearFails(req.ip);
     auth.setSession(res, { t: "buyer", id: l.id });
     discordLogin.clearInstall(res);
@@ -474,6 +492,7 @@ const row = (l) => {
     const hosted = l.hostedBot?.enabled || l.runMode === "central";
     return {
         id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked, lifetime: !!l.lifetime,
+        activationDays: awaitsActivation(l) ? l.activationDays : null,
         hosted: !!hosted,
         configured: hosted ? !!l.hostedBot?.guildId : !!l.config,
         bot: hosted ? (discordLogin.statusFor(l)?.state || "stopped") : runner.status(l.id),
@@ -487,14 +506,7 @@ app.post("/api/admin/licenses", admin, (req, res) => {
     const days = Math.min(3650, Math.max(1, Math.floor(Number(req.body?.days) || 30)));
     if (!name) return res.status(400).json({ error: "Nama pembeli wajib diisi." });
     if (req.body?.type === "service") return res.status(400).json({ error: "AutoStore Service tidak lagi tersedia untuk lisensi baru." });
-    const type = "autostore";
-    const key = newKey(type);
-    licenses().push({
-        id: crypto.randomBytes(8).toString("hex"), buyer: name, type, keyHash: sha256(key), keyPrefix: key.slice(0, 7),
-        createdAt: Date.now(), expiresAt: Date.now() + days * DAY, revoked: false,
-        port: store.data.nextPort++, config: null, desired: "stopped",
-    });
-    store.save();
+    const key = issueLicense(name, "autostore", days);
     res.json({ key });
 });
 
@@ -506,7 +518,7 @@ const find = (req, res) => {
 app.post("/api/admin/licenses/:id/extend", admin, (req, res) => {
     const l = find(req, res); if (!l) return;
     const days = Math.min(3650, Math.max(1, Math.floor(Number(req.body?.days) || 30)));
-    l.expiresAt = Math.max(l.expiresAt, Date.now()) + days * DAY;
+    addLicenseDays(l, days);
     store.save(); reconcile(l); res.json({ ok: true });
 });
 app.post("/api/admin/licenses/:id/revoke", admin, (req, res) => {

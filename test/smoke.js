@@ -36,11 +36,30 @@ const waitBot = async (ck, want, ms = 6000) => {
         assert.strictEqual((await call("GET", "/api/admin/licenses")).status, 401, "tanpa cookie harus ditolak");
         const created = await call("POST", "/api/admin/licenses", { buyer: "Budi", days: 30 }, adm);
         const key = created.json.key; assert.match(key, /^AS-[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/);
+        const adminRow = async () => (await call("GET", "/api/admin/licenses", null, adm)).json.licenses[0];
+        const pending = await adminRow();
+        assert.strictEqual(pending.expiresAt, null);
+        assert.strictEqual(pending.activationDays, 30);
+        const pendingUrl = "/api/admin/licenses/" + pending.id;
+        assert.strictEqual((await call("POST", pendingUrl + "/extend", { days: 7 }, adm)).status, 200);
+        assert.strictEqual((await call("POST", pendingUrl + "/revoke", { revoked: true }, adm)).status, 200);
+        assert.strictEqual((await call("POST", "/api/login", { key })).status, 403);
+        assert.strictEqual((await adminRow()).expiresAt, null);
+        assert.strictEqual((await adminRow()).activationDays, 37);
+        assert.strictEqual((await call("POST", pendingUrl + "/revoke", { revoked: false }, adm)).status, 200);
         console.log("ok  admin buat key");
 
         // buyer login
         assert.strictEqual((await call("POST", "/api/login", { key: "AS-SALAH" })).status, 401);
-        const b = await call("POST", "/api/login", { key }); assert.strictEqual(b.status, 200); const ck = b.cookie;
+        const firstAttempt = Date.now();
+        const [b, second] = await Promise.all([call("POST", "/api/login", { key }), call("POST", "/api/login", { key })]);
+        assert.strictEqual(b.status, 200); assert.strictEqual(second.status, 200); const ck = b.cookie;
+        const activated = await adminRow();
+        assert.strictEqual(activated.activationDays, null);
+        assert.ok(activated.expiresAt >= firstAttempt + 37 * 864e5 && activated.expiresAt <= Date.now() + 37 * 864e5);
+        await sleep(10);
+        assert.strictEqual((await call("POST", "/api/login", { key })).status, 200);
+        assert.strictEqual((await adminRow()).expiresAt, activated.expiresAt, "login ulang tidak menggeser kedaluwarsa");
         assert.match(b.setCookie, /SameSite=Lax/);
         assert.strictEqual((await call("GET", "/api/me", null, adm)).status, 401, "cookie admin bukan akses pembeli");
         console.log("ok  login pembeli + pemisahan akses");

@@ -24,6 +24,7 @@
     <div class="adm-stat pend"><span class="mut">Pesanan menunggu</span><b id="stPending">0</b></div>
     <div class="adm-stat pend hide" id="stWdBox"><span class="mut">Penarikan menunggu</span><b id="stWd">0</b></div>
     <div class="adm-stat ok"><span class="mut">Aktif</span><b id="stActive">0</b></div>
+    <div class="adm-stat"><span class="mut">Menunggu login pertama</span><b id="stAwaiting">0</b></div>
     <div class="adm-stat warn"><span class="mut">Hampir habis (7 hari)</span><b id="stSoon">0</b></div>
     <div class="adm-stat bad"><span class="mut">Habis / dicabut</span><b id="stDead">0</b></div>
   </div>
@@ -64,6 +65,7 @@
       <label>Lama (hari)<input id="days" type="number" value="30" min="1"></label>
       <button class="pri" id="btnNew">Buat key</button>
     </div>
+    <p class="mut">Masa aktif key berjangka dimulai saat login pertama.</p>
     <div id="newMsg" class="msg"></div>
     <div id="newKey" class="hide adm-newkey"><p class="mut">Salin sekarang, key ini tidak akan ditampilkan lagi:</p><div class="adm-keyrow"><div class="key" id="keyText"></div><button type="button" class="pri" id="btnCopyKey">Salin key</button></div></div>
   </div>
@@ -86,4 +88,4 @@
   <div id="bkMsg" class="msg"></div>
   </section>
 </section>
-</main><script src="/i18n.js?v=admin-status"></script><script src="/admin.js?v=admin-status"></script></body></html>
+</main><script src="/i18n.js?v=first-login"></script><script src="/admin.js?v=first-login"></script></body></html>

@@ -56,12 +56,17 @@ const hook = (payload, secret = "mock-webhook-secret", sig) => {
         assert.strictEqual(await hook({ orderId: "KO-" + id, status: "paid", amount: 15000 }), 200);
         const lic = (await call("GET", "/api/admin/licenses", { cookie: adm })).json.licenses.filter((l) => l.buyer === "Budi");
         assert.strictEqual(lic.length, 1, "webhook ganda tidak boleh membuat key kedua");
+        assert.strictEqual(lic[0].expiresAt, null, "pembayaran selesai belum memulai masa aktif");
+        assert.strictEqual(lic[0].activationDays, 30);
         assert.strictEqual(await hook({ orderId: "KO-tidakada", status: "paid", amount: 1 }), 200, "order tak dikenal tidak membuat webhook error");
         console.log("ok  webhook lunas membuat key otomatis, webhook ganda aman");
 
         // perpanjangan dari panel pembeli
+        const firstLoginAt = Date.now();
         const login = await call("POST", "/api/login", { body: { key: done.key } }); const ck = login.cookie;
+        assert.strictEqual(login.status, 200);
         const before = (await call("GET", "/api/me", { cookie: ck })).json.expiresAt;
+        assert.ok(before >= firstLoginAt + 30 * 864e5 && before <= Date.now() + 30 * 864e5);
         const opts = await call("GET", "/api/renew/options", { cookie: ck });
         assert.deepStrictEqual(opts.json.packages.map((p) => p.id), ["autostore", "autostore90", "autostore365"]);
         assert.strictEqual((await call("GET", "/api/renew/options")).status, 401, "perpanjangan butuh login pembeli");

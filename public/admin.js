@@ -11,12 +11,14 @@ function pillTd(text, state) { const e = document.createElement("td"); const sp 
 const BOT_TXT = { running: "Online", stopped: "Offline", crashed: "Error", starting: gsT("Memulai"), restarting: "Restart" };
 const BOT_STATE = { running: "ok", stopped: "off", crashed: "bad", starting: "warn", restarting: "warn" };
 function stats(list) {
-    const now = Date.now(); let active = 0, soon = 0, dead = 0;
+    const now = Date.now(); let active = 0, soon = 0, dead = 0, awaiting = 0;
     for (const l of list) {
+        if (l.activationDays && !l.revoked) { awaiting++; continue; }
         const left = Math.ceil((l.expiresAt - now) / 86400000);
         if (l.revoked || left <= 0) dead++; else { active++; if (left <= 7) soon++; }
     }
     $("stTotal").textContent = list.length; $("stActive").textContent = active; $("stSoon").textContent = soon; $("stDead").textContent = dead;
+    $("stAwaiting").textContent = awaiting;
 }
 function btn(text, fn, cls) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = async () => { try { await fn(); } catch (e) { await gsAlert(e.message); } load(); }; return b; }
 
@@ -148,8 +150,12 @@ async function load() {
         const tr = document.createElement("tr");
         const left = Math.ceil((l.expiresAt - Date.now()) / 86400000);
         const botMode = l.hosted ? "Bot GevraStore" : l.type === "service" ? "AutoStore Service" : gsT("Bot sendiri");
+        const validity = l.revoked ? pillTd(gsT("Dicabut"), "bad")
+            : l.lifetime ? pillTd(gsT("Seumur hidup"), "ok")
+            : l.activationDays ? pillTd(gsT`Belum login · ${l.activationDays} hari`, "off")
+            : left <= 0 ? pillTd(gsT("Habis"), "bad") : pillTd(gsT`${left} hari lagi`, left <= 7 ? "warn" : "ok");
         tr.append(td(l.buyer + (l.configured ? "" : gsT(" (belum setup)"))), td(botMode), td(l.keyPrefix + "…"),
-            l.revoked ? pillTd(gsT("Dicabut"), "bad") : l.lifetime ? pillTd(gsT("Seumur hidup"), "ok") : left <= 0 ? pillTd(gsT("Habis"), "bad") : pillTd(gsT`${left} hari lagi`, left <= 7 ? "warn" : "ok"), pillTd(BOT_TXT[l.bot] || l.bot, BOT_STATE[l.bot] || "off"));
+            validity, pillTd(BOT_TXT[l.bot] || l.bot, BOT_STATE[l.bot] || "off"));
         const act = document.createElement("td"); act.className = "row";
         act.append(
             ...(l.lifetime ? [] : [btn(gsT("+30 hari"), () => api("POST", `/api/admin/licenses/${l.id}/extend`, { days: 30 }))]),

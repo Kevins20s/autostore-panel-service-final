@@ -579,7 +579,7 @@ button,input,select,textarea{transition:border-color .18s ease,background .18s e
 #login.login #loginMsg.err:before{content:"!";flex:none;width:18px;height:18px;margin-top:1px;display:grid;place-items:center;border-radius:50%;background:rgba(149,149,149,.9);color:#111111;font-size:12px;font-weight:900;line-height:1}
 
 /* ===== Logo asli di sidebar ===== */
-.brand:before{background:url(/logo.png) center/cover no-repeat,linear-gradient(135deg,#838383,#868686)!important}
+.brand:before{background:url(/gevrastore-logo.svg) center/cover no-repeat,linear-gradient(135deg,#838383,#868686)!important}
 .brand:after{display:none!important}
 
 /* ===== Animasi masuk halus ===== */
@@ -817,6 +817,8 @@ html[data-theme="light"] #login.login .login-logo { filter: none; }
 #login.login .login-logo img, .buy-logo img, .adm-logo img, .brand img { filter: grayscale(1); }
 html[data-theme="light"] :is(.buy-logo, .adm-logo, .brand) img,
 html[data-theme="light"] #login.login .login-logo img { filter: invert(1) grayscale(1); }
+img.gevrastore-logo { filter: none; }
+html[data-theme="light"] img.gevrastore-logo { filter: invert(1); }
 #login.login #btnLogin, #view button.pri, button.pri {
   background: #f2f2f2;
   color: #171717;

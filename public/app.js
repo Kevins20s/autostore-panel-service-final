@@ -657,7 +657,7 @@ function storefrontPreview(model) {
         h("div", { class: "showcase-channel-bar" }, h("span", { "aria-hidden": "true" }, "#"),
             h("strong", {}, "katalog-toko"), h("span", { class: "showcase-channel-caption" }, t("Pratinjau Discord", "Discord preview"))),
         h("div", { class: "showcase-message" },
-            h("img", { class: "showcase-avatar", src: "/logo.png", alt: "", width: 36, height: 36 }),
+            h("img", { class: "showcase-avatar gevrastore-logo", src: "/gevrastore-logo.svg", alt: "", width: 36, height: 36 }),
             h("div", { class: "showcase-message-content" },
                 h("div", { class: "showcase-author" }, h("strong", {}, "GevraStore"), h("span", {}, "APP"),
                     h("small", {}, t("Baru saja", "Just now"))),

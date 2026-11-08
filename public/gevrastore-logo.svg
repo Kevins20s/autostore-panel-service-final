@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">GevraStore</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#183b40"/>
+      <stop offset=".72" stop-color="#0a2029"/>
+      <stop offset="1" stop-color="#08151d"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="79" y1="59" x2="177" y2="198" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c9fff0"/>
+      <stop offset=".54" stop-color="#65efd0"/>
+      <stop offset="1" stop-color="#24c5a4"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="248" height="248" rx="53" fill="url(#tile)" stroke="#3c746f" stroke-width="4"/>
+  <path fill="url(#mint)" d="M91 57h81l27 27-20 20-19-18h-57l-26 26v32l26 26h48l23-23v-6h-47v-28h76v46l-40 40H91l-43-43v-56z"/>
+</svg>

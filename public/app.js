@@ -1302,24 +1302,23 @@ const TRANSACTION_EMOJI_FIELDS = [["warning", "Peringatan", "Warning"], ["succes
     ["paymentOk", "Status QRIS berhasil", "QRIS success"], ["paymentWarning", "Peringatan QRIS", "QRIS warning"],
     ["paymentPending", "QRIS menunggu pembayaran", "QRIS awaiting payment"], ["paymentCancelled", "QRIS dibatalkan", "QRIS cancelled"],
     ["paymentCancelButton", "Tombol batalkan QRIS", "QRIS cancel button"], ["paymentLog", "Judul log QRIS", "QRIS log title"]];
+const CONVERSION_EMOJI_FIELDS = [["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi konversi", "Confirm conversion"]];
+const LEGACY_ACCOUNT_EMOJI_FIELDS = [["growId", "GrowID pada info saldo", "GrowID in balance info"],
+    ["world", "Dunia deposit", "Deposit world"], ["bot", "Nama bot deposit", "Deposit bot name"], ...CONVERSION_EMOJI_FIELDS];
 const MODEL_EMOJI_GROUPS = {
     model1: [
         ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ...BUY_EMOJI_FIELDS]],
         ["Profil & navigasi", "Profile & navigation", PROFILE_EMOJI_FIELDS],
         ["Deposit & pembayaran", "Deposits & payments", [["deposit", "Deposit WL/DL", "WL/DL deposit"], ["qris", "Top Up QRIS", "QRIS top-up"],
-            ["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi", "Confirm"]]],
+            ...CONVERSION_EMOJI_FIELDS]],
         ["Pesan transaksi", "Transaction messages", TRANSACTION_EMOJI_FIELDS],
     ],
     classic: [
         ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ...BUY_EMOJI_FIELDS,
             ["growIdButton", "Tombol Set GrowID", "Set GrowID button"], ["balanceButton", "Tombol Balance", "Balance button"],
             ["depositButton", "Tombol Deposit", "Deposit button"], ["qris", "Tombol Deposit QRIS", "QRIS deposit button"]]],
-        ["Info toko & transaksi", "Store and transaction messages", [["world", "Dunia deposit", "Deposit world"],
-            ["bot", "Nama bot", "Bot name"], ["monitor", "Status bot", "Bot status"], ["online", "Bot online", "Bot online"],
-            ["offline", "Bot offline", "Bot offline"], ...TRANSACTION_EMOJI_FIELDS]],
-        ["Profil & konversi saldo Rupiah", "Profile and rupiah conversion", [...PROFILE_EMOJI_FIELDS,
-            ["deposit", "Petunjuk Deposit WL/DL", "WL/DL deposit instructions"], ["convert", "Konversi saldo", "Convert balance"],
-            ["confirm", "Konfirmasi", "Confirm"]]],
+        ["Saldo & deposit", "Balance & deposits", LEGACY_ACCOUNT_EMOJI_FIELDS],
+        ["Pesan transaksi", "Transaction messages", TRANSACTION_EMOJI_FIELDS],
     ],
 };
 MODEL_EMOJI_GROUPS.model2 = [
@@ -1328,8 +1327,7 @@ MODEL_EMOJI_GROUPS.model2 = [
     ...MODEL_EMOJI_GROUPS.classic.slice(1),
 ];
 MODEL_EMOJI_GROUPS.model3 = [
-    ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Tombol Buy", "Buy button"]]],
-    ...MODEL_EMOJI_GROUPS.classic.slice(1),
+    ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Tombol Buy", "Buy button"], ["warning", "Panduan beli", "Purchase instructions"]]],
 ];
 
 function storefrontEmojiPreview(model, selected, emojis, t) {
@@ -1391,9 +1389,10 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
         return message([icon("deposit"), "Deposit via Growtopia"], line("WORLD = GEVRASHOP"),
             buttons(button("deposit", "Deposit WL/DL"), button("qris", "QRIS / E-Wallet"), button("convert", "Convert Rp to WL")));
     }
-    if (["monitor", "online", "offline"].includes(selected)) {
-        return message([t("Status bot", "Bot status")], line(icon("bot"), "Name Bot: GevraBot"),
-            line(icon("monitor"), "Status:", selected === "offline" ? "Offline" : "Online", icon(selected === "offline" ? "offline" : "online")));
+    if (selected === "growId" && model !== "model1") {
+        return message([icon("crown"), "Balance Information", icon("crown")],
+            line(icon("growId"), "GrowID: GEVRANT"), line(icon("balanceMark"), "Balance: 75", icon("wl")),
+            line(icon("price"), "Total Deposit: 100", icon("wl")));
     }
     if (["convert", "confirm"].includes(selected)) {
         return message([icon("convert"), "Convert Rp to WL"], line(t("Saldo Rupiah", "Rupiah balance"), "Rp10.000"),

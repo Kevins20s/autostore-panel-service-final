@@ -19,7 +19,10 @@ const menuActions = Object.freeze([
     ["depositqris_btn", "Deposit QRIS", "Top-up via QRIS", "qris"],
     ["balance1", "Balance", "Check balance", "balanceButton"],
 ]);
-const model1Preset = require("./model1-emoji-preset.json");
+const hostedPresets = {
+    [models.model1]: require("./model1-emoji-preset.json"),
+    [models.model2]: require("./model2-emoji-preset.json"),
+};
 const rupiahCredit = "idr";
 const model1EmojiDefaults = Object.freeze({
     profile: "👤", balance: "💰", history: "📜", deposit: "💎", qris: "💳", convert: "🔄", growId: "✏️",
@@ -51,7 +54,7 @@ function emojiDefaultsFor(model, hosted = false) {
         paymentOk: "✅", paymentWarning: "⚠️", paymentPending: "⏳", paymentCancelled: "⛔",
         paymentCancelButton: "❌", paymentLog: "📥", cart: "🛒", inStock: "✅", outOfStock: "❌",
     };
-    return model === models.model1 ? { ...shared, ...model1EmojiDefaults, ...(hosted ? model1Preset : {}) } : {
+    const base = model === models.model1 ? { ...shared, ...model1EmojiDefaults } : {
         ...shared, qris: "💳", convert: "🔄", confirm: "✅", previous: "⬅️", next: "➡️",
         profile: "👤", balance: "💰", history: "📜", discord: "🪪", growId: defaults.BOT,
         rupiah: "💵", spent: "🛍️", joined: "🗓️", deposit: "💎",
@@ -60,6 +63,7 @@ function emojiDefaultsFor(model, hosted = false) {
         monitor: "<:monitor:1197853474973552691>", online: "<a:online:1197850211914088448>", offline: "<a:offline:1197850388846616586>",
         ...([models.model2, models.model3].includes(model) ? { growIdButton: "⚙️", depositButton: "🌍", balanceButton: "💰" } : {}),
     };
+    return hosted ? { ...base, ...hostedPresets[model] } : base;
 }
 const emojiDefaults = Object.freeze(emojiDefaultsFor(models.model1));
 const customEmoji = /^<(a?):([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
@@ -86,7 +90,7 @@ function availableGuildEmoji(guild, id) {
 
 async function resolveEmojis(config, guild, sourceGuildId, permissions, model = models.model1) {
     const emojis = emojiDefaultsFor(model);
-    const preset = model === models.model1 && process.env.HOSTED_PILOT_BINDING ? model1Preset : {};
+    const preset = (process.env.HOSTED_PILOT_BINDING && hostedPresets[model]) || {};
     const configured = Object.keys(emojis).map(key => [key, customEmojiId(config?.[key]), customEmojiId(preset[key])]);
     const source = sourceGuildId && sourceGuildId === process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID && permissions?.has("UseExternalEmojis")
         ? guild?.client?.guilds?.cache.get(sourceGuildId) : null;

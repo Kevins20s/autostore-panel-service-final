@@ -168,7 +168,10 @@ async function handleStorefront(interaction) {
         else if (customId === buttons.convert) actions = await showQuote(interaction, embed, emojis);
         else if (confirm) actions = await confirmConversion(interaction, embed, emojis);
         else actions = await showHistory(interaction, embed, Number(customId.split(":")[1] || "1"), emojis);
-        await interaction.editReply({ content: null, embeds: [embed], components: [...actions, navigation(emojis)], allowedMentions: { parse: [] } });
+        const conversion = customId === buttons.convert || confirm;
+        const hasProfileMenu = interaction.message?.components?.some(row => row.components?.some(item => item.customId === buttons.profile));
+        const components = !conversion || hasProfileMenu ? [...actions, navigation(emojis)] : actions;
+        await interaction.editReply({ content: null, embeds: [embed], components, allowedMentions: { parse: [] } });
     } catch (error) {
         console.error("[STOREFRONT] Gagal membuka data pembeli:", error.code || error.name);
         await interaction.editReply({ content: "Permintaan belum bisa diproses. Cek saldo terbaru sebelum mencoba lagi." });

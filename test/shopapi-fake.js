@@ -4,6 +4,7 @@ const assert = require("assert"), http = require("http"), express = require("exp
 const shopdb = require("../src/shopdb");
 const { emojiDefaults, resolveEmojis, componentEmoji, customEmojiId, menuActions, menuId, storefrontAction } = require("../bot/src/config/storefront");
 const model1Preset = require("../bot/src/config/model1-emoji-preset.json");
+const model2Preset = require("../bot/src/config/model2-emoji-preset.json");
 
 const inserted = []; let lastFind = null;
 const cur = (rows) => { const c = { sort: () => c, skip: () => c, limit: () => c, project: () => c, toArray: async () => rows }; return c; };
@@ -150,9 +151,12 @@ const srv = http.createServer(app).listen(0, async () => {
         const model2 = (await j("GET", emojiPath)).j;
         assert.strictEqual(model2.model, "model2");
         assert.deepStrictEqual(model2.emotes, {});
-        assert.strictEqual(model2.defaults.inStock, classic.defaults.inStock);
+        for (const [key, code] of Object.entries(model2Preset)) assert.strictEqual(model2.defaults[key], code);
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model2", emojis: { inStock: custom } })).s, 200);
         assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { inStock: custom });
+        assert.deepStrictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model2", emojis: {} })).j.emotes, {});
+        assert.strictEqual((await j("GET", emojiPath)).j.defaults.inStock, model2Preset.inStock);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model2", emojis: { inStock: custom } })).s, 200);
         for (const [value] of menuActions) {
             const interaction = { customId: menuId, guildId: guildA, values: [value], isStringSelectMenu: () => true };
             assert.strictEqual(storefrontAction(interaction, guildA), value);
@@ -163,13 +167,17 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { profile: sourceCode });
         assert.deepStrictEqual(storefronts.get(guildA).classicEmojis, { growIdButton: botEmote });
         assert.deepStrictEqual(storefronts.get(guildA).model2Emojis, { inStock: custom });
-        const owned = new Map([[customEmojiId(model1Preset.profile), { toString: () => model1Preset.profile }]]);
+        const owned = new Map([model1Preset.profile, model2Preset.growIdButton]
+            .map(code => [customEmojiId(code), { toString: () => code }]));
         guild.client.application.emojis = { fetch: async () => owned };
         process.env.HOSTED_PILOT_BINDING = "test";
         try {
             assert.strictEqual((await resolveEmojis({}, guild)).profile, model1Preset.profile);
             assert.strictEqual((await resolveEmojis({ profile: custom }, guild)).profile, custom);
             assert.strictEqual((await resolveEmojis({}, guild)).qris, emojiDefaults.qris);
+            assert.strictEqual((await resolveEmojis({}, guild, null, null, "model2")).growIdButton, model2Preset.growIdButton);
+            assert.strictEqual((await resolveEmojis({ growIdButton: custom }, guild, null, null, "model2")).growIdButton, custom);
+            assert.strictEqual((await resolveEmojis({}, guild, null, null, "model2")).inStock, "✅");
         } finally {
             delete process.env.HOSTED_PILOT_BINDING;
         }

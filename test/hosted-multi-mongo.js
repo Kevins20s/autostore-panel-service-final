@@ -74,12 +74,15 @@ async function runBuyer({ url, dbName, guildId }) {
                 [profileEmoteId, { toString: () => profileEmote }],
             ]) } } };
         }
-        async function clickStorefront(customId, isPrivate = true) {
+        async function clickStorefront(customId, isPrivate = true, hasProfileMenu = true) {
             let acknowledged;
             await handleStorefront({
                 customId, guildId, guild, isButton: () => true,
                 user: { id: buyerId, displayAvatarURL: () => "https://example.com/avatar.png" },
-                message: { flags: { has: flag => flag === MessageFlags.Ephemeral && isPrivate } },
+                message: {
+                    flags: { has: flag => flag === MessageFlags.Ephemeral && isPrivate },
+                    components: hasProfileMenu ? [{ components: [{ customId: "storefront_profile" }] }] : [],
+                },
                 deferReply: async options => {
                     assert.equal(options.flags, MessageFlags.Ephemeral);
                     acknowledged = "new";
@@ -99,7 +102,12 @@ async function runBuyer({ url, dbName, guildId }) {
         assert.match((await clickStorefront("storefront_deposit", false)).title, /Deposit via Growtopia/);
         const depositAction = privateReply.components[0].toJSON().components[0].custom_id;
         assert.match((await clickStorefront(depositAction)).title, /Deposit via Growtopia/);
+        const hasProfileButton = () => privateReply.components.some(row =>
+            row.toJSON().components.some(button => button.custom_id === "storefront_profile"));
+        await clickStorefront("storefront_convert", true, false);
+        assert.equal(hasProfileButton(), false);
         await clickStorefront("storefront_convert");
+        assert.equal(hasProfileButton(), true);
         const quote = privateReply.components[0].toJSON().components[0].custom_id;
         assert.match(quote, /^storefront_convert:/);
         const confirmations = await Promise.all([clickStorefront(quote), clickStorefront(quote)]);

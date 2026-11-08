@@ -95,8 +95,9 @@ function buySelectRow(options, maintenance, emojis) {
 }
 
 const display = content => new TextDisplayBuilder().setContent(content);
-const banner = () => new MediaGalleryBuilder().addItems({
-    media: { url: /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//.test(imageUrl2) ? imageUrl2.split("?")[0] : imageUrl2 },
+const discordBannerUrl = url => /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//.test(url) ? url.split("?")[0] : url;
+const banner = url => new MediaGalleryBuilder().addItems({
+    media: { url: discordBannerUrl(url) },
 });
 
 async function editModernCatalog(message, container, rows = []) {
@@ -135,7 +136,7 @@ async function clearExtraCatalogs(message, target, keep = new Set(), strict = fa
     }
 }
 
-function productCards({ title, header, footer, products, maintenance, emojis }) {
+function productCards({ title, header, footer, products, maintenance, emojis, bannerUrl }) {
     const container = new ContainerBuilder().setAccentColor(resolveColor(COLOR)).addTextDisplayComponents(display(`## ${title}\n${header}`));
     for (const product of products) {
         const { name, code, description, priceIdr, sold, stock } = product;
@@ -153,7 +154,7 @@ function productCards({ title, header, footer, products, maintenance, emojis }) 
             new SectionBuilder().addTextDisplayComponents(display(details.join("\n"))).setButtonAccessory(buy));
     }
     if (!products.length) container.addTextDisplayComponents(display("Belum ada produk."));
-    return container.addSeparatorComponents(new SeparatorBuilder()).addTextDisplayComponents(display(footer)).addMediaGalleryComponents(banner());
+    return container.addSeparatorComponents(new SeparatorBuilder()).addTextDisplayComponents(display(footer)).addMediaGalleryComponents(banner(bannerUrl));
 }
 
 function editLegacyCatalog(message, embed, rows) {
@@ -164,7 +165,7 @@ function editLegacyCatalog(message, embed, rows) {
     const container = new ContainerBuilder().setAccentColor(resolveColor(COLOR)).addTextDisplayComponents(display("## " + embed.data.title));
     const chunks = embed.data.description.match(/[\s\S]{1,1800}(?:\n|$)|[\s\S]{1,1800}/g);
     for (const chunk of chunks) container.addTextDisplayComponents(display(chunk));
-    return editModernCatalog(message, container.addMediaGalleryComponents(banner()), rows);
+    return editModernCatalog(message, container.addMediaGalleryComponents(banner(embed.data.image.url)), rows);
 }
 
 function compactActionRow(maintenance, emojis) {
@@ -217,7 +218,7 @@ function rateText({ pricePerWL, pricePerDL }, emojis) {
         : `${emojis.arrow} Kurs: Harga belum tersedia`;
 }
 
-async function publishQrisCatalog(message, target, maintenance, emojis) {
+async function publishQrisCatalog(message, target, maintenance, emojis, bannerUrl) {
     const { kategori } = target;
     const filter = catalogProducts(kategori, models.model3);
     const [items, rates] = await Promise.all([list.find(filter).sort({ _id: 1 }).lean(), getEffectiveWLPrice()]);
@@ -235,7 +236,7 @@ async function publishQrisCatalog(message, target, maintenance, emojis) {
             })));
         const position = pages > 1 ? `\n-# Halaman ${index + 1}/${pages}` : "";
         const container = productCards({ title: escapeMarkdown(catalogTitle(kategori)), header: rateText(rates, emojis) + position,
-            footer, products, maintenance, emojis });
+            footer, products, maintenance, emojis, bannerUrl });
         if (index === 0) {
             await editModernCatalog(message, container);
             continue;
@@ -332,8 +333,9 @@ async function renderCatalog(message, guildId, target) {
     const permissions = storefront?.[emojiFields(model).source] && message.guild?.members.me
         ? message.channel?.permissionsFor(message.guild.members.me) : null;
     const emojis = await resolveStorefrontEmojis(storefront, message.guild, permissions);
+    const bannerUrl = storefront?.bannerUrl || imageUrl2;
     if (model === models.model3) {
-        return publishQrisCatalog(message, target, MT, emojis);
+        return publishQrisCatalog(message, target, MT, emojis, bannerUrl);
     }
     await clearExtraCatalogs(message, target);
 
@@ -430,7 +432,7 @@ ${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
         .setTitle(`${emojis.crown} ${titleText} ${emojis.crown}`)
         .setDescription(description)
         .setColor(COLOR)
-        .setImage(imageUrl2)
+        .setImage(discordBannerUrl(bannerUrl))
         .setTimestamp();
 
     if (compact || model === models.model2) {

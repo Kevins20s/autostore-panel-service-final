@@ -43,7 +43,7 @@ const cols = {
         findOne: async ({ _id }) => storefronts.get(_id),
         updateOne: async ({ _id }, { $set }) => storefronts.set(_id, { ...storefronts.get(_id), ...$set }),
     },
-    lists: { findOne: async (f) => ({ code: f.code }), find: () => cur([{ code: "P1", name: "Akun A" }, { code: "P2", name: "Akun B" }, { code: "P3", name: "Akun C" }]) },
+    lists: { findOne: async (f) => ({ code: f.code }), find: () => cur([{ code: "P1", name: "Akun A" }, { code: "P2", name: "Akun B" }, { code: "P3", name: "Akun C", priceIdr: 25000 }]) },
     prices: { find: () => cur([{ code: "P1", price: 1000 }, { code: "P2", price: 2000 }]) }, // P3 belum ada harga
     shops: {
         aggregate: () => ({ toArray: async () => [{ _id: "P1", n: 1 }, { _id: "P2", n: 10 }] }),
@@ -56,7 +56,7 @@ const cols = {
         aggregate: (p) => ({ toArray: async () => {
             const g = p.find((s) => s.$group)?.$group;
             if (g._id === null) return [{ _id: null, qty: 3, wl: 4900 }];
-            if (g._id.$dateToString) { assert.strictEqual(g._id.$dateToString.timezone, "Asia/Jakarta"); return [{ _id: "2026-11-04", orders: 1, qty: 1, wl: 900 }, { _id: "2026-11-05", orders: 1, qty: 2, wl: 4000 }]; }
+            if (g._id.$dateToString) { assert.strictEqual(g._id.$dateToString.timezone, "Asia/Jakarta"); assert.strictEqual(g.idr.$sum, "$totalIdr"); return [{ _id: "2026-11-04", orders: 1, qty: 1, wl: 900 }, { _id: "2026-11-05", orders: 1, qty: 2, wl: 4000, idr: 25000 }]; }
             return [{ _id: "P2", name: "Akun B", qty: 2, wl: 4000 }];
         } }),
     },
@@ -67,7 +67,7 @@ const createShopRouter = require("../src/shopapi");
 const app = express(); app.use(express.json());
 app.use("/api/shop", (req, res, next) => {
     const guildId = req.get("X-Test-Store") === "B" ? guildB : guildA;
-    req.lic = { id: guildId, expiresAt: now + 60000, discordLoginId: guildId, hostedBot: { enabled: true, guildId } };
+    req.lic = { id: guildId, expiresAt: now + 60000, paymentMode: "auto", discordLoginId: guildId, hostedBot: { enabled: true, guildId } };
     next();
 }, createShopRouter({ valid: () => true, decrypt: config => config }));
 const srv = http.createServer(app).listen(0, async () => {
@@ -82,6 +82,7 @@ const srv = http.createServer(app).listen(0, async () => {
 
         const s = await j("GET", "/stats?days=14");
         assert.strictEqual(s.s, 200); assert.strictEqual(s.j.days, 14); assert.strictEqual(s.j.daily.length, 2); assert.strictEqual(s.j.top[0].code, "P2");
+        assert.strictEqual(s.j.daily[1].idr, 25000);
         assert.deepStrictEqual(s.j.low, [{ code: "P1", name: "Akun A", stock: 1 }], "stok menipis: hanya produk berharga dengan stok <= 3 (P3 tanpa harga tidak ikut)");
         const s2 = await j("GET", "/stats?days=9999&lowAt=-5"); assert.strictEqual(s2.j.days, 90, "days dibatasi 90"); assert.strictEqual(s2.j.lowAt, 0, "lowAt negatif dibatasi ke 0");
         console.log("ok  /stats: harian, terlaris, stok menipis, batas parameter");
@@ -97,6 +98,8 @@ const srv = http.createServer(app).listen(0, async () => {
         console.log("ok  stok: opsi buang duplikat (dan tanpa opsi = perilaku lama)");
 
         assert.deepStrictEqual((await j("GET", "/settings")).j.storefront, { guildId: guildA, model: "classic" });
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "model3" })).s, 200);
+        assert.deepStrictEqual((await j("GET", "/stats")).j.low, [{ code: "P3", name: "Akun C", stock: 0 }]);
         assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "model1" })).s, 200);
         assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "invalid" })).s, 400);
         assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "classic" }, "B")).s, 409);

@@ -72,7 +72,7 @@ async function showHistory(interaction, embed, requestedPage, emojis) {
     const total = await OrderLog.countDocuments(filter);
     const pages = Math.max(1, Math.ceil(total / orderPageSize));
     const page = Math.max(1, Math.min(requestedPage, pages));
-    const orders = await OrderLog.find(filter).select("orderNumber productName code qty total createdAt")
+    const orders = await OrderLog.find(filter).select("orderNumber productName code qty total totalIdr createdAt")
         .sort({ createdAt: -1, _id: -1 }).skip((page - 1) * orderPageSize).limit(orderPageSize).lean();
     embed.setTitle(`${emojis.history} Riwayat Order`).setFooter({ text: `Halaman ${page}/${pages} · ${interaction.guild?.name || "GevraStore"}` });
     if (!orders.length) embed.setDescription("Belum ada pembelian yang tercatat.");

@@ -5,7 +5,9 @@ const express = require("express");
 const { derive } = require("./crypto");
 const { WalletError } = require("./walletdb");
 const { hostedTenant } = require("./shared-tenants");
-const { rupiahCredit } = require("../bot/src/config/storefront");
+const { getDb } = require("./shopdb");
+const { changeStorefrontPayment } = require("./storefront-payment");
+const { rupiahCredit, collection, models, storefrontModel } = require("../bot/src/config/storefront");
 
 // Token & secret per pembeli diturunkan dari MASTER_KEY, jadi tidak perlu disimpan dan ikut pindah bersama MASTER_KEY.
 const internalToken = (licenseId) => derive("wallet-internal:" + licenseId).toString("hex");
@@ -173,8 +175,16 @@ function registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin, 
         const mode = req.body?.mode === "auto" ? "auto" : req.body?.mode === "manual" ? "manual" : null;
         if (!mode) throw new WalletError("Mode harus manual atau auto.");
         if (mode === "auto" && (!wallet || !autoko.enabled)) throw new WalletError("QRIS otomatis belum tersedia. Hubungi penjual.", 503);
-        req.lic.paymentMode = mode; store.save();
-        return { mode };
+        return changeStorefrontPayment(req.lic.id, async () => {
+            const tenant = mode === "manual" && hostedTenant(req.lic, licenses());
+            if (tenant) {
+                const db = await getDb("hosted:" + tenant.tenantId, tenant.config.mongoUrl, tenant.dbName);
+                const settings = await db.collection(collection).findOne({ _id: tenant.guildId });
+                if (storefrontModel(settings) === models.model3) throw new WalletError("Model 3 membutuhkan QRIS otomatis. Ganti model toko sebelum memilih QRIS manual.", 409);
+            }
+            req.lic.paymentMode = mode; store.save();
+            return { mode };
+        });
     }));
 
     // ---- Rute admin ----

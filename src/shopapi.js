@@ -3,6 +3,8 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
+const { changeStorefrontPayment } = require("./storefront-payment");
+const { imageUrl2: defaultBanner } = require("../bot/src/config/configemoji.json");
 const { collection: storefrontCollection, models: storefrontModels, emojiDefaultsFor, storefrontModel, emojiFields,
     customEmojiId, validQrisPrice } = require("../bot/src/config/storefront");
 
@@ -54,7 +56,7 @@ async function discordEmotes(guildId, token, botId, sourceGuildId, discordUserId
     return { library, extraSource: extra && { id: extra.id, name: extra.name } };
 }
 
-module.exports = function createShopRouter({ valid, decrypt, licenses = () => [] }) {
+module.exports = function createShopRouter({ valid, decrypt, licenses = () => [], canAutoQris = () => true }) {
     const r = express.Router();
     const wrap = (fn) => (req, res) =>
         fn(req, res).catch((e) => {
@@ -290,7 +292,8 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             c(req, "bal").countDocuments(filter),
             c(req, "bal").find(filter).sort({ Balance: -1 }).skip(skip).limit(50).toArray(),
         ]);
-        res.json({ total, users: rows.map((u) => ({ discordId: u.DiscordID, growId: u.GrowIDNow || u.GrowID || "", balance: u.Balance || 0, deposit: u.Deposit || 0 })) });
+        res.json({ total, users: rows.map((u) => ({ discordId: u.DiscordID, growId: u.GrowIDNow || u.GrowID || "",
+            balance: u.Balance || 0, balanceRp: u.BalanceRp || 0, deposit: u.Deposit || 0 })) });
     }));
 
     r.post("/users/:discordId/balance", wrap(async (req, res) => {
@@ -333,26 +336,29 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         const today = Math.floor((Date.now() + wibOffset) / dayMs) * dayMs - wibOffset;
         const since = new Date(today - (days - 1) * dayMs);
         const col = c(req, "orderlog");
-        const [daily, top, [lists, prices, stocks]] = await Promise.all([
+        const [daily, top, [lists, prices, stocks, storefront]] = await Promise.all([
             col.aggregate([{ $match: { createdAt: { $gte: since } } },
-                { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "Asia/Jakarta" } }, orders: { $sum: 1 }, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } },
+                { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "Asia/Jakarta" } }, orders: { $sum: 1 }, qty: { $sum: "$qty" }, wl: { $sum: "$total" }, idr: { $sum: "$totalIdr" } } },
                 { $sort: { _id: 1 } }]).toArray(),
             col.aggregate([{ $match: { createdAt: { $gte: since } } },
                 { $group: { _id: "$code", name: { $first: "$productName" }, qty: { $sum: "$qty" }, wl: { $sum: "$total" } } },
                 { $sort: { qty: -1, _id: 1 } }]).toArray(),
             Promise.all([
-                c(req, "list").find({}).project({ code: 1, name: 1 }).toArray(),
+                c(req, "list").find({}).project({ code: 1, name: 1, priceIdr: 1 }).toArray(),
                 c(req, "price").find({}).project({ code: 1, price: 1 }).toArray(),
-                c(req, "shop").aggregate([{ $group: { _id: "$code", n: { $sum: 1 } } }]).toArray(),
+                c(req, "shop").aggregate([{ $match: { data: { $type: "string", $ne: "" } } }, { $group: { _id: "$code", n: { $sum: 1 } } }]).toArray(),
+                req.shopGuildId ? req.db.collection(storefrontCollection).findOne({ _id: req.shopGuildId }) : null,
             ]),
         ]);
         const priced = new Set(prices.filter((p) => p.price).map((p) => p.code));
         const stockBy = Object.fromEntries(stocks.map((s) => [s._id, s.n]));
-        const low = lists.filter((p) => priced.has(p.code) && (stockBy[p.code] || 0) <= lowAt).map((p) => ({ code: p.code, name: p.name, stock: stockBy[p.code] || 0 })).sort((a, b) => a.stock - b.stock).slice(0, 8);
+        const model = storefrontModel(storefront);
+        const hasPrice = p => model === storefrontModels.model3 ? validQrisPrice(p.priceIdr) : priced.has(p.code);
+        const low = lists.filter((p) => hasPrice(p) && (stockBy[p.code] || 0) <= lowAt).map((p) => ({ code: p.code, name: p.name, stock: stockBy[p.code] || 0 })).sort((a, b) => a.stock - b.stock).slice(0, 8);
         const productSales = top.map((t) => ({ code: t._id, name: t.name || t._id, qty: t.qty, wl: t.wl }));
         res.json({
-            days, lowAt,
-            daily: daily.map((d) => ({ date: d._id, orders: d.orders, qty: d.qty, wl: d.wl })),
+            days, lowAt, model,
+            daily: daily.map((d) => ({ date: d._id, orders: d.orders, qty: d.qty, wl: d.wl || 0, idr: d.idr || 0 })),
             top: productSales.slice(0, 5),
             productSales,
             low,
@@ -381,8 +387,32 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         }
         if (typeof model !== "string" || !Object.hasOwn(storefrontModels, model)) return fail(res, "Model toko tidak dikenal.");
         if (model === storefrontModels.model3 && !req.shopDiscord.hosted) return fail(res, "Model 3 tersedia untuk Bot GevraStore.", 409);
-        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { model } }, { upsert: true });
-        res.json({ model });
+        return changeStorefrontPayment(req.lic.id, async () => {
+            if (model === storefrontModels.model3 && (req.lic.paymentMode !== "auto" || req.lic.walletFrozen || !canAutoQris())) {
+                return fail(res, "Aktifkan QRIS otomatis di menu Pembayaran untuk memakai Model 3.", 409);
+            }
+            await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: { model } }, { upsert: true });
+            res.json({ model });
+        });
+    }));
+    r.get("/settings/storefront/banner", wrap(async (req, res) => {
+        if (!req.shopDiscord.hosted) return fail(res, "Banner ini khusus Bot GevraStore.", 403);
+        const storefront = await req.db.collection(storefrontCollection).findOne({ _id: req.shopGuildId });
+        res.json({ guildId: req.shopGuildId, url: storefront?.bannerUrl || "", defaultUrl: defaultBanner });
+    }));
+    r.put("/settings/storefront/banner", wrap(async (req, res) => {
+        if (!req.shopDiscord.hosted) return fail(res, "Banner ini khusus Bot GevraStore.", 403);
+        if (req.body?.guildId !== req.shopGuildId) return fail(res, "Server toko sudah berubah. Muat ulang halaman.", 409);
+        if (typeof req.body?.url !== "string" || req.body.url.length > 2048) return fail(res, "URL banner tidak valid.");
+        const url = req.body.url.trim();
+        if (url) {
+            let parsed;
+            try { parsed = new URL(url); } catch { return fail(res, "URL banner tidak valid."); }
+            if (parsed.protocol !== "https:" || parsed.username || parsed.password) return fail(res, "Gunakan URL gambar HTTPS publik.");
+        }
+        await req.db.collection(storefrontCollection).updateOne({ _id: req.shopGuildId },
+            url ? { $set: { bannerUrl: url } } : { $unset: { bannerUrl: "" } }, { upsert: !!url });
+        res.json({ url });
     }));
     r.get("/settings/storefront/emojis", wrap(async (req, res) => {
         const guildId = req.shopGuildId;

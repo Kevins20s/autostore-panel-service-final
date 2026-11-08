@@ -116,8 +116,10 @@ let logTimer = null;
 const rpText = (wl, rate) => (rate ? "Rp " + fmt(wl * rate) : "-");
 
 // ---------- Dashboard ----------
-// Grafik batang penjualan (WL per hari). SVG dibuat lewat DOM, tanpa library.
-function salesChart(daily, days) {
+// Grafik batang penjualan per hari.
+function salesChart(daily, days, currency) {
+    const amount = point => point[currency] || 0;
+    const money = value => currency === "idr" ? rpf(value) : fmt(value) + " WL";
     const ns = "http://www.w3.org/2000/svg", W = 640, H = 190, pl = 8, pr = 8, pt = 14, pb = 26;
     const byDate = new Map(daily.map((d) => [d.date, d]));
     const pts = [];
@@ -125,17 +127,17 @@ function salesChart(daily, days) {
         const key = new Date(Date.now() - i * 864e5 + 7 * 3600e3).toISOString().slice(0, 10);
         pts.push({ key, ...(byDate.get(key) || { orders: 0, qty: 0, wl: 0 }) });
     }
-    const max = Math.max(1, ...pts.map((x) => x.wl)), bw = (W - pl - pr) / pts.length;
+    const max = Math.max(1, ...pts.map(amount)), bw = (W - pl - pr) / pts.length;
     const detail = h("p", { class: "mut chart-detail", "aria-live": "polite" }, gsLanguage === "en" ? "Select a bar to see daily details." : "Pilih batang untuk melihat detail harian.");
     const svg = document.createElementNS(ns, "svg");
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "chart"); svg.setAttribute("role", "group");
-    svg.setAttribute("aria-label", `WL · ${days}`);
+    svg.setAttribute("aria-label", (currency === "idr" ? "Rp" : "WL") + " · " + days);
     const mk = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
     svg.append(mk("line", { x1: pl, x2: W - pr, y1: H - pb, y2: H - pb, class: "ch-axis" }));
     pts.forEach((x, i) => {
-        const bh = Math.max(2, (x.wl / max) * (H - pt - pb)), w = Math.min(64, bw * 0.72);
+        const bh = Math.max(2, (amount(x) / max) * (H - pt - pb)), w = Math.min(64, bw * 0.72);
         const bx = pl + i * bw + (bw - w) / 2;
-        const label = gsT`${x.key}: ${fmt(x.orders)} order, ${fmt(x.qty)} item, ${fmt(x.wl)} WL`;
+        const label = x.key + " · " + gsT`${fmt(x.orders)} pesanan, ${fmt(x.qty)} item` + " · " + money(amount(x));
         const g = mk("g", { tabindex: 0, role: "button", "aria-label": label, "aria-pressed": "false" });
         const select = () => {
             svg.querySelector('[aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
@@ -155,7 +157,7 @@ function salesChart(daily, days) {
         svg.append(g);
         if (i % Math.ceil(pts.length / 7) === 0 || i === pts.length - 1) svg.append(mk("text", { x: pl + i * bw + bw / 2, y: H - 8, "text-anchor": "middle", class: "ch-txt" }, x.key.slice(8) + "/" + x.key.slice(5, 7)));
     });
-    svg.append(mk("text", { x: pl, y: 10, class: "ch-txt" }, fmt(max) + " WL"));
+    svg.append(mk("text", { x: pl, y: 10, class: "ch-txt" }, money(max)));
     return h("div", {}, svg, detail);
 }
 
@@ -259,8 +261,11 @@ async function dashboard() {
     const period = h("select", { "aria-label": periodLabel }, ...[1, 3, 7, 14, 30].map(days =>
         h("option", { value: days }, gsT`${days} hari`)));
     period.value = "14";
+    const currency = h("select", { "aria-label": gsT("Mata uang penjualan") },
+        h("option", { value: "wl" }, "WL"), h("option", { value: "idr" }, "Rp"));
+    currency.value = st?.model === "model3" ? "idr" : "wl";
     const left = h("div"), right = h("div");
-    charts.append(card(h("div", { class: "row sp" }, h("h2", {}, gsLanguage === "en" ? "Sales (WL)" : "Penjualan (WL)"), period), left),
+    charts.append(card(h("div", { class: "row sp sales-controls" }, h("h2", {}, gsT("Penjualan")), h("div", { class: "row gap" }, currency, period)), left),
         card(h("h2", {}, gsLanguage === "en" ? "Sales by product" : "Penjualan per produk"), right));
     function draw(stats) {
         if (!stats) {
@@ -270,9 +275,10 @@ async function dashboard() {
             return;
         }
         const st = stats;
-        const tot = st.daily.reduce((a, d) => ({ orders: a.orders + d.orders, qty: a.qty + d.qty, wl: a.wl + d.wl }), { orders: 0, qty: 0, wl: 0 });
-        left.replaceChildren(h("p", { class: "mut" }, gsT`${fmt(tot.orders)} order, ${fmt(tot.qty)} item, ${fmt(tot.wl)} WL`),
-            salesChart(st.daily, st.days));
+        const tot = st.daily.reduce((a, d) => ({ orders: a.orders + d.orders, qty: a.qty + d.qty,
+            wl: a.wl + (d.wl || 0), idr: a.idr + (d.idr || 0) }), { orders: 0, qty: 0, wl: 0, idr: 0 });
+        left.replaceChildren(h("p", { class: "mut" }, gsT`${fmt(tot.orders)} pesanan, ${fmt(tot.qty)} item`, " · ", fmt(tot.wl), " WL · ", rpf(tot.idr)),
+            salesChart(st.daily, st.days, currency.value));
         right.replaceChildren(productSalesDonut(st.productSales || []));
         const top = st.top.length
             ? h("ol", { class: "rank" }, ...st.top.map((t) => h("li", {}, h("span", {}, h("b", {}, t.name), " ", h("span", { class: "mut" }, t.code)), h("span", { class: "mut" }, gsT`${fmt(t.qty)} terjual`))))
@@ -283,12 +289,14 @@ async function dashboard() {
         insights.replaceChildren(h("div", { class: "desk-insights" }, card(h("h2", {}, gsT("Produk terlaris")), top),
             card(h("div", { class: "row sp" }, h("h2", { class: "m0" }, gsT("Stok menipis")), st.low.length ? h("a", { href: "#/products" }, gsT("Isi stok")) : null), low)));
     }
-    draw(st);
+    let currentStats = st;
+    draw(currentStats);
+    currency.onchange = () => draw(currentStats);
     let request = 0;
     period.addEventListener("change", async () => {
         const version = ++request;
         const next = await api("GET", "/api/shop/stats?days=" + period.value).catch(() => null);
-        if (version === request) draw(next);
+        if (version === request) { currentStats = next; draw(next); }
     });
     return h("div", { class: "store-overview" },
         h("section", { class: "desk-header head" },
@@ -329,7 +337,7 @@ async function storeOrders() {
     more.onclick = guard(() => load(false));
     search.oninput = () => { clearTimeout(timer); timer = setTimeout(guard(() => { q = search.value.trim(); return load(true); }), 300); };
     await load(true);
-    return h("div", {}, head("Orders", gsT("Riwayat pembelian produk di Discord.")), sum, card(h("div", { class: "toolbar" }, search), host, h("div", { class: "row mt" }, more)));
+    return h("div", {}, head(gsT("Pesanan"), gsT("Riwayat pembelian produk di Discord.")), sum, card(h("div", { class: "toolbar" }, search), host, h("div", { class: "row mt" }, more)));
 }
 
 // ---------- Products ----------
@@ -573,16 +581,17 @@ async function users() {
     const box = h("div", {});
     async function load() {
         const r = await api("GET", `/api/shop/users?q=${encodeURIComponent(q)}&skip=${skip}`);
-        const body = h("tbody", {}, ...r.users.map((u) => h("tr", {}, h("td", { class: "mono" }, u.discordId, " ", copyBtn(u.discordId)), h("td", {}, u.growId), h("td", {}, fmt(u.balance) + " WL"), h("td", {}, fmt(u.deposit) + " WL"),
+        const body = h("tbody", {}, ...r.users.map((u) => h("tr", {}, h("td", { class: "mono" }, u.discordId, " ", copyBtn(u.discordId)), h("td", {}, u.growId), h("td", {}, fmt(u.balance) + " WL"),
+            h("td", {}, rpf(u.balanceRp)), h("td", {}, fmt(u.deposit) + " WL"),
             h("td", {}, h("div", { class: "row gap" },
-                h("button", { class: "sm", onclick: () => balanceModal(u, "add", load) }, gsT("Tambah")),
-                h("button", { class: "sm", onclick: () => balanceModal(u, "remove", load) }, gsT("Kurangi")))))));
-        box.replaceChildren(r.users.length ? h("div", { class: "tbl" }, h("table", {}, h("thead", {}, h("tr", {}, ...[gsT("ID Discord"), "GrowID", gsT("Saldo"), "Total deposit", gsT("Aksi")].map((x) => h("th", {}, x)))), body)) : empty("users", gsT("Tidak ada pengguna"), gsT("Coba kata kunci lain, atau pengguna belum terdaftar di bot toko.")),
+                h("button", { class: "sm", onclick: () => balanceModal(u, "add", load) }, gsT("Tambah WL")),
+                h("button", { class: "sm", onclick: () => balanceModal(u, "remove", load) }, gsT("Kurangi WL")))))));
+        box.replaceChildren(r.users.length ? h("div", { class: "tbl" }, h("table", {}, h("thead", {}, h("tr", {}, ...[gsT("ID Discord"), "GrowID", gsT("Saldo WL"), gsT("Saldo Rupiah"), gsT("Total deposit WL"), gsT("Aksi")].map((x) => h("th", {}, x)))), body)) : empty("users", gsT("Tidak ada pengguna"), gsT("Coba kata kunci lain, atau pengguna belum terdaftar di bot toko.")),
             h("div", { class: "row sp mt" }, h("span", { class: "mut" }, gsT`${fmt(r.total)} user`),
                 h("div", { class: "row gap" }, h("button", { class: "sm", disabled: skip === 0, onclick: () => { skip = Math.max(0, skip - 50); load(); } }, "‹"), h("button", { class: "sm", disabled: skip + 50 >= r.total, onclick: () => { skip += 50; load(); } }, "›"))));
     }
     search.onkeydown = (e) => { if (e.key === "Enter") { q = search.value.trim(); skip = 0; load().catch((x) => toast(x.message, false)); } };
-    wrap.append(head("Users", gsT("Saldo dan data user toko.")), card(search, box));
+    wrap.append(head(gsT("Pelanggan"), gsT("Lihat saldo WL dan Rupiah pelanggan serta riwayat total deposit WL.")), card(search, box));
     await load();
     return wrap;
 }
@@ -771,7 +780,7 @@ async function settings() {
     live.onchange = guard(async () => { await api("PUT", "/api/shop/settings/liveapi", { on: live.checked }); toast(gsT("Tersimpan.")); });
     const rate = h("input", { value: s.pricePerWL ?? "", inputmode: "decimal" });
     const webhook = h("input", { value: s.donationWebhookId || "", inputmode: "numeric" });
-    return h("div", {}, head("Settings", gsT("Pengaturan toko.")),
+    return h("div", {}, head(gsT("Pengaturan toko"), gsT("Atur maintenance, kurs WL, dan webhook donasi.")),
         card(h("h2", {}, "Maintenance"), h("p", { class: "mut" }, gsT("Saat aktif, pembelian di toko dinonaktifkan.")), h("label", { class: "sw" }, mt, gsT("Aktifkan mode maintenance"))),
         card(h("h2", {}, gsT("Kurs World Lock")), h("label", { class: "sw" }, live, gsT("Pakai harga live (gtid.pro), kurs manual jadi cadangan")),
             field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))),
@@ -1547,9 +1556,45 @@ async function storeCustomEmojis() {
 }
 
 // ---------- AutoStore: Custom Banner ----------
-function storeCustomBanner() {
+async function storeCustomBanner() {
+    if (me.hostedBot?.enabled) {
+        const endpoint = "/api/shop/settings/storefront/banner";
+        const settings = await api("GET", endpoint);
+        const input = h("input", { type: "url", autocomplete: "off", maxlength: 2048, value: settings.url, placeholder: "https://…" });
+        const preview = h("div", { class: "catalog-banner-preview" });
+        const message = h("p", { class: "mut", role: "status" });
+        const draw = () => {
+            const value = input.value.trim() || settings.defaultUrl;
+            let url;
+            try { url = new URL(value); } catch { url = null; }
+            preview.replaceChildren();
+            if (url?.protocol !== "https:" || url.username || url.password) return;
+            const img = h("img", { src: url.href, alt: gsT("Preview banner") });
+            img.onerror = () => { if (img.isConnected) preview.replaceChildren(h("p", { class: "mut" }, gsT("Gambar tidak dapat dimuat"))); };
+            preview.append(img);
+        };
+        input.oninput = draw;
+        const save = h("button", { type: "button", class: "pri" }, gsT("Simpan banner"));
+        const reset = h("button", { type: "button" }, gsT("Pulihkan banner bawaan"));
+        const persist = async url => {
+            save.disabled = reset.disabled = true;
+            try {
+                const result = await api("PUT", endpoint, { guildId: settings.guildId, url });
+                input.value = result.url;
+                draw();
+                message.textContent = gsT("Banner tersimpan. Katalog Discord berubah pada pembaruan berikutnya.");
+                toast(gsT("Tersimpan."));
+            } finally { save.disabled = reset.disabled = false; }
+        };
+        save.onclick = guard(() => persist(input.value.trim()));
+        reset.onclick = guard(() => persist(""));
+        draw();
+        return h("div", {}, head("Banner", gsT("Atur gambar katalog Discord untuk server ini.")),
+            card(field(gsT("URL gambar HTTPS"), input, gsT("Kosongkan untuk memakai banner bawaan.")), preview,
+                h("div", { class: "row gap mt" }, save, reset), message));
+    }
     return customEmojiEditor({
-        title: "Custom Banner",
+        title: "Banner",
         subtitle: gsT("Atur gambar banner yang tampil pada embed toko AutoStore. Gunakan URL gambar HTTPS yang bisa diakses publik."),
         fields: [["imageUrl", gsT("Banner utama")], ["imageUrl2", gsT("Banner realtime")]],
         endpoint: "/api/emojis",
@@ -1607,7 +1652,7 @@ async function customEmojiEditor({ title, subtitle, fields, endpoint, resetEndpo
                 throw new Error(gsT`Format ${key} terlalu panjang. Gunakan emoji Unicode atau format <:nama:id>.`);
             }
         }
-        const out = await api("PUT", endpoint, { emojis: current });
+        const out = await api("PUT", endpoint, { emojis: includeBanner ? Object.fromEntries(fields.map(([key]) => [key, current[key]])) : current });
         Object.assign(values, current);
         msg.textContent = out.restarted ? gsT("Tersimpan. Bot sedang restart dengan pengaturan baru.") : gsT("Tersimpan. Tekan Restart di menu Bot & Server agar perubahan diterapkan.");
         toast(includeBanner ? gsT("Custom banner tersimpan.") : gsT("Custom emoji tersimpan."));
@@ -1617,7 +1662,7 @@ async function customEmojiEditor({ title, subtitle, fields, endpoint, resetEndpo
         if (!(await gsConfirm(includeBanner ? gsT("Kembalikan URL banner ke default? Emoji lain tidak akan diubah.") : gsT("Kembalikan semua emoji ke default?"), { danger: true, okText: gsT("Kembalikan") }))) return;
         let out;
         if (includeBanner) {
-            const restored = { ...values };
+            const restored = {};
             for (const [key] of fields) restored[key] = defaults[key] || "";
             out = await api("PUT", endpoint, { emojis: restored });
             Object.assign(values, restored);
@@ -1636,8 +1681,7 @@ async function customEmojiEditor({ title, subtitle, fields, endpoint, resetEndpo
             h("div", { style: "flex:1;min-width:260px" }, h("h2", { style: "margin:0" }, includeBanner ? gsT("Gambar yang sedang digunakan") : gsT("Emoji yang sedang digunakan")), help,
                 h("div", { style: "margin-top:18px" }, select), h("div", { style: "margin-top:12px" }, input)),
             h("div", { style: "width:150px;text-align:center" }, previewBox, h("div", { style: "margin-top:10px" }, previewName), previewValue)),
-            h("div", { class: "row gap", style: "margin-top:18px" }, save, reset), msg),
-        includeBanner ? h("p", { class: "mut" }, gsT("Catatan: reset banner juga mengembalikan konfigurasi emoji ke default karena keduanya disimpan bersama dalam konfigurasi AutoStore.")) : null
+            h("div", { class: "row gap", style: "margin-top:18px" }, save, reset), msg)
     );
 }
 
@@ -1724,7 +1768,7 @@ async function tutorial() {
     update();
 
     return h("div", { class: "tutorial-page" },
-        head(gsT("Tutorial Setup"), guideText("Pilih cara menjalankan bot, lalu ikuti langkah untuk menyiapkan tokomu.", "Choose how to run your bot, then follow the steps to set up your store.")),
+        head(gsT("Panduan setup"), guideText("Pilih cara menjalankan bot, lalu ikuti langkah untuk menyiapkan tokomu.", "Choose how to run your bot, then follow the steps to set up your store.")),
         h("fieldset", { class: "tutorial-tabs" }, h("legend", {}, gsT("Pilih cara menjalankan bot")),
             h("label", {}, hostedRadio, h("span", {}, gsT("Pakai Bot GevraStore"))),
             h("label", {}, ownRadio, h("span", {}, gsT("Pakai bot sendiri")))),
@@ -1732,16 +1776,17 @@ async function tutorial() {
         card(h("h2", {}, guideText("Pastikan toko siap", "Check that your store is ready")),
             h("ul", { class: "tutorial-checks" },
                 h("li", {}, h("a", { href: "#/bot" }, gsT("Bot & server")), guideText("Periksa apakah bot sudah online.", "Check that the bot is online.")),
+                h("li", {}, h("a", { href: "#/storefront" }, gsT("Tampilan Toko")), guideText("Pilih dan terapkan model. Untuk Model 3, aktifkan QRIS otomatis di Pembayaran dan isi harga Rupiah di Produk & stok.", "Choose and apply a model. For Model 3, enable automatic QRIS in Payments and enter rupiah prices in Products & stock.")),
                 h("li", {}, h("a", { href: "#/products" }, gsT("Produk & stok")), guideText("Buat produk, atur harga, dan isi stok.", "Create a product, set its price, and add stock.")),
-                h("li", {}, h("a", { href: "#/commands" }, "Slash Command List"), guideText("Gunakan /setchannel untuk mengatur channel testimoni dan log donasi sebelum jualan.", "Use /setchannel to configure the testimonial and donation log channels before selling.")),
+                h("li", {}, h("a", { href: "#/commands" }, gsT("Perintah Slash")), guideText("Gunakan /setchannel untuk mengatur channel testimoni dan log donasi sebelum jualan.", "Use /setchannel to configure the testimonial and donation log channels before selling.")),
                 h("li", {}, h("a", { href: "#/settings" }, gsT("Pengaturan toko")), guideText("Cek kurs WL dan pastikan mode maintenance sudah dimatikan.", "Check the WL rate and make sure maintenance mode is off.")),
                 h("li", {}, h("a", { href: "#/sales" }, gsT("Pesanan")), guideText("Setelah pembelian pertama, cek pesanan tercatat dan produk terkirim ke pembeli.", "After the first purchase, check that the order is recorded and the product reaches the buyer.")))));
 }
 async function subscription() {
     me = await api("GET", "/api/me");
     const row = (a, b) => h("tr", {}, h("td", { class: "mut" }, a), h("td", {}, b));
-    return h("div", {}, head("Subscription", gsT("Status key kamu.")),
-        card(h("table", {}, h("tbody", {}, row(gsT("Pemilik"), me.buyer), row("Key", me.keyPrefix + "…"),
+    return h("div", {}, head(gsT("Langganan"), gsT("Status lisensi dan masa aktif tokomu.")),
+        card(h("table", { class: "subscription-table" }, h("tbody", {}, row(gsT("Pemilik"), me.buyer), row(gsT("Key lisensi"), me.keyPrefix + "…"),
             row("Status", me.revoked ? gsT("Dicabut") : me.valid ? gsT("Aktif") : gsT("Habis")),
             me.lifetime ? row(gsT("Masa aktif"), gsT("Seumur hidup")) : row(gsT("Berlaku sampai"), new Date(me.expiresAt).toLocaleString(gsLocale)),
             me.lifetime ? null : row(gsT("Sisa"), me.daysLeft + gsT(" hari"))))),
@@ -1750,30 +1795,43 @@ async function subscription() {
 }
 
 // ---------- Pembayaran: QRIS otomatis, saldo, rekening, penarikan ----------
-const TX_STATUS = { pending: [gsT("Menunggu bayar"), "no"], paid: [gsT("Berhasil"), "ok"], expired: [gsT("Kedaluwarsa"), "no"], mismatch: [gsT("Perlu dicek"), "no"] };
+const TX_STATUS = { pending: [gsT("Menunggu bayar"), "no"], paid: [gsT("Berhasil"), "ok"], expired: [gsT("Kedaluwarsa"), "no"],
+    cancelled: [gsT("Dibatalkan"), "no"], mismatch: [gsT("Perlu dicek"), "no"] };
 const WD_STATUS = { pending: [gsT("Diproses"), "no"], paid: [gsT("Selesai"), "ok"], rejected: [gsT("Ditolak"), "no"] };
 const rpf = (n) => "Rp " + fmt(n || 0);
 const when = (t) => (t ? new Date(t).toLocaleString(gsLocale) : "-");
 const pillOf = (map, k) => { const [label, cls] = map[k] || [k, "no"]; return h("span", { class: "pill " + cls }, label); };
 
 async function payments() {
-    const s = await api("GET", "/api/wallet/summary");
+    const [s, settings] = await Promise.all([
+        api("GET", "/api/wallet/summary"), api("GET", "/api/shop/settings").catch(() => null),
+    ]);
+    const model = settings?.storefront?.model;
+    const direct = model === "model3";
     if (!s.enabled) return h("div", {}, head(gsT("Pembayaran"), gsT("QRIS otomatis dan saldo toko kamu.")),
-        card(empty("box", gsT("Belum diaktifkan"), gsT("Penjual belum mengaktifkan QRIS otomatis. Toko kamu tetap memakai QRIS manual lewat /setqris."))));
+        card(empty("box", gsT("Belum diaktifkan"), direct ? gsT("Model 3 membutuhkan QRIS otomatis. Hubungi penjual untuk mengaktifkannya.")
+            : gsT("Penjual belum mengaktifkan QRIS otomatis. Toko kamu tetap memakai QRIS manual lewat /setqris."))));
     const [tx, wd] = await Promise.all([api("GET", "/api/wallet/transactions?limit=50"), api("GET", "/api/wallet/withdrawals")]);
     const again = () => render();
     const stat = (l, v, cls) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", { class: cls || "" }, v));
 
     const setMode = (mode) => guard(async () => { await api("PUT", "/api/wallet/mode", { mode }); toast(mode === "auto" ? gsT("QRIS otomatis aktif.") : gsT("Kembali ke QRIS manual.")); again(); });
-    const modeCard = card(h("div", { class: "row sp" }, h("div", {}, h("h2", { class: "m0" }, gsT("Metode deposit")),
-        h("p", { class: "mut" }, gsT("Pilih bagaimana user tokomu membayar saat menekan Deposit QRIS di Discord."))),
+    const modeCard = card(h("div", { class: "row sp" }, h("div", {}, h("h2", { class: "m0" }, direct ? gsT("Pembayaran produk") : gsT("Metode deposit")),
+        h("p", { class: "mut" }, direct ? gsT("Model 3 memakai QRIS otomatis saat pembeli menekan Buy.")
+            : gsT("Pilih metode QRIS untuk pelanggan di Discord."))),
         h("span", { class: "pill " + (s.mode === "auto" ? "ok" : "no") }, s.mode === "auto" ? gsT("Otomatis aktif") : gsT("Manual aktif"))),
         h("div", { class: "seg mt" },
-            h("button", { class: s.mode === "manual" ? "pri" : "", onclick: s.mode === "manual" ? undefined : setMode("manual") }, gsT("QRIS Manual (/setqris)")),
+            h("button", { class: s.mode === "manual" ? "pri" : "", disabled: direct,
+                onclick: s.mode === "manual" || direct ? undefined : setMode("manual") }, gsT("QRIS Manual (/setqris)")),
             h("button", { class: s.mode === "auto" ? "pri" : "", disabled: !s.autoReady && s.mode !== "auto", onclick: s.mode === "auto" ? undefined : setMode("auto") }, gsT("QRIS Otomatis"))),
-        h("p", { class: "mut mt" }, s.mode === "auto"
-            ? gsT("User membayar lewat QR dinamis, saldo WL mereka masuk sendiri beberapa saat setelah bayar. Uang masuk ke saldo di bawah ini.")
-            : gsT("User scan QRIS statis milikmu, lalu admin toko menekan Success/Cancel di Discord. Uang langsung ke rekeningmu sendiri.")),
+        h("p", { class: "mut mt" }, direct
+            ? s.mode === "auto" ? gsT("Pembeli menerima file pesanan setelah pembayaran terkonfirmasi. Hasil penjualan masuk ke saldo toko.")
+                : gsT("Aktifkan QRIS otomatis agar pembeli bisa menggunakan tombol Buy.")
+            : s.mode === "auto" ? model === "model1"
+                ? gsT("Top up QRIS menambah saldo Rupiah pelanggan. Pelanggan bisa mengonversinya ke WL di Discord.")
+                : model ? gsT("Deposit QRIS menambah saldo WL pelanggan. Dana pembayaran masuk ke saldo toko.")
+                    : gsT("Pembayaran dikonfirmasi otomatis. Dana pembayaran masuk ke saldo toko.")
+                : gsT("Pelanggan membayar lewat QRIS statis. Admin toko mengonfirmasi pembayaran di Discord.")),
         !s.autoReady ? h("p", { class: "mut" }, gsT("QRIS otomatis belum tersedia dari penjual.")) : null);
 
     const withdrawModal = () => {
@@ -1805,7 +1863,7 @@ async function payments() {
     const txRows = tx.transactions.map((t) => h("tr", {}, h("td", {}, h("div", { class: "mono" }, t.orderId),
         t.productCode ? h("div", { class: "mut" }, t.productCode) : null), h("td", {}, t.discordId || "-"), h("td", {}, rpf(t.amount)),
         h("td", {}, t.status === "paid" ? rpf(t.net) : "-"), h("td", {}, pillOf(TX_STATUS, t.status)), h("td", {}, when(t.paidAt || t.createdAt))));
-    const txCard = card(h("h2", {}, gsT("Transaksi QRIS")), h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ...["Order", gsT("User Discord"), gsT("Nominal"), gsT("Masuk saldo"), "Status", gsT("Waktu")].map((x) => h("th", {}, x)))),
+    const txCard = card(h("h2", {}, gsT("Transaksi QRIS")), h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, ...[gsT("ID transaksi"), gsT("ID Discord"), gsT("Nominal"), gsT("Masuk saldo toko"), "Status", gsT("Waktu")].map((x) => h("th", {}, x)))),
         h("tbody", {}, ...(txRows.length ? txRows : [h("tr", {}, h("td", { colspan: "6" }, empty("clipboard", gsT("Belum ada transaksi"), gsT("Transaksi QRIS otomatis dari user tokomu akan tampil di sini."))))])))));
 
     const wdRows = wd.withdrawals.map((w) => h("tr", {}, h("td", {}, when(w.createdAt)), h("td", {}, rpf(w.amount)), h("td", {}, rpf(w.payout)),
@@ -1829,7 +1887,7 @@ const STORE_NAV = [
         ["bot", "Bot & server", "server"], ["storefront", gsT("Tampilan Toko"), "monitor"], ["settings", gsT("Pengaturan toko"), "settings"],
         ["emojis", "Emoji", "palette"], ["banner", "Banner", "image"]
     ]],
-    [gsT("Panduan"), [["tutorial", gsT("Panduan setup"), "book"], ["commands", "Slash Command List", "terminal"],
+    [gsT("Panduan"), [["tutorial", gsT("Panduan setup"), "book"], ["commands", gsT("Perintah Slash"), "terminal"],
         ["deposit-script", gsT("Script Deposit"), "script"]]],
     [gsT("Akun"), [["subscription", gsT("Langganan"), "credit-card"]]]
 ];
@@ -1891,7 +1949,9 @@ function drawNav(cur) {
         ...links.map(([k, label, icon]) => h("a", { class: k === cur ? "on" : "", href: "#/" + k, "aria-current": k === cur ? "page" : null },
             navIcon(icon), h("span", { class: "nav-label" }, label))))));
 }
+let renderVersion = 0;
 async function render() {
+    const version = ++renderVersion;
     const defaultView = me?.type === "service" ? "service" : "dashboard";
     let name = VIEWS[location.hash.slice(2)] ? location.hash.slice(2) : defaultView;
     if (me?.type === "service" && !["service", "service-settings", "service-emojis", "orders", "bot", "subscription"].includes(name)) name = "service";
@@ -1901,8 +1961,13 @@ async function render() {
     if (name !== "bot") clearInterval(logTimer);
     const view = $("view");
     view.replaceChildren(skeleton());
-    try { view.replaceChildren(await VIEWS[name]()); }
+    try {
+        const content = await VIEWS[name]();
+        if (version !== renderVersion) return;
+        view.replaceChildren(content);
+    }
     catch (e) {
+        if (version !== renderVersion) return;
         if (e.status === 401) return showLogin();
         view.replaceChildren(card(h("h2", {}, gsT("Tidak bisa membuka halaman ini")), h("p", {}, e.message),
             e.status === 409 || e.status === 502 ? h("button", { class: "pri", onclick: () => (location.hash = "#/bot") }, gsT("Buka Bot & Server")) : null));

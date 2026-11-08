@@ -110,12 +110,13 @@ function buildStatusJSON(is_online)
         .. EmojiCrown .. ' STATUS INFORMATION ' .. EmojiCrown
         .. '","description":"' .. desc
         .. '","color":' .. color
-        .. ',"image":{"url":"' .. BannerWebhook .. '"}'
+        .. (BannerWebhook ~= "" and ',"image":{"url":"' .. BannerWebhook .. '"}' or "")
         .. ',"footer":{"text":"IF THE BOT IS OFFLINE, SEND SS TO TICKET."}'
         .. '}]}'
 end
 
 function sendStatus(is_online)
+    if WebhookStatus == "" then return end
     local json = buildStatusJSON(is_online)
     if status_msg_id == nil then
         local c = HttpClient.new()
@@ -177,7 +178,7 @@ function OnVariantList(variant, netid)
         if (is_dona or is_vend) and is_lock and not is_cp then
             local webhook = Webhook.new(WebhookDonation)
             webhook.username   = UsernameWebhook
-            webhook.avatar_url = AvatarWebhook
+            if AvatarWebhook ~= "" then webhook.avatar_url = AvatarWebhook end
             webhook.embed1.use   = true
             webhook.embed1.color = 0xFFEEEE
 
@@ -223,18 +224,20 @@ end
 reconnect(WorldDonation, "")
 
 -- Kirim webhook started
-local c = HttpClient.new()
-c.url = WebhookStarted .. "?wait=true"
-c.method = Method.post
-c.headers["Content-Type"] = "application/json"
-c.content = buildStatusJSON(true)
-c:request()
+if WebhookStarted ~= "" then
+    local c = HttpClient.new()
+    c.url = WebhookStarted .. "?wait=true"
+    c.method = Method.post
+    c.headers["Content-Type"] = "application/json"
+    c.content = buildStatusJSON(true)
+    c:request()
+end
 
 -- Kirim status awal
 sendStatus(true)
 
 -- Thread monitor offline (HTTP langsung, tidak perlu event Growtopia)
-runThread(function()
+if WebhookStatus ~= "" then runThread(function()
     local was_online = true
     while true do
         local is_online = isOnline()
@@ -251,7 +254,7 @@ runThread(function()
 
         sleep(3000)
     end
-end)
+end) end
 
 function OnStatusChange(variant, netid)
     local is_online = isOnline()

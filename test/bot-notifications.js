@@ -25,6 +25,9 @@ function load(file, imports, extra = {}) {
 (async () => {
     let balance = 30, stock = true, sold = 0, orderCount = 0, testimonial;
     const emoji = { WL: "WL", ARROW: ">", Benar: "OK", CROWN: "*", Dolar: "$", BALANCE: "BAL", Buy: "BUY", Warning: "!", COLOR: 1, imageUrl: "https://example.com/image.png" };
+    const storefront = { rupiahCredit: "idr", models: { model1: "model1", classic: "classic" }, componentEmoji: value => ({ name: value }),
+        interactionEmojis: async () => ({ wl: emoji.WL, arrow: emoji.ARROW, success: emoji.Benar, crown: emoji.CROWN, price: emoji.Dolar,
+            balanceMark: emoji.BALANCE, sold: emoji.Buy, warning: emoji.Warning, paymentCancelButton: "❌", paymentLog: "📥", paymentPending: "⏳" }) };
     const product = { _id: "p", code: "TEST", name: "Test Product", type: "yes" };
     const stockQuery = () => ({ sort: () => ({ limit: () => ({ lean: async () => stock ? [{ _id: "s", data: "SECRET" }] : [] }) }) });
     const file = "bot/src/events/client/interactionBuy.js";
@@ -33,6 +36,7 @@ function load(file, imports, extra = {}) {
         mongoose: { connection: { transaction: fn => fn({}) } },
         "../../config/config.json": { Owner: "owner", Admin: [] },
         "../../config/configemoji.json": emoji,
+        "../../config/storefront": storefront,
         "../../Schema/balance.js": { findOneAndUpdate: async (_q, update) => { balance += update.$inc.Balance; return { Balance: balance }; } },
         "../../Schema/shop.js": { find: stockQuery, deleteMany: async () => { stock = false; return { deletedCount: 1 }; } },
         "../../Schema/list.js": { findOne: async () => product, updateOne: async () => { sold++; } },
@@ -72,10 +76,13 @@ function load(file, imports, extra = {}) {
         "../Schema/qris": model,
         "discord.js": { EmbedBuilder: Embed },
         "../config/configemoji.json": emoji,
+        "../config/storefront": storefront,
         "./depositWatcher": {
             sendDepositLog: async () => { throw Error("existing log should be reused"); },
             updateDepositLog: async (_doc, status) => { assert.equal(status, "SUCCESS"); notifications++; return true; },
             fetchDmMessage: async () => ({ edit: async () => { updates++; } }),
+            depositEmojis: storefront.interactionEmojis,
+            formatDepositCredit: tx => tx.wlAmount + " WL",
         },
     }, { fetch: async () => ({ ok: true, json: async () => ({ amount: 1000, wl: 114, credited: paid }) }), AbortSignal });
     await syncHostedDepositLogs();
@@ -116,6 +123,8 @@ function load(file, imports, extra = {}) {
         "../Schema/balance.js": {},
         "../Schema/SettingChannel.js": { findOne: () => Promise.resolve({ ChannelDonation: "channel" }) },
         "../config/configemoji.json": emoji,
+        "../config/config.json": { serverId: "" },
+        "../config/storefront": storefront,
     });
     await Promise.all([sendDepositLog(doc), sendDepositLog(doc)]);
     assert.equal(sends, 1);

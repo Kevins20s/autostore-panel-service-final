@@ -128,7 +128,7 @@ function commandGuide() {
     renderCommands();
     return h("div", { class: "guide-page" },
         h("section", { class: "card guide-intro" },
-            h("h1", {}, "Slash Command List"),
+            h("h1", {}, guideText("Perintah Slash", "Slash Commands")),
             h("p", { class: "guide-intro-description" }, guideText("Cari command berdasarkan fungsi, lalu buka contoh untuk melihat cara mengisi kolomnya di Discord.", "Find a command by function, then open its examples to see how to fill in the fields in Discord.")),
             h("div", { class: "row sp gap guide-toolbar" }, search, count),
             h("p", { class: "guide-access mut" },
@@ -163,12 +163,16 @@ async function depositScript() {
     const copy = h("button", { type: "button", class: "pri", disabled: true, onclick: () => copyText(preview.value) }, guideText("Salin script Lua", "Copy Lua script"));
     const form = h("form", { class: "deposit-form", autocomplete: "off" });
     const labels = ["Deposit world", "Donation webhook", "Status webhook", "Startup webhook", "Webhook name", "Banner URL", "Avatar URL"];
+    const extras = h("details", { class: "guide-details" },
+        h("summary", {}, guideText("Pengaturan lanjutan (opsional)", "Advanced settings (optional)")));
     for (const [index, [key, label, placeholder, type, pattern]] of fields.entries()) {
-        const input = h("input", { name: key, type, placeholder, required: true, autocomplete: "off", maxlength: key === "UsernameWebhook" ? 80 : 2048 });
+        const required = index < 2;
+        const input = h("input", { name: key, type, placeholder, required, autocomplete: "off", maxlength: key === "UsernameWebhook" ? 80 : 2048 });
         if (pattern) input.pattern = pattern;
         input.addEventListener("input", () => { preview.value = template; copy.disabled = true; message.textContent = ""; });
-        form.append(field(guideText(label, labels[index]), input));
+        (required ? form : extras).append(field(guideText(label, labels[index]), input));
     }
+    form.append(extras);
     form.append(h("div", { class: "row gap mt" }, h("button", { type: "submit" }, guideText("Buat script", "Generate script")), copy), message);
     form.addEventListener("submit", event => {
         event.preventDefault();
@@ -176,13 +180,15 @@ async function depositScript() {
         const hook = /^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/;
         const imageUrl = /^https:\/\/[^"\\\s]+$/i;
         if (!/^[A-Za-z0-9]{1,24}$/.test(values.WorldDonation) ||
-            !["WebhookDonation", "WebhookStatus", "WebhookStarted"].every(key => hook.test(values[key])) ||
-            !values.UsernameWebhook || /["\\\x00-\x1f]/.test(values.UsernameWebhook) ||
-            !["BannerWebhook", "AvatarWebhook"].every(key => imageUrl.test(values[key]))) {
+            !hook.test(values.WebhookDonation) ||
+            !["WebhookStatus", "WebhookStarted"].every(key => !values[key] || hook.test(values[key])) ||
+            /["\\\x00-\x1f]/.test(values.UsernameWebhook) ||
+            !["BannerWebhook", "AvatarWebhook"].every(key => !values[key] || imageUrl.test(values[key]))) {
             message.textContent = guideText("Periksa nama world, URL webhook Discord, nama webhook, dan URL gambar HTTPS.", "Check the world name, Discord webhook URLs, webhook name, and HTTPS image URLs.");
             return;
         }
         values.WorldDonation = values.WorldDonation.toUpperCase();
+        values.UsernameWebhook ||= "AutoStore Deposit";
         preview.value = luaDepositScript(template, values);
         copy.disabled = false;
         message.textContent = guideText("Script siap disalin.", "Your script is ready to copy.");
@@ -191,6 +197,8 @@ async function depositScript() {
         head(guideText("Script Deposit", "Deposit Script"), guideText("Isi konfigurasi, buat script Lua, lalu salin ke runtime bot depositmu.", "Fill in the configuration, generate the Lua script, then copy it to your deposit bot runtime.")),
         h("div", { class: "deposit-layout" },
             card(h("h2", {}, guideText("Konfigurasi", "Configuration")),
+                h("p", { class: "mut" }, guideText("Cukup isi nama world dan URL webhook donasi. Webhook status, startup, dan gambar bisa ditambahkan bila diperlukan.",
+                    "Enter the world name and donation webhook URL. Status and startup webhooks and images are optional.")),
                 h("p", { class: "mut" }, guideText("Webhook diproses di browser dan tidak disimpan panel. Jaga kerahasiaan script hasil salinan.", "Webhook values are processed in your browser. Keep the generated script private.")),
                 h("p", { class: "mut" }, guideText("Atur channel donasi lewat /setchannel. Di Bot GevraStore, simpan ID angka webhook donasi di Pengaturan toko pada panel.", "Set the donation channel via /setchannel. For hosted GevraStore, save the donation webhook's numeric ID in the panel Store settings.")), form),
             card(h("h2", {}, guideText("Pratinjau Lua", "Lua preview")), preview)));

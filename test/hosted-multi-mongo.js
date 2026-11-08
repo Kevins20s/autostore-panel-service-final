@@ -204,10 +204,10 @@ async function main() {
     try {
         await client.connect();
         const origin = "http://127.0.0.1:" + http.address().port;
-        const request = async (i, method, endpoint, body) => {
+        const request = async (i, method, endpoint, body, status = 200) => {
             const r = await fetch(origin + endpoint, { method, headers: { "Content-Type": "application/json", "X-Test-License": fixtures[i].id },
                 body: body && JSON.stringify(body) });
-            assert.equal(r.status, 200, endpoint);
+            assert.equal(r.status, status, endpoint);
             return r.json();
         };
         const firstReads = await Promise.all(Array.from({ length: 40 }, (_, i) =>
@@ -275,11 +275,34 @@ async function main() {
             assert.equal(await db.collection("worlddepositreceipts").countDocuments(), 1);
         }));
         console.log("OK: two isolated stores; concurrent QRIS and conversion, interrupted credit retry, stock, world deposit and reports");
+        const bannerRoute = "/shop/settings/storefront/banner";
+        assert.equal((await request(0, "PUT", bannerRoute, { guildId: tenants[0].guildId, url: "https://example.com/catalog-a.png" })).url,
+            "https://example.com/catalog-a.png");
+        await request(0, "PUT", bannerRoute, { guildId: tenants[1].guildId, url: "" }, 409);
+        await request(0, "PUT", bannerRoute, { guildId: tenants[0].guildId, url: "https://name:secret@example.com/private.png" }, 400);
+        assert.equal((await request(0, "GET", bannerRoute)).url, "https://example.com/catalog-a.png");
+        assert.equal((await request(1, "GET", bannerRoute)).url, "");
+        await request(0, "PUT", bannerRoute, { guildId: tenants[0].guildId, url: "" });
+        assert.equal((await request(0, "GET", bannerRoute)).url, "");
+        assert.equal((await request(0, "GET", "/shop/settings")).storefront.model, "model1");
+        assert.equal((await request(0, "GET", "/shop/users")).users[0].balanceRp, 70);
+        const mode = "/api/wallet/mode";
+        const storefront = "/shop/settings/storefront";
+        const model3 = { guildId: tenants[0].guildId, model: "model3" };
+        await request(0, "PUT", mode, { mode: "manual" });
+        await request(0, "PUT", storefront, model3, 409);
+        await request(0, "PUT", mode, { mode: "auto" });
+        const raw = (endpoint, body) => fetch(origin + endpoint, { method: "PUT",
+            headers: { "Content-Type": "application/json", "X-Test-License": fixtures[0].id }, body: JSON.stringify(body) });
+        const competingSettings = await Promise.all([raw(storefront, model3), raw(mode, { mode: "manual" })]);
+        assert.deepEqual(competingSettings.map(response => response.status).sort(), [200, 409]);
+        await request(0, "PUT", mode, { mode: "auto" });
         await Promise.all(tenants.map(async (tenant, i) => {
             await request(i, "PUT", "/shop/settings/storefront", { guildId: tenant.guildId, model: "model3" });
             await request(i, "PUT", "/shop/products/" + code, { name: "Store " + i, role, type: "yes", description: "Full source", priceIdr: 12000 + i });
             await request(i, "POST", "/shop/products/" + code + "/stock", { text: i === 0 ? "QR-STOCK-0\nQR-STOCK-0B" : "QR-STOCK-1" });
         }));
+        await request(0, "PUT", mode, { mode: "manual" }, 409);
         const internal = (tenant, route, body) => fetch(origin + "/internal/wallet/" + route, {
             method: "POST", headers: { "Content-Type": "application/json", "X-License-Id": tenant.licenseId,
                 "X-Hosted-Guild": tenant.guildId, Authorization: "Bearer " + hostedWalletToken(tenant.licenseId, tenant.guildId) },
@@ -319,6 +342,8 @@ async function main() {
             assert.equal(orderPage.total, 2);
             assert.equal(orderPage.idr, order.amount);
             assert.equal(orderPage.wl, 10);
+            const stats = await request(i, "GET", "/shop/stats?days=1");
+            assert.equal(stats.daily[0].idr, order.amount);
             assert.equal(orderPage.qty, order.quantity + 1);
             assert.equal((await (await claim(tenants[i], order)).json()).data, files[i]);
         }

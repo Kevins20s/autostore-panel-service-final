@@ -610,7 +610,7 @@ function storefrontSettings(storefront, productQris) {
                 "🛒 Click here to select menu", h("span", { "aria-hidden": "true" }, "⌄")) : null,
             qris ? null : h("div", { class: "storefront-preview-select" },
                 "🛒 Select product to buy...", h("span", { "aria-hidden": "true" }, "⌄")),
-            menuDropdown ? null : h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
+            menuDropdown || qris ? null : h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
                 h("span", { class: compact || index === 3 ? "green" : null }, label))),
             compact ? h("details", { class: "storefront-profile-preview" },
                 h("summary", {}, text("Lihat pratinjau My Profile", "Preview My Profile")),
@@ -1218,7 +1218,6 @@ MODEL_EMOJI_GROUPS.model2 = [
 ];
 MODEL_EMOJI_GROUPS.model3 = [
     ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Tombol Buy", "Buy button"]]],
-    ["Menu toko", "Store menu", STORE_MENU_EMOJIS.map(([key, label]) => [key, label, label])],
     ...MODEL_EMOJI_GROUPS.classic.slice(1),
 ];
 

@@ -4,7 +4,6 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags
     TextInputBuilder, TextInputStyle, escapeMarkdown } = require("discord.js");
 const { serverId } = require("../../config/config.json");
 const { qrisBuyPrefix, qrisSelectId, qrisPagePrefix } = require("../../config/storefront");
-const { openQrisCatalogPage } = require("../../slashCommands/information/startrealtime");
 const { requestAutoDeposit, claimProductOrder, PanelError } = require("../../utils/panelWallet");
 const client = require("../../index");
 
@@ -14,7 +13,9 @@ const quantityPrefix = "storefront_qris_qty:";
 async function handleProductQris(interaction) {
     if (!process.env.HOSTED_PILOT_BINDING || interaction.guildId !== serverId) return;
     const id = interaction.customId || "";
-    if (interaction.isButton() && id.startsWith(qrisPagePrefix)) return openQrisCatalogPage(interaction);
+    if (interaction.isButton() && id.startsWith(qrisPagePrefix)) {
+        return interaction.reply({ content: "Lihat kartu produk lanjutan di channel katalog.", flags: MessageFlags.Ephemeral });
+    }
     const buy = interaction.isButton() && id.startsWith(qrisBuyPrefix);
     const select = interaction.isStringSelectMenu() && id === qrisSelectId;
     const claim = interaction.isButton() && id.startsWith(claimPrefix);

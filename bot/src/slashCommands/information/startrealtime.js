@@ -25,7 +25,7 @@ let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
 const { imageUrl2, COLOR } = require("../../config/configemoji.json");
-const { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, emojiFields,
+const { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, emojiFields,
     resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
 
 const jobs = new Map();
@@ -40,7 +40,8 @@ async function catalogMessage(client, guildId, target) {
 
 function scheduleCatalog(client, guildId, kategori, target, delay) {
     const key = guildId + ":" + kategori;
-    clearTimeout(jobs.get(key)?.timer);
+    const previous = jobs.get(key);
+    clearTimeout(previous?.timer);
     const job = {};
     jobs.set(key, job);
     async function refresh() {
@@ -52,17 +53,17 @@ function scheduleCatalog(client, guildId, kategori, target, delay) {
                 return;
             }
             const message = await catalogMessage(client, guildId, target);
-            if (message && jobs.get(key) === job) await renderCatalog(message, guildId, kategori);
+            if (message && jobs.get(key) === job) await renderCatalog(message, guildId, current);
         } catch (error) {
             console.error("[STOREFRONT] Gagal memperbarui katalog:", error.code || error.name);
         } finally {
             if (jobs.get(key) === job) {
-                job.timer = setTimeout(refresh, delay * 1000);
+                job.timer = setTimeout(() => { job.refresh = refresh(); }, delay * 1000);
                 job.timer.unref();
             }
         }
     }
-    void refresh();
+    job.refresh = Promise.resolve(previous?.refresh).then(refresh);
 }
 
 async function resumeRealtime(client) {
@@ -98,13 +99,40 @@ const banner = () => new MediaGalleryBuilder().addItems({
     media: { url: /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//.test(imageUrl2) ? imageUrl2.split("?")[0] : imageUrl2 },
 });
 
-async function editModernCatalog(message, container, rows) {
+async function editModernCatalog(message, container, rows = []) {
     await message.edit({
         flags: message.flags.bitfield | MessageFlags.IsComponentsV2,
         content: null, embeds: [],
         components: [container, ...rows],
         allowedMentions: { parse: [] },
     });
+}
+
+async function extraCatalogMessage(client, guildId, ref) {
+    try {
+        const channel = await client.channels.fetch(ref.channelId);
+        if (channel?.guildId !== guildId || !channel.messages) return null;
+        const message = await channel.messages.fetch(ref.messageId);
+        return message?.author?.id === client.user.id ? message : null;
+    } catch (error) {
+        if (error.code === 10003 || error.code === 10008) return null;
+        throw error;
+    }
+}
+
+async function clearExtraCatalogs(message, target, keep = new Set(), strict = false) {
+    const current = { _id: target._id, messageId: target.messageId };
+    for (const ref of target.extraCatalogMessages || []) {
+        if (keep.has(ref.messageId)) continue;
+        try {
+            const extra = await extraCatalogMessage(message.client, message.guildId, ref);
+            if (extra) await extra.delete().catch(error => { if (error.code !== 10008) throw error; });
+            await RealtimeChannel.updateOne(current, { $pull: { extraCatalogMessages: { messageId: ref.messageId } } });
+        } catch (error) {
+            if (strict) throw error;
+            console.error("[STOREFRONT] Gagal merapikan kartu tambahan:", error.code || error.name);
+        }
+    }
 }
 
 function productCards({ title, header, footer, products, maintenance, emojis }) {
@@ -161,20 +189,19 @@ function storeMenuRow(maintenance, emojis) {
     return new ActionRowBuilder().addComponents(select);
 }
 
-function classicActionRow(maintenance, emojis, classic = true) {
+function classicActionRow(maintenance, emojis) {
     const actions = [
         ["growid23", "Set GrowID", "growIdButton", ButtonStyle.Secondary],
         ["balance1", "Balance", "balanceButton", ButtonStyle.Secondary],
         ["deposit", "Deposit", "depositButton", ButtonStyle.Secondary],
         ["depositqris_btn", "Deposit QRIS", "qris", ButtonStyle.Success],
     ];
-    const showMaintenance = maintenance && classic;
-    return new ActionRowBuilder().addComponents((showMaintenance ? actions.slice(0, 3) : actions)
+    return new ActionRowBuilder().addComponents((maintenance ? actions.slice(0, 3) : actions)
         .map(([id, label, emoji, style]) => new ButtonBuilder().setCustomId(id).setStyle(style)
-            .setLabel(showMaintenance ? "Maintenance" : label).setEmoji(componentEmoji(emojis[emoji])).setDisabled(maintenance)));
+            .setLabel(maintenance ? "Maintenance" : label).setEmoji(componentEmoji(emojis[emoji])).setDisabled(maintenance)));
 }
 
-const pageSize = 7;
+const pageSize = 8;
 const catalogTitle = kategori => kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
 const sellableStock = code => ({ code, data: { $type: "string", $ne: "" } });
 
@@ -184,53 +211,53 @@ function rateText({ pricePerWL, pricePerDL }, emojis) {
         : `${emojis.arrow} Kurs: Harga belum tersedia`;
 }
 
-async function qrisCatalog(kategori, messageId, requestedPage, maintenance, emojis, isPublic) {
+async function publishQrisCatalog(message, target, maintenance, emojis) {
+    const { kategori } = target;
     const filter = kategori === "ALL" ? {} : { kategori };
-    const [total, rates] = await Promise.all([list.countDocuments(filter), getEffectiveWLPrice()]);
-    const pages = Math.max(1, Math.ceil(total / pageSize));
-    const page = Math.min(requestedPage, pages);
-    const items = await list.find(filter).sort({ _id: 1 }).skip((page - 1) * pageSize).limit(pageSize).lean();
-    const products = await Promise.all(items.map(async ({ name, code, description, priceIdr, sold }) => ({
-        name, code, description, sold: sold ?? 0, stock: await shop.countDocuments(sellableStock(code)),
-        priceIdr: Number.isSafeInteger(priceIdr) && priceIdr >= 1000 && priceIdr <= 1000000 ? priceIdr : null,
-    })));
+    const [items, rates] = await Promise.all([list.find(filter).sort({ _id: 1 }).lean(), getEffectiveWLPrice()]);
+    const pages = Math.max(1, Math.ceil(items.length / pageSize));
     const updated = `**Last Update:** <t:${Math.floor(Date.now() / 1000)}:R>`;
-    const footer = `${emojis.warning} **HOW TO BUY**\n${emojis.cart} Tekan **Buy**, isi jumlah, lalu konfirmasi untuk membuka QRIS.\n${emojis.arrow} File pesanan dikirim setelah pembayaran terkonfirmasi.`;
-    const position = pages > 1 ? `\n-# Halaman ${page}/${pages}` : "";
-    const container = productCards({ title: escapeMarkdown(catalogTitle(kategori)), header: `${updated}\n${rateText(rates, emojis)}${position}`,
-        footer, products, maintenance, emojis });
-    const rows = isPublic ? [classicActionRow(maintenance, emojis, false)] : [];
-    const navigate = (label, target) => new ButtonBuilder().setStyle(ButtonStyle.Secondary)
-        .setCustomId(`${qrisPagePrefix}${messageId}:${target}`).setLabel(label);
-    const navigation = [];
-    if (!isPublic && page > 1) navigation.push(navigate("Sebelumnya", page - 1));
-    if (page < pages) navigation.push(navigate(isPublic ? "Produk lainnya" : "Berikutnya", page + 1));
-    if (navigation.length) rows.push(new ActionRowBuilder().addComponents(navigation));
-    return { container, rows };
-}
-
-async function openQrisCatalogPage(interaction) {
-    const match = /^(\d{17,20}):([1-9]\d{0,7})$/.exec(interaction.customId.slice(qrisPagePrefix.length));
-    if (!match) return;
-    const [, messageId, page] = match;
-    const isPrivate = interaction.message.flags.has(MessageFlags.Ephemeral);
-    if (isPrivate) await interaction.deferUpdate();
-    else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    const [target, storefront, maintenance] = await Promise.all([
-        RealtimeChannel.findOne({ messageId, channelId: interaction.channelId }).lean(),
-        mongoose.connection.collection(collection).findOne({ _id: interaction.guildId }),
-        mt.exists({ mt: true }),
-    ]);
-    if (!target || storefrontModel(storefront) !== models.model3) {
-        const notice = "Katalog sudah berubah. Buka pesan katalog terbaru.";
-        if (isPrivate) return interaction.followUp({ content: notice, flags: MessageFlags.Ephemeral });
-        return interaction.editReply(notice);
+    const footer = `${updated}\n\n${emojis.warning} **HOW TO BUY**\n${emojis.cart} Tekan **Buy**, isi jumlah, lalu konfirmasi untuk membuka QRIS.\n${emojis.arrow} File pesanan dikirim setelah pembayaran terkonfirmasi.`;
+    const existing = (target.extraCatalogMessages || []).filter(ref => ref.channelId === target.channelId);
+    const keep = new Set();
+    let rebuild = false;
+    for (let index = 0; index < pages; index++) {
+        const products = await Promise.all(items.slice(index * pageSize, (index + 1) * pageSize)
+            .map(async ({ name, code, description, priceIdr, sold }) => ({
+                name, code, description, sold: sold ?? 0, stock: await shop.countDocuments(sellableStock(code)),
+                priceIdr: Number.isSafeInteger(priceIdr) && priceIdr >= 1000 && priceIdr <= 1000000 ? priceIdr : null,
+            })));
+        const position = pages > 1 ? `\n-# Halaman ${index + 1}/${pages}` : "";
+        const container = productCards({ title: escapeMarkdown(catalogTitle(kategori)), header: rateText(rates, emojis) + position,
+            footer, products, maintenance, emojis });
+        if (index === 0) {
+            await editModernCatalog(message, container);
+            continue;
+        }
+        const ref = !rebuild && existing[index - 1];
+        const extra = ref && await extraCatalogMessage(message.client, message.guildId, ref);
+        if (extra) {
+            await editModernCatalog(extra, container);
+            keep.add(extra.id);
+            continue;
+        }
+        if (ref) {
+            // Later pages need to be sent again to stay in order after a missing message.
+            await clearExtraCatalogs(message, target, keep, true);
+            rebuild = true;
+        }
+        const sent = await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { parse: [] } });
+        const newRef = { channelId: target.channelId, messageId: sent.id };
+        try {
+            const saved = await RealtimeChannel.updateOne({ _id: target._id, messageId: target.messageId }, { $push: { extraCatalogMessages: newRef } });
+            if (!saved.matchedCount) throw new Error("Katalog sudah dipindah.");
+            keep.add(sent.id);
+        } catch (error) {
+            await sent.delete().catch(() => {});
+            throw error;
+        }
     }
-    const emojis = await resolveStorefrontEmojis(storefront, interaction.guild, interaction.appPermissions);
-    const { container, rows } = await qrisCatalog(target.kategori, messageId, Number(page), !!maintenance, emojis, false);
-    const flags = MessageFlags.Ephemeral | MessageFlags.IsComponentsV2;
-    return interaction.editReply({ flags, components: [container, ...rows], allowedMentions: { parse: [] } });
+    await clearExtraCatalogs(message, target, keep);
 }
 
 module.exports = {
@@ -284,10 +311,10 @@ module.exports = {
         });
     },
     resumeRealtime,
-    openQrisCatalogPage,
 };
 
-async function renderCatalog(message, guildId, kategori) {
+async function renderCatalog(message, guildId, target) {
+    const { kategori } = target;
     const productFilter = kategori === "ALL" ? {} : { kategori };
     const [maintenance, storefront] = await Promise.all([
         mt.exists({ mt: true }),
@@ -300,9 +327,9 @@ async function renderCatalog(message, guildId, kategori) {
         ? message.channel?.permissionsFor(message.guild.members.me) : null;
     const emojis = await resolveStorefrontEmojis(storefront, message.guild, permissions);
     if (model === models.model3) {
-        const { container, rows } = await qrisCatalog(kategori, message.id, 1, MT, emojis, true);
-        return editModernCatalog(message, container, rows);
+        return publishQrisCatalog(message, target, MT, emojis);
     }
+    await clearExtraCatalogs(message, target);
 
     // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
     const { pricePerWL, pricePerDL } = await getEffectiveWLPrice();

@@ -127,12 +127,15 @@ function registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin, 
             const input = { licenseId: l.id, amount: req.body?.amount, discordId: req.body?.discordId };
             const currency = req.body?.creditCurrency;
             let product;
+            let quantity;
             if (currency !== undefined && currency !== rupiahCredit) throw new WalletError("Mata uang saldo tidak valid.");
             if (req.body?.productCode !== undefined) {
                 if (!hosted || !productQris || currency !== undefined) throw new WalletError("QRIS produk tersedia untuk Bot GevraStore.", 409);
                 const code = String(req.body.productCode);
-                product = await productQris.quote(hosted, code);
-                Object.assign(input, { amount: product.priceIdr, hostedTenantId: hosted.tenantId, productOrder: { guildId, code } });
+                quantity = req.body.quantity === undefined ? 1 : req.body.quantity;
+                const quote = await productQris.quote(hosted, code, quantity);
+                product = quote.product;
+                Object.assign(input, { amount: quote.amount, hostedTenantId: hosted.tenantId, productOrder: { guildId, code, quantity } });
             } else if (currency === rupiahCredit) {
                 input.creditCurrency = currency;
                 if (hosted) input.hostedTenantId = hosted.tenantId;
@@ -147,7 +150,7 @@ function registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin, 
             const d = await wallet.createDeposit(input);
             const qrPng = d.qrString ? (await QRCode.toBuffer(d.qrString, { type: "png", width: 512, margin: product ? 4 : 2 })).toString("base64") : null;
             res.json({ mode: "auto", orderId: d.orderId, amount: d.amount, expiresAt: d.expiresAt, qrPng, qrImageUrl: d.qrImageUrl,
-                ...(product ? { productName: product.name }
+                ...(product ? { productName: product.name, quantity }
                     : currency === rupiahCredit ? { creditCurrency: currency, panelManaged: !!hosted }
                     : hosted ? { hostedWL: input.hostedWL } : {}) });
         } catch (e) { send(res)(e); }

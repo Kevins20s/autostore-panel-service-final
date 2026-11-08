@@ -8,6 +8,17 @@ const { models, collection } = require("../bot/src/config/storefront");
 const codePattern = /^[A-Za-z0-9_-]{1,32}$/;
 const buyerPattern = /^\d{17,20}$/;
 const sellable = code => ({ code, data: { $type: "string", $ne: "" } });
+const orderStock = stock => Array.isArray(stock) ? stock : stock ? [stock] : [];
+const orderData = order => orderStock(order.stock).map(item => item.data).join("\n");
+const isScript = product => product.type?.includes("script") === true;
+
+function checkoutAmount(product, quantity) {
+    if (!Number.isSafeInteger(quantity) || quantity < 1) throw new WalletError("Jumlah harus berupa bilangan bulat minimal 1.");
+    if (isScript(product) && quantity !== 1) throw new WalletError("Produk tipe script dibeli satu per pesanan.");
+    const total = product.priceIdr * quantity;
+    if (!Number.isSafeInteger(total) || total > 1000000) throw new WalletError("Total QRIS maksimal Rp1.000.000 per pesanan.");
+    return total;
+}
 
 function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = fetch }) {
     const dbFor = tenantId => openDb("hosted:" + tenantId, mongoUrl, hostedDbName("autostore", tenantId));
@@ -28,29 +39,37 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
         return product;
     }
 
-    async function quote(tenant, code) {
+    async function quote(tenant, code, quantity) {
         const db = await dbFor(tenant.tenantId);
-        return productAt(db, tenant.guildId, code);
+        const product = await productAt(db, tenant.guildId, code);
+        return { product, amount: checkoutAmount(product, quantity) };
     }
 
-    async function takeStock(db, code, script, options) {
-        const query = { ...options, sort: { _id: 1 } };
-        return script ? db.collection(COL.shop).findOne(sellable(code), query)
-            : db.collection(COL.shop).findOneAndDelete(sellable(code), query);
+    async function takeStock(db, code, script, quantity, options) {
+        const col = db.collection(COL.shop);
+        const stock = await col.find(sellable(code), options).sort({ _id: 1 }).limit(quantity).toArray();
+        if (stock.length !== quantity) return null;
+        const bytes = stock.reduce((total, item) => total + Buffer.byteLength(item.data) + 1, 0);
+        if (bytes > 8 * 1024 * 1024) throw new WalletError("File pesanan terlalu besar. Kurangi jumlah item atau hubungi admin toko.");
+        if (!script) {
+            const removed = await col.deleteMany({ code, _id: { $in: stock.map(item => item._id) } }, options);
+            if (removed.deletedCount !== quantity) throw new WalletError("Stok baru saja berubah. Coba lagi.", 409);
+        }
+        return stock;
     }
 
     async function reserve(dep) {
         const db = await dbFor(dep.hostedTenantId);
         return transaction(db, async options => {
-            const { code, guildId } = dep.productOrder;
+            const { code, guildId, quantity = 1 } = dep.productOrder;
             const product = await productAt(db, guildId, code, options);
-            if (product.priceIdr !== dep.amount) throw new WalletError("Harga produk baru berubah. Pilih Buy lagi.", 409);
-            const script = product.type?.includes("script") === true;
-            const stock = await takeStock(db, code, script, options);
-            if (!stock) throw new WalletError("Stok produk ini habis.", 409);
+            if (checkoutAmount(product, quantity) !== dep.amount) throw new WalletError("Harga produk baru berubah. Pilih Buy lagi.", 409);
+            const script = isScript(product);
+            const stock = await takeStock(db, code, script, quantity, options);
+            if (!stock) throw new WalletError("Stok tidak cukup untuk jumlah yang dipilih.", 409);
             await db.collection("qrisproductorders").insertOne({
                 _id: dep.orderId, discordId: dep.discordId, productId: product._id,
-                code, productName: product.name, role: product.role, amount: dep.amount, script, stock, status: "reserved",
+                code, productName: product.name, role: product.role, amount: dep.amount, quantity, script, stock, status: "reserved",
             }, options);
         });
     }
@@ -62,7 +81,7 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
             const order = await orders.findOne({ _id: dep.orderId, status: "reserved" }, options);
             if (!order) return;
             if (!order.script && await db.collection(COL.list).findOne({ _id: order.productId }, options)) {
-                await db.collection(COL.shop).insertOne(order.stock, options);
+                await db.collection(COL.shop).insertMany(orderStock(order.stock), options);
             }
             await orders.updateOne({ _id: order._id }, { $set: { status: "released" }, $unset: { stock: "" } }, options);
         });
@@ -74,19 +93,20 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
             const order = await orders.findOne({ _id: dep.orderId, discordId: dep.discordId }, options);
             if (!order || order.amount !== dep.amount) return null;
             if (order.status === "fulfilled") return order;
+            const quantity = order.quantity ?? 1;
             let stock = order.stock;
             if (order.status === "released") {
                 // A late payment may use a replacement only from the original product.
                 if (!await db.collection(COL.list).findOne({ _id: order.productId }, options)) return null;
-                stock = await takeStock(db, order.code, order.script, options);
+                stock = await takeStock(db, order.code, order.script, quantity, options);
             }
-            if (!stock) return null;
+            if (orderStock(stock).length !== quantity) return null;
             const counter = await db.collection("orders").findOneAndUpdate({}, { $inc: { Order: 1 } },
                 { ...options, upsert: true, returnDocument: "after" });
-            await db.collection(COL.list).updateOne({ _id: order.productId }, { $inc: { sold: 1 } }, options);
+            await db.collection(COL.list).updateOne({ _id: order.productId }, { $inc: { sold: quantity } }, options);
             await db.collection(COL.orderlog).insertOne({
                 orderNumber: counter.Order, discordId: order.discordId, code: order.code, productName: order.productName,
-                qty: 1, totalIdr: order.amount, createdAt: new Date(),
+                qty: quantity, totalIdr: order.amount, createdAt: new Date(),
             }, options);
             const result = { status: "fulfilled", orderNumber: counter.Order, stock };
             await orders.updateOne({ _id: order._id }, { $set: result }, options);
@@ -111,10 +131,10 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
         if (!buyerPattern.test(id)) return false;
         const form = new FormData();
         form.set("payload_json", JSON.stringify({
-            content: `Pembayaran QRIS berhasil. File pesanan #${order.orderNumber} (${order.productName}) terlampir.`,
+            content: `Pembayaran QRIS berhasil. File pesanan #${order.orderNumber} (${order.productName} ×${order.quantity ?? 1}) terlampir.`,
             allowed_mentions: { parse: [] }, nonce: order._id, enforce_nonce: true,
         }));
-        form.set("files[0]", new Blob([order.stock.data], { type: "text/plain" }), `order-${order.orderNumber}.txt`);
+        form.set("files[0]", new Blob([orderData(order)], { type: "text/plain" }), `order-${order.orderNumber}.txt`);
         return (await discord("/channels/" + id + "/messages", { method: "POST", body: form })).ok;
     }
 
@@ -129,7 +149,7 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     embeds: [{ title: "#Order Number: " + order.orderNumber, description:
-                        `Buyer: <@${order.discordId}>\nProduct: ${order.productName}\nQuantity: 1\nTotal Price: Rp${order.amount.toLocaleString("id-ID")} · QRIS` }],
+                        `Buyer: <@${order.discordId}>\nProduct: ${order.productName}\nQuantity: ${order.quantity ?? 1}\nTotal Price: Rp${order.amount.toLocaleString("id-ID")} · QRIS` }],
                     allowed_mentions: { parse: [] }, nonce: "sale-" + order._id, enforce_nonce: true,
                 }),
             });
@@ -173,7 +193,7 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
     async function claim(dep) {
         const order = await fulfill(await dbFor(dep.hostedTenantId), dep);
         if (!order) throw new WalletError("Pembayaran diterima. Produk belum tersedia, hubungi admin toko dengan nomor QRIS ini.", 409);
-        return { orderNumber: order.orderNumber, productName: order.productName, data: order.stock.data };
+        return { orderNumber: order.orderNumber, productName: order.productName, data: orderData(order) };
     }
 
     return { quote, reserve, release, deliver, claim };

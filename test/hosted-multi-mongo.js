@@ -270,29 +270,38 @@ async function main() {
         await Promise.all(tenants.map(async (tenant, i) => {
             await request(i, "PUT", "/shop/settings/storefront", { guildId: tenant.guildId, model: "model3" });
             await request(i, "PUT", "/shop/products/" + code, { name: "Store " + i, role, type: "yes", description: "Full source", priceIdr: 12000 + i });
-            await request(i, "POST", "/shop/products/" + code + "/stock", { text: "QR-STOCK-" + i });
+            await request(i, "POST", "/shop/products/" + code + "/stock", { text: i === 0 ? "QR-STOCK-0\nQR-STOCK-0B" : "QR-STOCK-1" });
         }));
         const internal = (tenant, route, body) => fetch(origin + "/internal/wallet/" + route, {
             method: "POST", headers: { "Content-Type": "application/json", "X-License-Id": tenant.licenseId,
                 "X-Hosted-Guild": tenant.guildId, Authorization: "Bearer " + hostedWalletToken(tenant.licenseId, tenant.guildId) },
             body: JSON.stringify(body),
         });
-        const buy = tenant => internal(tenant, "deposit", { productCode: code, amount: 1000, discordId: buyerId });
-        const competing = await Promise.all([buy(tenants[0]), buy(tenants[0]), buy(tenants[1])]);
+        const buy = (tenant, quantity) => internal(tenant, "deposit", { productCode: code, amount: 1000, discordId: buyerId, quantity });
+        assert.equal((await buy(tenants[0], 0)).status, 400);
+        assert.equal((await buy(tenants[0], 2.5)).status, 400);
+        assert.equal((await buy(tenants[0], 100)).status, 400);
+        assert.equal((await buy(tenants[0], 3)).status, 409);
+        const competing = await Promise.all([buy(tenants[0], 2), buy(tenants[0], 2), buy(tenants[1])]);
         assert.deepEqual(competing.slice(0, 2).map(r => r.status).sort(), [200, 409]);
         assert.equal(competing[2].status, 200);
         const direct = await Promise.all([competing.find(r => r.status === 200), competing[2]].map(r => r.json()));
-        assert.deepEqual(direct.map(r => r.amount), [12000, 12001]);
+        assert.deepEqual(direct.map(r => r.amount), [24000, 12001]);
+        assert.deepEqual(direct.map(r => r.quantity), [2, 1]);
         assert.ok(direct.every(r => r.qrPng));
+        const legacyOrders = client.db(tenants[1].dbName).collection("qrisproductorders");
+        const legacyOrder = await legacyOrders.findOne({ _id: direct[1].orderId });
+        await legacyOrders.updateOne({ _id: direct[1].orderId }, { $set: { stock: legacyOrder.stock[0] }, $unset: { quantity: "" } });
         const claim = (tenant, order, discordId = buyerId) => internal(tenant, "hosted-product/" + order.orderId + "/claim", { discordId });
         assert.equal((await claim(tenants[0], direct[0])).status, 409);
         assert.equal((await claim(tenants[1], direct[0])).status, 404);
         assert.equal((await claim(tenants[0], direct[0], guilds[1])).status, 404);
         assert.equal((await wallet.handlePaid({ orderId: direct[0].orderId }, { background: true })).reason, "amount_missing");
         await Promise.all(direct.flatMap(order => [1, 2].map(() => wallet.handlePaid({ orderId: order.orderId, amount: order.amount }))));
-        assert.deepEqual(delivered.sort(), ["QR-STOCK-0", "QR-STOCK-1"]);
+        const files = ["QR-STOCK-0\nQR-STOCK-0B", "QR-STOCK-1"];
+        assert.deepEqual(delivered.sort(), files);
         assert.equal(testimonies.length, 1);
-        assert.match(testimonies[0].description, /Rp12.000/);
+        assert.match(testimonies[0].description, /Quantity: 2\nTotal Price: Rp24\.000/);
         assert.deepEqual(roles.sort(), guilds);
         for (const [i, order] of direct.entries()) {
             const db = client.db(tenants[i].dbName);
@@ -302,17 +311,20 @@ async function main() {
             assert.equal(orderPage.total, 2);
             assert.equal(orderPage.idr, order.amount);
             assert.equal(orderPage.wl, 10);
-            assert.equal((await (await claim(tenants[i], order)).json()).data, "QR-STOCK-" + i);
+            assert.equal(orderPage.qty, order.quantity + 1);
+            assert.equal((await (await claim(tenants[i], order)).json()).data, files[i]);
         }
-        await request(0, "POST", "/shop/products/" + code + "/stock", { text: "EXPIRED-QR-STOCK" });
-        const expired = await buy(tenants[0]);
+        await request(0, "POST", "/shop/products/" + code + "/stock", { text: "EXPIRED-QR-STOCK-A\nEXPIRED-QR-STOCK-B" });
+        const expired = await buy(tenants[0], 2);
         assert.equal(expired.status, 200);
         const expiredOrder = await expired.json();
         time = expiredOrder.expiresAt + 6 * 60e3;
         autoko.getStatus = async () => ({ paid: false, status: "Expired" });
         await wallet.sweep();
-        assert.equal(await client.db(tenants[0].dbName).collection("shops").countDocuments({ code }), 1);
+        assert.equal(await client.db(tenants[0].dbName).collection("shops").countDocuments({ code }), 2);
         assert.equal((await claim(tenants[0], expiredOrder)).status, 409);
+        await wallet.handlePaid({ orderId: expiredOrder.orderId, amount: expiredOrder.amount });
+        assert.equal((await (await claim(tenants[0], expiredOrder)).json()).data, "EXPIRED-QR-STOCK-A\nEXPIRED-QR-STOCK-B");
         console.log("OK: direct product QRIS, quoted price, concurrent stock reservation, delivery, access checks and expired stock recovery");
     } finally {
         for (const child of children) if (child.connected) child.kill();

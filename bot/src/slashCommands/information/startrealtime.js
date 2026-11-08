@@ -70,7 +70,8 @@ async function resumeRealtime(client) {
     const catalogs = await RealtimeChannel.find({ messageId: { $type: "string" } }).lean();
     for (const target of catalogs) {
         const message = await catalogMessage(client, serverId, target);
-        const published = message?.components.some(row => row.components?.some(item => ["Howmanys", menuId, qrisSelectId].includes(item.customId)));
+        const published = message?.flags.has(MessageFlags.IsComponentsV2)
+            || message?.components.some(row => row.components?.some(item => ["Howmanys", menuId, qrisSelectId].includes(item.customId)));
         // Legacy catalogs did not save an interval. Resume only if they were already published.
         if (message && (validDelay(target.intervalSeconds) || published) && !jobs.has(serverId + ":" + target.kategori)) {
             scheduleCatalog(client, serverId, target.kategori, target, validDelay(target.intervalSeconds) ? target.intervalSeconds : 60);
@@ -160,6 +161,19 @@ function storeMenuRow(maintenance, emojis) {
     return new ActionRowBuilder().addComponents(select);
 }
 
+function classicActionRow(maintenance, emojis, classic = true) {
+    const actions = [
+        ["growid23", "Set GrowID", "growIdButton", ButtonStyle.Secondary],
+        ["balance1", "Balance", "balanceButton", ButtonStyle.Secondary],
+        ["deposit", "Deposit", "depositButton", ButtonStyle.Secondary],
+        ["depositqris_btn", "Deposit QRIS", "qris", ButtonStyle.Success],
+    ];
+    const showMaintenance = maintenance && classic;
+    return new ActionRowBuilder().addComponents((showMaintenance ? actions.slice(0, 3) : actions)
+        .map(([id, label, emoji, style]) => new ButtonBuilder().setCustomId(id).setStyle(style)
+            .setLabel(showMaintenance ? "Maintenance" : label).setEmoji(componentEmoji(emojis[emoji])).setDisabled(maintenance)));
+}
+
 const pageSize = 7;
 const catalogTitle = kategori => kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
 const sellableStock = code => ({ code, data: { $type: "string", $ne: "" } });
@@ -181,11 +195,11 @@ async function qrisCatalog(kategori, messageId, requestedPage, maintenance, emoj
         priceIdr: Number.isSafeInteger(priceIdr) && priceIdr >= 1000 && priceIdr <= 1000000 ? priceIdr : null,
     })));
     const updated = `**Last Update:** <t:${Math.floor(Date.now() / 1000)}:R>`;
-    const footer = `${emojis.warning} **HOW TO BUY**\n${emojis.cart} Tekan **Buy** untuk membayar lewat QRIS.\n${emojis.arrow} File pesanan dikirim setelah pembayaran terkonfirmasi.`;
+    const footer = `${emojis.warning} **HOW TO BUY**\n${emojis.cart} Tekan **Buy**, isi jumlah, lalu konfirmasi untuk membuka QRIS.\n${emojis.arrow} File pesanan dikirim setelah pembayaran terkonfirmasi.`;
     const position = pages > 1 ? `\n-# Halaman ${page}/${pages}` : "";
     const container = productCards({ title: escapeMarkdown(catalogTitle(kategori)), header: `${updated}\n${rateText(rates, emojis)}${position}`,
         footer, products, maintenance, emojis });
-    const rows = isPublic ? [storeMenuRow(maintenance, emojis)] : [];
+    const rows = isPublic ? [classicActionRow(maintenance, emojis, false)] : [];
     const navigate = (label, target) => new ButtonBuilder().setStyle(ButtonStyle.Secondary)
         .setCustomId(`${qrisPagePrefix}${messageId}:${target}`).setLabel(label);
     const navigation = [];
@@ -391,49 +405,5 @@ ${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
         return editLegacyCatalog(message, productEmbed, components);
     }
 
-    let buttonRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setLabel("Set GrowID")
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji(componentEmoji(emojis.growIdButton))
-            .setCustomId("growid23"),
-        new ButtonBuilder()
-            .setLabel("Balance")
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji(componentEmoji(emojis.balanceButton))
-            .setCustomId("balance1"),
-        new ButtonBuilder()
-            .setLabel("Deposit")
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji(componentEmoji(emojis.depositButton))
-            .setCustomId("deposit"),
-        new ButtonBuilder()
-            .setLabel("Deposit QRIS")
-            .setStyle(ButtonStyle.Success)
-            .setEmoji(componentEmoji(emojis.qris))
-            .setCustomId("depositqris_btn")
-    );
-
-    let maintenanceRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setLabel("Maintenance")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true)
-            .setEmoji(componentEmoji(emojis.growIdButton))
-            .setCustomId("growid23"),
-        new ButtonBuilder()
-            .setLabel("Maintenance")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true)
-            .setEmoji(componentEmoji(emojis.balanceButton))
-            .setCustomId("balance1"),
-        new ButtonBuilder()
-            .setLabel("Maintenance")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true)
-            .setEmoji(componentEmoji(emojis.depositButton))
-            .setCustomId("deposit")
-    );
-
-    await editLegacyCatalog(message, productEmbed, [selectRow, MT ? maintenanceRow : buttonRow]);
+    await editLegacyCatalog(message, productEmbed, [selectRow, classicActionRow(MT, emojis)]);
 }

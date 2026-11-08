@@ -7,9 +7,9 @@ class PanelError extends Error {}
  * @returns {Promise<{mode:"manual"} | {mode:"auto", orderId:string, amount:number, expiresAt:number, qrPng:string|null, qrImageUrl:string|null}>}
  * Melempar PanelError (pesan aman ditampilkan ke user) kalau mode auto tapi gagal.
  */
-async function requestAutoDeposit({ amount, discordId, pricePerWL, creditCurrency, productCode }) {
+async function requestAutoDeposit({ amount, discordId, pricePerWL, creditCurrency, productCode, quantity }) {
     if (!config.PanelInternalUrl || !config.PanelInternalToken || !config.PanelLicenseId) return { mode: "manual" };
-    return walletPost("/internal/wallet/deposit", { amount, discordId, pricePerWL, creditCurrency, productCode });
+    return walletPost("/internal/wallet/deposit", { amount, discordId, pricePerWL, creditCurrency, productCode, quantity });
 }
 
 async function walletPost(path, body) {

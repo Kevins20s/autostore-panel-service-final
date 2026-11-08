@@ -470,10 +470,16 @@ app.post("/api/admin/login", (req, res) => {
     res.json({ ok: true });
 });
 
-const row = (l) => ({
-    id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked, lifetime: !!l.lifetime,
-    configured: !!l.config, bot: runner.status(l.id), walletFrozen: !!l.walletFrozen, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
-});
+const row = (l) => {
+    const hosted = l.hostedBot?.enabled || l.runMode === "central";
+    return {
+        id: l.id, buyer: l.buyer, type: l.type || "autostore", keyPrefix: l.keyPrefix, expiresAt: l.expiresAt, revoked: l.revoked, lifetime: !!l.lifetime,
+        hosted: !!hosted,
+        configured: hosted ? !!l.hostedBot?.guildId : !!l.config,
+        bot: hosted ? (discordLogin.statusFor(l)?.state || "stopped") : runner.status(l.id),
+        walletFrozen: !!l.walletFrozen, paymentMode: l.paymentMode === "auto" ? "auto" : "manual",
+    };
+};
 app.get("/api/admin/licenses", admin, (req, res) => res.json({ licenses: licenses().map(row) }));
 
 app.post("/api/admin/licenses", admin, (req, res) => {

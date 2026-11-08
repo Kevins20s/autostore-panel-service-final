@@ -1165,6 +1165,7 @@ html[data-theme="dark"] :is(.buy, .adm) button.pri:hover { background: var(--ac2
 .desk-insights { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .adm-jump a[aria-current="page"] { background: var(--ac); border-color: var(--ac); color: #172333; font-weight: 700; }
 .adm .adm-main { width: min(1240px, calc(100% - 36px)); }
+.adm-logout { margin-left: auto; }
 .adm .adm-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px; margin-bottom: 18px; background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; }
 .adm-tabs a { display: block; padding: 12px 8px; text-align: center; border: 1px solid transparent; border-radius: 9px; color: var(--mut); text-decoration: none; font-weight: 700; }
 .adm-tabs a:hover { color: var(--tx); background: var(--panel2); }

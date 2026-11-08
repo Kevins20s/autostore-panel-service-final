@@ -650,6 +650,7 @@ const gsEnglish = {
   "Hubungkan bot AutoStore Service dan database kamu.": "Connect your AutoStore Service bot and database.",
   "Hubungkan bot Discord dan database kamu.": "Connect your Discord bot and database.",
   "Status bot": "Bot status",
+  "Mode bot": "Bot mode",
   "Belum masuk ke server?": "Need to add the bot to a server?",
   "Undang bot ke server": "Invite bot to server",
   "Salin link": "Copy link",

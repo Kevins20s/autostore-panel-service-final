@@ -136,8 +136,8 @@ showWorkspace();
 
 async function load() {
     let data;
-    try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("login").classList.remove("hide"); return; }
-    $("login").classList.add("hide"); $("dash").classList.remove("hide");
+    try { data = await api("GET", "/api/admin/licenses"); } catch { $("dash").classList.add("hide"); $("adminLogout").classList.add("hide"); $("login").classList.remove("hide"); return; }
+    $("login").classList.add("hide"); $("dash").classList.remove("hide"); $("adminLogout").classList.remove("hide");
     loadOrders(); loadWallet(); loadPackages();
     const body = $("rows"); body.replaceChildren();
     stats(data.licenses);
@@ -147,7 +147,8 @@ async function load() {
     for (const l of shown) {
         const tr = document.createElement("tr");
         const left = Math.ceil((l.expiresAt - Date.now()) / 86400000);
-        tr.append(td(l.buyer + (l.configured ? "" : gsT(" (belum setup)"))), td(l.type === "service" ? "AutoStore Service" : "AutoStore"), td(l.keyPrefix + "…"),
+        const botMode = l.hosted ? "Bot GevraStore" : l.type === "service" ? "AutoStore Service" : gsT("Bot sendiri");
+        tr.append(td(l.buyer + (l.configured ? "" : gsT(" (belum setup)"))), td(botMode), td(l.keyPrefix + "…"),
             l.revoked ? pillTd(gsT("Dicabut"), "bad") : l.lifetime ? pillTd(gsT("Seumur hidup"), "ok") : left <= 0 ? pillTd(gsT("Habis"), "bad") : pillTd(gsT`${left} hari lagi`, left <= 7 ? "warn" : "ok"), pillTd(BOT_TXT[l.bot] || l.bot, BOT_STATE[l.bot] || "off"));
         const act = document.createElement("td"); act.className = "row";
         act.append(
@@ -159,6 +160,10 @@ async function load() {
     }
 }
 $("btnLogin").onclick = async () => { try { await api("POST", "/api/admin/login", { password: $("pw").value }); load(); } catch (e) { msg("loginMsg", e.message); } };
+$("adminLogout").onclick = async () => {
+    try { await api("POST", "/api/logout"); location.reload(); }
+    catch (e) { await gsAlert(e.message); }
+};
 $("pw").onkeydown = (e) => { if (e.key === "Enter") $("btnLogin").click(); };
 $("btnNew").onclick = async () => {
     const b = $("btnNew"), old = b.textContent; b.disabled = true; b.textContent = gsT("Memproses...");

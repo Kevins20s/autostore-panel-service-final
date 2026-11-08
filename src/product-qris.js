@@ -3,7 +3,7 @@
 const { getDb, COL } = require("./shopdb");
 const { hostedDbName } = require("./shared-tenants");
 const { WalletError } = require("./walletdb");
-const { models, collection } = require("../bot/src/config/storefront");
+const { models, collection, qrisPriceMax, validQrisPrice } = require("../bot/src/config/storefront");
 
 const codePattern = /^[A-Za-z0-9_-]{1,32}$/;
 const buyerPattern = /^\d{17,20}$/;
@@ -16,7 +16,7 @@ function checkoutAmount(product, quantity) {
     if (!Number.isSafeInteger(quantity) || quantity < 1) throw new WalletError("Jumlah harus berupa bilangan bulat minimal 1.");
     if (isScript(product) && quantity !== 1) throw new WalletError("Produk tipe script dibeli satu per pesanan.");
     const total = product.priceIdr * quantity;
-    if (!Number.isSafeInteger(total) || total > 1000000) throw new WalletError("Total QRIS maksimal Rp1.000.000 per pesanan.");
+    if (!Number.isSafeInteger(total) || total > qrisPriceMax) throw new WalletError("Total QRIS maksimal Rp1.000.000 per pesanan.");
     return total;
 }
 
@@ -33,7 +33,7 @@ function createProductQris({ mongoUrl, botToken, openDb = getDb, discordFetch = 
         if (await db.collection(COL.mt).findOne({ mt: true }, options)) throw new WalletError("Toko sedang dalam pemeliharaan.", 409);
         const product = await db.collection(COL.list).findOne({ code }, options);
         if (!product) throw new WalletError("Produk tidak ditemukan.", 404);
-        if (!Number.isSafeInteger(product.priceIdr) || product.priceIdr < 1000 || product.priceIdr > 1000000) {
+        if (!validQrisPrice(product.priceIdr)) {
             throw new WalletError("Harga QRIS produk ini belum diatur.", 409);
         }
         return product;

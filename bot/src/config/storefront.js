@@ -5,6 +5,9 @@ const models = Object.freeze({ classic: "classic", model1: "model1", model2: "mo
 const qrisBuyPrefix = "storefront_qris_buy:";
 const qrisSelectId = "storefront_qris_select";
 const qrisPagePrefix = "storefront_qris_page:";
+const qrisPriceMin = 1000;
+const qrisPriceMax = 1000000;
+const validQrisPrice = price => Number.isSafeInteger(price) && price >= qrisPriceMin && price <= qrisPriceMax;
 const buttons = Object.freeze({
     profile: "storefront_profile", balance: "storefront_balance", history: "storefront_history",
     deposit: "storefront_deposit", qris: "storefront_qris", convert: "storefront_convert",
@@ -121,4 +124,4 @@ function componentEmoji(value) {
 }
 
 module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, emojiFields,
-    customEmojiId, resolveEmojis, resolveStorefrontEmojis, interactionEmojis, componentEmoji };
+    customEmojiId, resolveEmojis, resolveStorefrontEmojis, interactionEmojis, componentEmoji, qrisPriceMin, qrisPriceMax, validQrisPrice };

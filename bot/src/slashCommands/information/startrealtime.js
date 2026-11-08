@@ -26,7 +26,7 @@ let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
 const { imageUrl2, COLOR } = require("../../config/configemoji.json");
 const { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, emojiFields,
-    resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
+    resolveStorefrontEmojis, storefrontModel, componentEmoji, validQrisPrice } = require("../../config/storefront");
 
 const jobs = new Map();
 const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
@@ -231,7 +231,7 @@ async function publishQrisCatalog(message, target, maintenance, emojis) {
         const products = await Promise.all(items.slice(index * pageSize, (index + 1) * pageSize)
             .map(async ({ name, code, description, priceIdr, sold }) => ({
                 name, code, description, sold: sold ?? 0, stock: await shop.countDocuments(sellableStock(code)),
-                priceIdr: Number.isSafeInteger(priceIdr) && priceIdr >= 1000 && priceIdr <= 1000000 ? priceIdr : null,
+                priceIdr: validQrisPrice(priceIdr) ? priceIdr : null,
             })));
         const position = pages > 1 ? `\n-# Halaman ${index + 1}/${pages}` : "";
         const container = productCards({ title: escapeMarkdown(catalogTitle(kategori)), header: rateText(rates, emojis) + position,

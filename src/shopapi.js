@@ -4,7 +4,7 @@ const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
 const { collection: storefrontCollection, models: storefrontModels, emojiDefaultsFor, storefrontModel, emojiFields,
-    customEmojiId } = require("../bot/src/config/storefront");
+    customEmojiId, validQrisPrice } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -144,7 +144,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         }
         if (body?.priceIdr !== undefined) {
             const priceIdr = body.priceIdr === "" || body.priceIdr === null ? null : Number(body.priceIdr);
-            if (priceIdr !== null && (!Number.isSafeInteger(priceIdr) || priceIdr < 1000 || priceIdr > 1000000)) {
+            if (priceIdr !== null && !validQrisPrice(priceIdr)) {
                 return { error: "Harga QRIS harus antara Rp1.000 dan Rp1.000.000." };
             }
             out.priceIdr = priceIdr;

@@ -7,11 +7,13 @@ module.exports = async () => {
     console.log("----------------------------------------".yellow);
 
     const slash = [];
+    const hosted = !!process.env.HOSTED_PILOT_BINDING;
 
     fs.readdirSync('./src/slashCommands/').forEach(dir => {
         const commands = fs.readdirSync(`./src/slashCommands/${dir}`).filter(file => file.endsWith('.js'));
         for (let file of commands) {
             let pull = require(`../slashCommands/${dir}/${file}`);
+            if (pull.hostedOnly && !hosted) continue;
 
             if (pull.name) {
                 slash.push(pull)
@@ -34,7 +36,6 @@ module.exports = async () => {
     const rest = new REST({ version: '10' })
         .setToken(config.TOKEN);
 
-    const hosted = !!process.env.HOSTED_PILOT_BINDING;
     const route = hosted
         ? Routes.applicationGuildCommands(CLIEND_ID, config.serverId)
         : Routes.applicationCommands(CLIEND_ID);

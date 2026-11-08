@@ -76,7 +76,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             const config = hosted ? hosted.config : decrypt(l.config);
             req.shopGuildId = hosted?.guildId || config.guildId || "";
             req.shopDiscord = hosted
-                ? { token: process.env.DISCORD_CATALOG_PILOT_TOKEN, botId: process.env.DISCORD_HOSTED_BOT_CLIENT_ID,
+                ? { hosted: true, token: process.env.DISCORD_CATALOG_PILOT_TOKEN, botId: process.env.DISCORD_HOSTED_BOT_CLIENT_ID,
                     sourceGuildId: process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID, discordUserId: l.discordLoginId }
                 : { token: config.botToken, botId: config.clientId };
             req.db = hosted
@@ -374,7 +374,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             req.db.collection(storefrontCollection).findOne({ _id: guildId }), storeEmotes(req),
         ]);
         const model = storefrontModel(storefront);
-        const defaults = emojiDefaultsFor(model);
+        const defaults = emojiDefaultsFor(model, req.shopDiscord.hosted);
         const fields = emojiFields(model);
         const emotes = Object.fromEntries(Object.entries(storefront?.[fields.values] || {}).filter(
             ([key, value]) => Object.hasOwn(defaults, key) && customEmojiId(value)

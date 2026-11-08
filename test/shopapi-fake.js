@@ -2,7 +2,8 @@
 // Yang diuji: bentuk respons dan alur kode. Sintaks pipeline MongoDB tetap perlu diuji ke database asli (test/shop.js dengan SHOP_TEST_MONGO).
 const assert = require("assert"), http = require("http"), express = require("express");
 const shopdb = require("../src/shopdb");
-const { emojiDefaults, resolveEmojis, componentEmoji } = require("../bot/src/config/storefront");
+const { emojiDefaults, resolveEmojis, componentEmoji, customEmojiId, menuActions, menuId, storefrontAction } = require("../bot/src/config/storefront");
+const model1Preset = require("../bot/src/config/model1-emoji-preset.json");
 
 const inserted = []; let lastFind = null;
 const cur = (rows) => { const c = { sort: () => c, skip: () => c, limit: () => c, project: () => c, toArray: async () => rows }; return c; };
@@ -108,6 +109,7 @@ const srv = http.createServer(app).listen(0, async () => {
         const initial = (await j("GET", emojiPath)).j;
         assert.strictEqual(initial.model, "model1");
         assert.ok(initial.defaults.inStock && initial.defaults.crown && !initial.defaults.growIdButton);
+        for (const [key, code] of Object.entries(model1Preset)) assert.strictEqual(initial.defaults[key], code);
         assert.deepStrictEqual(initial.emotes, {});
         assert.deepStrictEqual(initial.library.map(({ source, code }) => [source, code]), [["bot", botEmote], ["server", custom], ["external", sourceCode]]);
         assert.strictEqual(initial.extraSource, "Source store");
@@ -139,14 +141,38 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "classic" })).s, 200);
         const classic = (await j("GET", emojiPath)).j;
         assert.strictEqual(classic.model, "classic");
-        assert.ok(classic.defaults.growIdButton && !classic.defaults.inStock);
+        assert.ok(classic.defaults.growIdButton && classic.defaults.inStock === "✅");
         assert.deepStrictEqual(classic.emotes, {});
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model1", emojis: {} })).s, 409);
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "classic", emojis: { growIdButton: botEmote } })).s, 200);
         assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { growIdButton: botEmote });
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "model2" })).s, 200);
+        const model2 = (await j("GET", emojiPath)).j;
+        assert.strictEqual(model2.model, "model2");
+        assert.deepStrictEqual(model2.emotes, {});
+        assert.strictEqual(model2.defaults.inStock, classic.defaults.inStock);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model2", emojis: { inStock: custom } })).s, 200);
+        assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { inStock: custom });
+        for (const [value] of menuActions) {
+            const interaction = { customId: menuId, guildId: guildA, values: [value], isStringSelectMenu: () => true };
+            assert.strictEqual(storefrontAction(interaction, guildA), value);
+            assert.strictEqual(storefrontAction(interaction, guildB), undefined);
+            assert.strictEqual(storefrontAction({ ...interaction, values: ["Howmanys"] }, guildA), undefined);
+        }
         assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "model1" })).s, 200);
         assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { profile: sourceCode });
         assert.deepStrictEqual(storefronts.get(guildA).classicEmojis, { growIdButton: botEmote });
+        assert.deepStrictEqual(storefronts.get(guildA).model2Emojis, { inStock: custom });
+        const owned = new Map([[customEmojiId(model1Preset.profile), { toString: () => model1Preset.profile }]]);
+        guild.client.application.emojis = { fetch: async () => owned };
+        process.env.HOSTED_PILOT_BINDING = "test";
+        try {
+            assert.strictEqual((await resolveEmojis({}, guild)).profile, model1Preset.profile);
+            assert.strictEqual((await resolveEmojis({ profile: custom }, guild)).profile, custom);
+            assert.strictEqual((await resolveEmojis({}, guild)).qris, emojiDefaults.qris);
+        } finally {
+            delete process.env.HOSTED_PILOT_BINDING;
+        }
         console.log("ok  emoji Model 1: simpan per server, reset, validasi, dan fallback emoji Discord");
         console.log("\nSemua tes shopapi (tiruan) lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }

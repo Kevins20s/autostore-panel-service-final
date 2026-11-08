@@ -7,6 +7,7 @@ let {
 } = require("discord.js");
 let client = require('../../index');
 const { COLOR } = require("../../config/configemoji.json");
+const { serverId } = require("../../config/config.json");
 let mt = require("../../Schema/maintenance.js");
 let Bal = require("../../Schema/balance.js");
 let shop = require("../../Schema/shop.js");
@@ -15,14 +16,15 @@ let Price = require("../../Schema/priceproduct.js");
 let { MessageEmbed } = require("discord.js");
 let depo = require("../../Schema/deposition.js");
 let cd = new Map();
-const { buttons, models, interactionEmojis, componentEmoji } = require("../../config/storefront");
+const { buttons, models, storefrontAction, interactionEmojis, componentEmoji } = require("../../config/storefront");
 
 module.exports = {
     name: "ButtonMessage"
 };
 
 client.on("interactionCreate", async (interaction) => {
-    if (interaction.customId === "balance1") {
+    const action = storefrontAction(interaction, serverId);
+    if (action === "balance1") {
         const { growId: BOT, crown: CROWN, balanceMark: BALANCE, wl: WL, price: Dolar, convert } = await interactionEmojis(interaction, models.classic);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -78,7 +80,7 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.reply({ embeds: [embed], components, ephemeral: true });
     }
 
-    if (interaction.customId === "deposit") {
+    if (action === "deposit") {
         const { growId, bot: BOT, world: EARTH, crown: CROWN } = await interactionEmojis(interaction, models.classic);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()

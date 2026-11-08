@@ -17,7 +17,7 @@ let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
 const { imageUrl2, COLOR } = require("../../config/configemoji.json");
-const { collection, models, buttons, resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
+const { collection, models, buttons, menuId, menuActions, emojiFields, resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
 
 const jobs = new Map();
 const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
@@ -69,7 +69,7 @@ async function resumeRealtime(client) {
     }
 }
 
-function compactRows(options, maintenance, emojis) {
+function buySelectRow(options, maintenance, emojis) {
     const available = options.filter(option => option.hasStock);
     const soldOut = !available.length;
     const displayed = (options.length > 25 ? [...available, ...options.filter(option => !option.hasStock)] : options).slice(0, 25)
@@ -80,15 +80,29 @@ function compactRows(options, maintenance, emojis) {
         .setPlaceholder(maintenance ? "Under Maintenance" : placeholderIcon + (soldOut ? " Semua produk sedang habis" : " Select product to buy..."))
         .setDisabled(maintenance || soldOut)
         .addOptions(displayed.length ? displayed : [{ label: "Semua produk sedang habis", value: "none" }]);
+    return new ActionRowBuilder().addComponents(select);
+}
+
+function compactActionRow(maintenance, emojis) {
     const actions = [
         [buttons.profile, "My Profile", emojis.profile],
         [buttons.deposit, "Top Up WL", emojis.deposit],
         [buttons.qris, "QRIS Top Up", emojis.qris],
         [buttons.history, "History", emojis.history],
     ];
-    return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(
+    return new ActionRowBuilder().addComponents(
         actions.map(([id, label, emoji]) => new ButtonBuilder().setCustomId(id).setLabel(label)
-            .setStyle(ButtonStyle.Success).setEmoji(componentEmoji(emoji)).setDisabled(maintenance)))];
+            .setStyle(ButtonStyle.Success).setEmoji(componentEmoji(emoji)).setDisabled(maintenance)));
+}
+
+function storeMenuRow(maintenance, emojis) {
+    const select = new StringSelectMenuBuilder().setCustomId(menuId)
+        .setPlaceholder("🛒 Click here to select menu")
+        .setDisabled(maintenance)
+        .addOptions(menuActions.map(([value, label, description, key]) => ({
+            value, label, description, emoji: componentEmoji(emojis[key]),
+        })));
+    return new ActionRowBuilder().addComponents(select);
 }
 
 module.exports = {
@@ -151,8 +165,9 @@ async function renderCatalog(message, guildId, kategori) {
         mongoose.connection.collection(collection).findOne({ _id: guildId }),
     ]);
     const MT = !!maintenance;
-    const compact = storefrontModel(storefront) === models.model1;
-    const permissions = (storefront?.emojiSourceGuildId || storefront?.classicEmojiSourceGuildId) && message.guild?.members.me
+    const model = storefrontModel(storefront);
+    const compact = model === models.model1;
+    const permissions = storefront?.[emojiFields(model).source] && message.guild?.members.me
         ? message.channel?.permissionsFor(message.guild.members.me) : null;
     const emojis = await resolveStorefrontEmojis(storefront, message.guild, permissions);
 
@@ -176,7 +191,7 @@ async function renderCatalog(message, guildId, kategori) {
     for (const code of getCodes) {
         const filter = { code: code.code };
         const [stock, priceDoc, discountDoc] = await Promise.all([
-            shop.countDocuments(compact ? { ...filter, data: { $type: "string", $ne: "" } } : filter),
+            shop.countDocuments({ ...filter, data: { $type: "string", $ne: "" } }),
             Price.findOne(filter), disc.findOne(filter),
         ]);
         const discount = discountDoc?.discount;
@@ -214,25 +229,24 @@ ${emojis.arrow} Price: ${priceText} ${emojis.wl}${rupiahText}
 ${DIVIDER}`
         );
 
-        if (compact || selectOptions.length < 25) {
-            const plainPrice = priceText.replace(/\*\*/g, "").replace(/~~[^~]*~~/g, "").trim();
-            selectOptions.push({
-                label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
-                description: (compact ? `Code: ${code.code} | Stock: ${stock}` : `Stock: ${stock} | Price: ${plainPrice}`).slice(0, 100),
-                value: code.code,
-                ...(compact ? { hasStock } : {}),
-            });
-        }
+        selectOptions.push({
+            label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
+            description: `Code: ${code.code} | Stock: ${stock}`.slice(0, 100),
+            value: code.code,
+            hasStock,
+        });
     }
 
     let howToBuySection = compact
         ? `${emojis.warning} **HOW TO BUY** ${emojis.warning}\n${emojis.arrow} Buka **My Profile** untuk mengatur GrowID.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown.`
+        : model === models.model2
+        ? `${emojis.warning} **HOW TO BUY** ${emojis.warning}\n${emojis.arrow} Buka menu untuk **Set GrowID**, **Deposit**, atau cek **Balance**.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown beli.`
         :
 `${emojis.warning} **HOW TO BUY** ${emojis.warning}
 ${emojis.arrow} Click Button **Set GrowID**
 ${emojis.arrow} Click Button **Balance** To Check Your GrowID
 ${emojis.arrow} Click Button **Deposit** To See World Deposit
-${emojis.arrow} Click The **Dropdown Menu** Below To Buy An Item`;
+${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
 
     let kursText = pricePerWL
         ? `${emojis.arrow} Kurs: **1 ${emojis.wl} = Rp${Math.round(pricePerWL).toLocaleString("id-ID")}** | **1 DL = Rp${Math.round(pricePerDL).toLocaleString("id-ID")}**`
@@ -255,22 +269,12 @@ ${emojis.arrow} Click The **Dropdown Menu** Below To Buy An Item`;
         .setImage(imageUrl2)
         .setTimestamp();
 
-    if (compact) {
-        await message.edit({ content: null, embeds: [productEmbed], components: compactRows(selectOptions, MT, emojis) });
+    const selectRow = buySelectRow(selectOptions, MT, emojis);
+    if (compact || model === models.model2) {
+        const components = compact ? [selectRow, compactActionRow(MT, emojis)] : [storeMenuRow(MT, emojis), selectRow];
+        await message.edit({ content: null, embeds: [productEmbed], components });
         return;
     }
-
-    let selectRow = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId("Howmanys")
-            .setPlaceholder("Click here to buy products")
-            .setDisabled(selectOptions.length < 1)
-            .addOptions(
-                selectOptions.length > 0
-                    ? selectOptions
-                    : [{ label: "No product available", value: "none" }]
-            )
-    );
 
     let buttonRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -293,14 +297,6 @@ ${emojis.arrow} Click The **Dropdown Menu** Below To Buy An Item`;
             .setStyle(ButtonStyle.Success)
             .setEmoji(componentEmoji(emojis.qris))
             .setCustomId("depositqris_btn")
-    );
-
-    let maintenanceSelectRow = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId("Howmanys")
-            .setPlaceholder("Under Maintenance")
-            .setDisabled(true)
-            .addOptions([{ label: "Under Maintenance", value: "none" }])
     );
 
     let maintenanceRow = new ActionRowBuilder().addComponents(
@@ -327,6 +323,6 @@ ${emojis.arrow} Click The **Dropdown Menu** Below To Buy An Item`;
     await message.edit({
         content: null,
         embeds: [productEmbed],
-        components: MT ? [maintenanceSelectRow, maintenanceRow] : [selectRow, buttonRow]
+        components: [selectRow, MT ? maintenanceRow : buttonRow]
     });
 }

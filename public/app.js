@@ -576,19 +576,23 @@ function storefrontSettings(storefront) {
     const text = (id, en) => gsLanguage === "en" ? en : id;
     const model = h("select", { disabled: !storefront.guildId },
         h("option", { value: "classic" }, text("Klasik · katalog lengkap", "Classic · full catalog")),
-        h("option", { value: "model1" }, text("Model 1 · menu ringkas", "Model 1 · compact menu")));
+        h("option", { value: "model1" }, text("Model 1 · menu ringkas", "Model 1 · compact menu")),
+        h("option", { value: "model2" }, text("Model 2 · dua dropdown", "Model 2 · two dropdowns")));
     model.value = storefront.model;
     const preview = h("div", { class: "storefront-preview" });
     const draw = () => {
         const compact = model.value === "model1";
+        const twoMenus = model.value === "model2";
         const buttons = compact ? ["👤 My Profile", "💎 Top Up WL", "💳 QRIS Top Up", "📜 History"]
             : ["Set GrowID", "Balance", "Deposit", "Deposit QRIS"];
         preview.replaceChildren(...[
             h("div", { class: "storefront-preview-embed" }, h("strong", {}, "PRODUCT LIST"),
                 h("span", {}, text("Voucher Digital · Stok 12 · 25 WL", "Digital Voucher · Stock 12 · 25 WL"))),
+            twoMenus ? h("div", { class: "storefront-preview-select" },
+                "🛒 Click here to select menu", h("span", { "aria-hidden": "true" }, "⌄")) : null,
             h("div", { class: "storefront-preview-select" },
-                compact ? "🛒 Select product to buy..." : "Click here to buy products", h("span", { "aria-hidden": "true" }, "⌄")),
-            h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
+                "🛒 Select product to buy...", h("span", { "aria-hidden": "true" }, "⌄")),
+            twoMenus ? null : h("div", { class: "storefront-preview-actions" }, ...buttons.map((label, index) =>
                 h("span", { class: compact || index === 3 ? "green" : null }, label))),
             compact ? h("details", { class: "storefront-profile-preview" },
                 h("summary", {}, text("Lihat pratinjau My Profile", "Preview My Profile")),
@@ -599,14 +603,14 @@ function storefrontSettings(storefront) {
                         h("span", { class: "primary" }, "✏️ Set / Edit GrowID"),
                         h("span", {}, "👤 Profile"), h("span", {}, "💰 Balance"), h("span", {}, "📜 History"))))
                 : null,
-            compact ? h("details", { class: "storefront-profile-preview" },
-                h("summary", {}, text("Lihat contoh stok & pembayaran", "Preview stock & payments")),
+            h("details", { class: "storefront-profile-preview" },
+                h("summary", {}, compact ? text("Lihat contoh stok & pembayaran", "Preview stock & payments")
+                    : text("Lihat contoh dropdown beli", "Preview the buy dropdown")),
                 h("div", { class: "storefront-preview-embed" },
                     h("span", {}, "✅ VOUCHER DIGITAL · Code: VOUCHER01 | Stock: 12"),
                     h("span", {}, "❌ VOUCHER PREMIUM · Code: VOUCHER02 | Stock: 0"),
                     h("span", {}, text("❌ Semua produk sedang habis", "❌ All products are sold out")),
-                    h("span", {}, text("Top Up WL langsung menambah WL. QRIS menambah saldo Rupiah yang bisa dikonversi lewat Convert Rp to WL.", "Growtopia top-ups credit WL. QRIS credits a rupiah balance that can be exchanged with Convert Rp to WL."))))
-                : null,
+                    compact ? h("span", {}, text("Top Up WL langsung menambah WL. QRIS menambah saldo Rupiah yang bisa dikonversi lewat Convert Rp to WL.", "Growtopia top-ups credit WL. QRIS credits a rupiah balance that can be exchanged with Convert Rp to WL.")) : null)),
         ].filter(Boolean));
     };
     draw();
@@ -1155,6 +1159,11 @@ const STORE_EMOJI_FIELDS = [
 const CATALOG_EMOJI_FIELDS = [["crown", "Mahkota judul dan produk", "Catalog and product crown"], ["arrow", "Panah detail produk", "Product detail arrow"],
     ["wl", "Mata uang World Lock", "World Lock currency"], ["sold", "Produk terjual", "Products sold"],
     ["stockAvailable", "Stok tersedia di daftar", "In-stock catalog marker"], ["stockEmpty", "Stok habis di daftar", "Sold-out catalog marker"]];
+const BUY_EMOJI_FIELDS = [["cart", "Panduan pilih produk", "Product picker instructions"],
+    ["inStock", "Stok tersedia di dropdown", "In-stock dropdown marker"], ["outOfStock", "Stok habis di dropdown", "Sold-out dropdown marker"]];
+const STORE_MENU_EMOJIS = [["growIdButton", "Set GrowID", "Set your GrowID"],
+    ["depositButton", "Deposit", "View deposit info"], ["qris", "Deposit QRIS", "Top-up via QRIS"],
+    ["balanceButton", "Balance", "Check balance"]];
 const PROFILE_EMOJI_FIELDS = [["profile", "Profil", "Profile"], ["discord", "Akun Discord", "Discord account"],
         ["growId", "GrowID", "GrowID"], ["balance", "Saldo WL", "WL balance"], ["rupiah", "Saldo Rupiah", "Rupiah balance"],
         ["spent", "Total belanja", "Total spent"], ["joined", "Tanggal bergabung", "Join date"], ["history", "Riwayat", "History"],
@@ -1166,15 +1175,14 @@ const TRANSACTION_EMOJI_FIELDS = [["warning", "Peringatan", "Warning"], ["succes
     ["paymentCancelButton", "Tombol batalkan QRIS", "QRIS cancel button"], ["paymentLog", "Judul log QRIS", "QRIS log title"]];
 const MODEL_EMOJI_GROUPS = {
     model1: [
-        ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Panduan pilih produk", "Product picker instructions"],
-            ["inStock", "Stok tersedia di dropdown", "In-stock dropdown marker"], ["outOfStock", "Stok habis di dropdown", "Sold-out dropdown marker"]]],
+        ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ...BUY_EMOJI_FIELDS]],
         ["Profil & navigasi", "Profile & navigation", PROFILE_EMOJI_FIELDS],
         ["Deposit & pembayaran", "Deposits & payments", [["deposit", "Deposit WL/DL", "WL/DL deposit"], ["qris", "Top Up QRIS", "QRIS top-up"],
             ["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi", "Confirm"]]],
         ["Pesan transaksi", "Transaction messages", TRANSACTION_EMOJI_FIELDS],
     ],
     classic: [
-        ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["outOfStock", "Pesan produk habis", "Sold-out message"],
+        ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ...BUY_EMOJI_FIELDS,
             ["growIdButton", "Tombol Set GrowID", "Set GrowID button"], ["balanceButton", "Tombol Balance", "Balance button"],
             ["depositButton", "Tombol Deposit", "Deposit button"], ["qris", "Tombol Deposit QRIS", "QRIS deposit button"]]],
         ["Info toko & transaksi", "Store and transaction messages", [["world", "Dunia deposit", "Deposit world"],
@@ -1185,6 +1193,11 @@ const MODEL_EMOJI_GROUPS = {
             ["confirm", "Konfirmasi", "Confirm"]]],
     ],
 };
+MODEL_EMOJI_GROUPS.model2 = [
+    ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ...BUY_EMOJI_FIELDS]],
+    ["Dropdown menu", "Menu dropdown", STORE_MENU_EMOJIS.map(([key, label]) => [key, label, label])],
+    ...MODEL_EMOJI_GROUPS.classic.slice(1),
+];
 
 function storefrontEmojiPreview(model, selected, emojis, t) {
     const icon = (key) => h("span", { class: "emoji-preview-icon" + (key === selected ? " is-target" : ""),
@@ -1197,15 +1210,15 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
         h("div", { class: "emoji-preview-embed" }, h("strong", { class: "emoji-preview-heading" }, ...title), ...content));
 
     if (["inStock", "outOfStock"].includes(selected)) {
-        if (model === "classic") return message([t("Pilih produk", "Pick a product")], line(icon("outOfStock"), t("Stok produk ini sedang habis.", "This product is out of stock.")));
         return message([t("Pilihan produk", "Product options")],
-            h("div", { class: "emoji-preview-select" }, line(icon("inStock"), t("Voucher Game · Stok 12", "Game Voucher · 12 in stock")),
-                line(icon("outOfStock"), t("Paket Premium · Habis", "Premium Pack · Sold out"))));
+            h("div", { class: "emoji-preview-select" }, line(icon("inStock"), "Voucher Game · Code: GAME01 | Stock: 12"),
+                line(icon("outOfStock"), "Paket Premium · Code: PREM01 | Stock: 0")));
     }
     if (selected === "cart" || selected === "warning") {
         return message([icon("warning"), "HOW TO BUY", icon("warning")],
-            line(icon("arrow"), model === "model1" ? t("Buka My Profile untuk mengatur GrowID.", "Open My Profile to set your GrowID.") : "Click Button Set GrowID"),
-            line(model === "model1" ? icon("cart") : icon("arrow"), t("Pilih produk dari dropdown.", "Pick a product from the dropdown.")));
+            line(icon("arrow"), model === "model1" ? t("Buka My Profile untuk mengatur GrowID.", "Open My Profile to set your GrowID.")
+                : model === "model2" ? t("Pilih Set GrowID di dropdown menu.", "Choose Set GrowID in the menu dropdown.") : "Click Button Set GrowID"),
+            line(icon("cart"), t("Pilih produk dari dropdown.", "Pick a product from the dropdown.")));
     }
     if (CATALOG_EMOJI_FIELDS.some(([key]) => key === selected)) {
         return message([icon("crown"), "PRODUCT LIST", icon("crown")],
@@ -1215,6 +1228,9 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
             line(icon("arrow"), "Stock: 0", icon("stockEmpty")));
     }
     if (["growIdButton", "balanceButton", "depositButton", "qris"].includes(selected)) {
+        if (model === "model2") return message(["🛒 Click here to select menu"],
+            h("div", { class: "emoji-preview-select" }, ...STORE_MENU_EMOJIS.map(([key, label, description]) =>
+                line(icon(key), h("strong", {}, label), description))));
         const actions = model === "model1"
             ? [button("profile", "My Profile"), button("deposit", "Top Up WL"), button("qris", "QRIS Top Up"), button("history", "History")]
             : [button("growIdButton", "Set GrowID"), button("balanceButton", "Balance"), button("depositButton", "Deposit"), button("qris", "Deposit QRIS")];
@@ -1225,7 +1241,7 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
             line("#42 · Voucher Game ×1 · 25 WL"), buttons(button("previous", t("Sebelumnya", "Previous")), button("next", t("Berikutnya", "Next"))));
     }
     if (["deposit", "world", "bot"].includes(selected)) {
-        if (model === "classic" && selected !== "deposit") {
+        if (model !== "model1" && selected !== "deposit") {
             return message([icon("crown"), "Deposit World", icon("crown")], line(icon("world"), "World: GEVRASHOP"),
                 line(icon("crown"), "Owner: Gevra"), line(icon("bot"), "Bot Name: GevraBot"));
         }
@@ -1267,7 +1283,7 @@ async function modelEmojiEditor() {
     try { settings = await api("GET", endpoint); }
     catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
     const { guildId, library, extraSource, model, defaults } = settings;
-    const modelLabel = model === "model1" ? "Model 1" : t("Klasik", "Classic");
+    const modelLabel = { model1: "Model 1", model2: "Model 2", classic: t("Klasik", "Classic") }[model];
     let values = { ...settings.emotes };
     const botCount = library?.filter(emote => emote.source === "bot").length || 0;
     const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS[model].map(([id, en, fields]) =>

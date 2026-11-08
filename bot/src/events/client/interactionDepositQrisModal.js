@@ -16,7 +16,7 @@ const { getQrisImageUrl, sendDepositLog } = require("../../utils/depositWatcher.
 const { requestAutoDeposit, PanelError } = require("../../utils/panelWallet.js");
 const { hostedQrCancelId } = require("../../utils/hostedQrCancel");
 const { serverId } = require("../../config/config.json");
-const { buttons, models, rupiahCredit, interactionEmojis } = require("../../config/storefront");
+const { buttons, models, menuId, storefrontAction, rupiahCredit, interactionEmojis } = require("../../config/storefront");
 const { COLOR } = require("../../config/configemoji.json");
 
 module.exports = {
@@ -129,8 +129,9 @@ async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah,
 
 client.on("interactionCreate", async (interaction) => {
     // Step 1: tombol "Deposit QRIS" diklik -> munculin modal
-    if (interaction.isButton() && ["depositqris_btn", buttons.qris].includes(interaction.customId)) {
-        const rupiah = interaction.customId === buttons.qris;
+    const action = storefrontAction(interaction, serverId);
+    if ((interaction.isButton() || interaction.customId === menuId) && ["depositqris_btn", buttons.qris].includes(action)) {
+        const rupiah = action === buttons.qris;
         if (rupiah && interaction.guildId !== serverId) return;
         const wallet = await Bal.findOne({ DiscordID: interaction.user.id }).catch(console.error);
 

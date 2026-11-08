@@ -13,7 +13,7 @@ let Bal = require("../../Schema/balance.js");
 let list = require("../../Schema/list.js");
 const Stock = require("../../Schema/shop.js");
 let { serverId } = require("../../config/config.json");
-const { interactionEmojis, componentEmoji } = require("../../config/storefront");
+const { storefrontAction, interactionEmojis, componentEmoji } = require("../../config/storefront");
 let cd = new Map();
 
 module.exports = {
@@ -48,7 +48,7 @@ client.on("interactionCreate", async (interaction) => {
     growid.addComponents(row4);
 
     try {
-        // ── Pilih produk dari dropdown "Click here to buy products" -> langsung tampilkan modal jumlah ──
+        // Pilih produk dari dropdown beli untuk membuka modal jumlah.
         if (interaction.isStringSelectMenu() && interaction.customId === "Howmanys") {
             let getBal = await Bal.findOne({ DiscordID: interaction.user.id }).catch((e) => console.error(e));
 
@@ -113,7 +113,7 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.showModal(buyAmount);
         }
 
-        if (interaction.customId === "growid23") {
+        if (storefrontAction(interaction, serverId) === "growid23") {
             let lcd = cd.get(interaction.user.id);
             if (lcd && Date.now() < lcd) {
                 let rt = Math.ceil((lcd - Date.now()) / 1000);

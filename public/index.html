@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GevraStore Panel</title><meta name="description" content="GevraStore AutoStore untuk Discord. Kelola katalog, stok, pesanan, dan pembayaran QRIS dari satu panel."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Buka toko di Discord dan kelola katalog, stok, serta pesanan dari panel GevraStore."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png?v=gevrastore-logo"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/svg+xml" href="/gevrastore-logo.svg"><link rel="apple-touch-icon" href="/logo.png?v=gevrastore-logo"><link rel="stylesheet" href="/style.css?v=landing-refresh"><link rel="stylesheet" href="/landing.css?v=landing-refresh"><script src="/ui-extras.js"></script></head>
+<title>GevraStore Panel</title><meta name="description" content="GevraStore AutoStore untuk Discord. Kelola katalog, stok, pesanan, dan pembayaran QRIS dari satu panel."><meta name="theme-color" content="#080b12"><meta name="color-scheme" content="dark"><meta property="og:type" content="website"><meta property="og:site_name" content="GevraStore"><meta property="og:title" content="GevraStore Panel"><meta property="og:description" content="Buka toko di Discord dan kelola katalog, stok, serta pesanan dari panel GevraStore."><meta property="og:image" content="https://panel.gevrastore.my.id/logo.png?v=gevrastore-logo"><meta property="og:url" content="https://panel.gevrastore.my.id/"><meta name="twitter:card" content="summary"><link rel="icon" type="image/svg+xml" href="/gevrastore-logo.svg"><link rel="apple-touch-icon" href="/logo.png?v=gevrastore-logo"><link rel="stylesheet" href="/style.css?v=landing-refresh"><link rel="stylesheet" href="/landing.css?v=landing-benefits"><script src="/ui-extras.js"></script></head>
 <body>
 <div id="login" class="landing hide">
   <header class="landing-nav landing-shell">
@@ -17,7 +17,7 @@
         <h1 id="heroTitle">Buka toko di Discord.<em>Kelola dari satu panel.</em></h1>
         <p>Atur produk dan stok dari web. Pelangganmu bisa memilih produk, membayar, dan menerima pesanan langsung di Discord.</p>
         <div class="landing-actions">
-          <a class="landing-btn" href="#paket">Lihat paket <span aria-hidden="true">↗</span></a>
+          <a class="landing-btn" href="#paket"><span id="landingPriceCta">Lihat paket</span><span aria-hidden="true">↗</span></a>
           <a class="landing-btn landing-outline" href="#showcase">Lihat cara kerja <span aria-hidden="true">↓</span></a>
         </div>
         <ul class="landing-hero-points"><li>QRIS &amp; Growtopia</li><li>Pengiriman via DM</li><li>Hosting bot 24/7</li></ul>
@@ -84,6 +84,11 @@
           <h3>Tampilan toko Discord</h3><p>Pilih dari empat model katalog, lalu sesuaikan emoji dan banner untuk tokomu.</p>
         </article>
       </div>
+      <dl class="landing-grid landing-extras">
+        <div><dt>Kenali pelangganmu</dt><dd>Cari GrowID, cek saldo WL dan Rupiah, lalu sesuaikan saldo WL dari panel.</dd></div>
+        <div><dt>Catatan pembelian dan donasi</dt><dd>Pisahkan channel testimoni dan log donasi di Discord agar aktivitas toko mudah dilacak.</dd></div>
+        <div><dt>Panduan di dalam panel</dt><dd>Ikuti panduan setup, lihat daftar perintah slash, dan buat script deposit dengan pengaturan world tokomu.</dd></div>
+      </dl>
     </section>
 
     <section class="landing-section" id="showcase" aria-labelledby="showcaseTitle">
@@ -113,6 +118,15 @@
           </section>
         </div>
       </div>
+      <div class="landing-storefronts">
+        <h3>Empat model toko untuk cara jualan yang berbeda.</h3>
+        <div class="landing-grid landing-models">
+          <article><span class="landing-chip">Klasik</span><h4>Menu lengkap</h4><p>Dropdown beli dengan tombol GrowID, saldo, dan deposit di satu pesan.</p></article>
+          <article><span class="landing-chip">Model 1</span><h4>Profil &amp; riwayat</h4><p>Menu ringkas untuk pelanggan yang sering top up dan cek riwayat.</p></article>
+          <article><span class="landing-chip">Model 2</span><h4>Dua dropdown</h4><p>Pisahkan menu pelanggan dari pemilihan produk dan status stok.</p></article>
+          <article><span class="landing-chip landing-chip-mint">Model 3</span><h4>Bayar langsung via QRIS</h4><p>Tombol Buy di tiap produk dengan harga Rupiah, cocok untuk script, aplikasi, dan voucher.</p></article>
+        </div>
+      </div>
     </section>
 
     <section class="landing-section" id="mode-bot" aria-labelledby="botTitle">
@@ -124,6 +138,11 @@
         <article><span class="landing-chip landing-chip-mint">Hosting cloud 24/7</span><h3>Bot milikmu</h3><p>Gunakan aplikasi bot Discord dan MongoDB milikmu. Hubungkan keduanya dari panel untuk menjalankan bot di cloud GevraStore.</p></article>
         <article><span class="landing-chip">Untuk lisensi yang mendapat akses</span><h3>Bot GevraStore</h3><p>Hubungkan akun Discord, pilih server yang kamu kelola, lalu aktifkan bot. Hosting dan database disiapkan GevraStore.</p></article>
       </div>
+      <ol class="landing-grid landing-start" aria-label="Cara memulai">
+        <li><b>Ambil lisensi</b><span>Pilih paket dan simpan kunci setelah pembayaran.</span></li>
+        <li><b>Hubungkan bot</b><span>Pilih bot dan siapkan server lewat panel.</span></li>
+        <li><b>Terbitkan katalog</b><span>Tambah produk dan stok, lalu tampilkan katalog di Discord.</span></li>
+      </ol>
     </section>
 
     <section class="landing-section landing-pricing" id="paket" aria-labelledby="planTitle">
@@ -147,6 +166,8 @@
         <details><summary>Apa yang perlu disiapkan?</summary><p>Siapkan server Discord. Jika memakai bot sendiri, siapkan juga aplikasi bot dan MongoDB. Jika lisensimu mendapat akses Bot GevraStore, cukup hubungkan Discord dan pilih server.</p></details>
         <details><summary>Kapan kunci lisensi muncul?</summary><p>QRIS otomatis menampilkan key setelah pembayaran terdeteksi. Untuk pembayaran DL atau QRIS manual, key muncul setelah penjual mengonfirmasi pembayaran.</p></details>
         <details><summary>Apakah pelanggan perlu membuka web?</summary><p>Pelanggan belanja lewat katalog Discord. Pemilik toko memakai panel web untuk mengelola produk, stok, dan pesanan.</p></details>
+        <details><summary>Apakah QRIS lisensi sama dengan QRIS toko?</summary><p>QRIS saat beli lisensi dipakai untuk membuka akses GevraStore. Untuk menerima pembayaran pelanggan di Discord, atur QRIS toko dari panel. Model 3 membutuhkan QRIS otomatis yang aktif.</p></details>
+        <details><summary>Apa yang dibutuhkan untuk deposit Growtopia?</summary><p>Siapkan world, bot Growtopia yang bisa menjalankan script Lua, dan webhook donasi. Generator di panel membantu menyiapkan script untuk world kamu.</p></details>
         <details><summary>Bagaimana cara memperpanjang lisensi?</summary><p>Buka menu Langganan di panel, pilih paket perpanjangan, dan ikuti langkah pembayaran.</p></details>
       </div>
     </section>
@@ -176,8 +197,8 @@
   <main class="content"><div id="view"></div></main>
 </div>
 <div id="toast"></div>
-<script src="/i18n.js?v=landing-refresh"></script>
+<script src="/i18n.js?v=landing-benefits"></script>
 <script src="/shop-guide.js?v=dashboard-audit"></script><script src="/app.js?v=gevrastore-logo"></script>
 <script src="/login-extras.js"></script>
-<script src="/landing.js?v=landing-refresh"></script>
+<script src="/landing.js?v=landing-benefits"></script>
 </body></html>

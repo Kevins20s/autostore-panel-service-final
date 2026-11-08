@@ -123,6 +123,13 @@ html[data-theme="light"] .landing {
 .landing-grid h3 { margin: 13px 0 6px; font: 750 21px/1.15 var(--landing-heading); letter-spacing: -.02em; }
 .landing-grid article p { line-height: 1.55; }
 .landing-icon { display: block; width: 39px; height: 39px; padding: 8px; border: 1px solid var(--landing-line); border-radius: 8px; background: var(--landing-soft); color: var(--landing-accent); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.landing-extras, .landing-start { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 16px 0 0; padding: 0; }
+.landing-extras > div, .landing-start li { padding: 10px 13px; border-left: 2px solid var(--landing-line); }
+.landing-extras dt, .landing-start b { font-weight: 750; }
+.landing-extras dd, .landing-start li > span { display: block; margin: 4px 0 0; color: var(--landing-muted); line-height: 1.5; }
+.landing-start { list-style: none; counter-reset: landing-setup; }
+.landing-start li { counter-increment: landing-setup; }
+.landing-start li::before { content: "0" counter(landing-setup); margin-right: 8px; color: var(--landing-accent); font: 700 12px ui-monospace, monospace; }
 
 .landing-showcase { display: grid; grid-template-columns: minmax(210px, .56fr) minmax(0, 1fr); gap: 16px; }
 .landing-demo-tabs { display: grid; align-content: start; gap: 8px; }
@@ -138,6 +145,10 @@ html[data-theme="light"] .landing {
 .landing-demo-receipt > div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 16px; padding: 9px 10px; border: 1px solid var(--landing-line); border-radius: 7px; background: var(--landing-bg); }
 .landing-demo-receipt span { color: var(--landing-muted); }
 .landing-mint { color: var(--landing-accent); }
+.landing-storefronts { margin-top: 27px; }
+.landing-storefronts > h3 { margin: 0 0 12px; font: 750 clamp(19px, 2vw, 25px)/1.2 var(--landing-heading); }
+.landing-models { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.landing-models h4 { margin: 9px 0 4px; font-size: 16px; }
 
 .landing-plans { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .landing-plans article { display: flex; flex-direction: column; }
@@ -147,6 +158,7 @@ html[data-theme="light"] .landing {
 .landing-plans .landing-plan-featured { border-color: var(--landing-accent); background: var(--landing-soft); }
 .landing-plan-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; padding-top: 12px; margin-top: auto; border-top: 1px solid var(--landing-line); color: var(--landing-muted); }
 .landing-plan-price strong { color: var(--landing-text); font: 760 clamp(23px, 2.55vw, 36px)/1.2 var(--landing-heading); letter-spacing: -.04em; }
+.landing-monthly { margin-top: 3px; color: var(--landing-muted); font-size: 12px; }
 .landing-plans .plan-dl-price { margin: 4px 0 13px; color: var(--landing-accent); }
 .landing-plans .landing-btn { margin-top: 3px; }
 .landing-loading { margin-bottom: 9px !important; }
@@ -184,7 +196,7 @@ html[data-theme="light"] .landing {
   .landing-shell { width: calc(100% - 40px); }
   .landing-nav { padding-right: 126px; }
   .landing-nav, .landing-nav nav { column-gap: 14px; }
-  .landing-plans { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-plans, .landing-models { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .landing-nav { padding: 12px 0; }
@@ -192,6 +204,7 @@ html[data-theme="light"] .landing {
   .landing-hero { padding-block: 46px; }
   .landing h1 { font-size: clamp(40px, 8.2vw, 64px); text-wrap: initial; }
   .landing-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-extras, .landing-start { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .landing-demo-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .landing-demo-tabs button { align-items: flex-start; flex-direction: column; gap: 5px; }
   .landing-footer { padding-bottom: 70px; }
@@ -199,7 +212,7 @@ html[data-theme="light"] .landing {
 @media (max-width: 450px) {
   .landing-shell { width: calc(100% - 30px); }
   .landing-nav nav { order: 3; flex-basis: 100%; }
-  .landing-features, .landing-bots, .landing-plans { grid-template-columns: minmax(0, 1fr); }
+  .landing-features, .landing-bots, .landing-plans, .landing-models { grid-template-columns: minmax(0, 1fr); }
   .landing-preview-bar { gap: 7px; padding-inline: 9px; }
   .landing-metrics > div { padding-inline: 6px; }
   .landing-footer { gap: 12px 20px; }

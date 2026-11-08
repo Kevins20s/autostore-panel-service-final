@@ -32,6 +32,7 @@
 (async () => {
     const list = document.getElementById("landingPlans");
     const status = document.getElementById("landingPlanStatus");
+    const priceCta = document.getElementById("landingPriceCta");
     const rupiah = new Intl.NumberFormat(gsLocale, { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
     const descriptions = {
         autostore: "Mulai dan kelola toko Discord selama 30 hari.",
@@ -48,6 +49,11 @@
         const response = await fetch("/api/shop-info");
         if (!response.ok) throw new Error("Paket gagal dimuat");
         const { packages } = await response.json();
+        const recurring = packages.filter(plan => !plan.lifetime && plan.days > 0);
+        if (recurring.length) {
+            const startingPrice = Math.min(...recurring.map(plan => plan.price));
+            priceCta.textContent = gsT("Paket mulai {0}", rupiah.format(startingPrice));
+        }
         const cards = packages.map(plan => {
             const card = document.createElement("article");
             const heading = document.createElement("div");
@@ -69,7 +75,14 @@
             const dl = element("span", gsT("Memuat kurs DL…"));
             dl.className = "plan-dl-price";
             dl.dataset.dlPrice = plan.price;
-            card.append(heading, price, dl, link);
+            card.append(heading, price);
+            const months = { 90: 3, 365: 12 }[plan.days];
+            if (!plan.lifetime && months) {
+                const average = element("span", gsT("Setara {0} per bulan", rupiah.format(Math.round(plan.price / months))));
+                average.className = "landing-monthly";
+                card.append(average);
+            }
+            card.append(dl, link);
             return card;
         });
         list.replaceChildren(...cards);

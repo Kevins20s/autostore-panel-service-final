@@ -16,8 +16,8 @@ const { getQrisImageUrl, sendDepositLog } = require("../../utils/depositWatcher.
 const { requestAutoDeposit, PanelError } = require("../../utils/panelWallet.js");
 const { hostedQrCancelId } = require("../../utils/hostedQrCancel");
 const { serverId } = require("../../config/config.json");
-const { buttons, rupiahCredit } = require("../../config/storefront");
-const { COLOR, WL, Warning } = require("../../config/configemoji.json");
+const { buttons, models, rupiahCredit, interactionEmojis } = require("../../config/storefront");
+const { COLOR } = require("../../config/configemoji.json");
 
 module.exports = {
     name: "interactionDepositQrisModal",
@@ -27,14 +27,15 @@ module.exports = {
  * Alur QRIS otomatis: QR dinamis dari panel, saldo masuk sendiri begitu webhook pembayaran diterima.
  * Transaksi dicatat SEBELUM DM dikirim, supaya webhook yang datang cepat tetap menemukan ordernya.
  */
-function creditDetails(nominal, wlAmount, pricePerWL, rupiah) {
+function creditDetails(nominal, wlAmount, pricePerWL, rupiah, WL) {
     return rupiah
         ? `> Saldo Rupiah diterima: **Rp${nominal.toLocaleString("id-ID")}**\n` +
           "> Setelah lunas, gunakan **Convert Rp to WL** untuk menukar saldo sesuai kurs saat itu.\n"
         : `> Rate: **Rp${pricePerWL.toLocaleString("id-ID")}/WL**\n> Balance Diterima: **${wlAmount} ${WL}**\n`;
 }
 
-async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah) {
+async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah, emojis) {
+    const { wl: WL, warning: Warning, paymentOk, paymentWarning } = emojis;
     const wlAmount = rupiah ? 0 : (panel.hostedWL ?? Math.floor(panel.amount / pricePerWL));
 
     if (!rupiah && wlAmount < 1) {
@@ -49,10 +50,10 @@ async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah)
             `Scan QR di bawah ini menggunakan aplikasi e-wallet/mobile banking kamu\n\n` +
             `> Order ID: \`${panel.orderId}\`\n` +
             `> Nominal: **Rp${panel.amount.toLocaleString("id-ID")}**\n` +
-            creditDetails(panel.amount, wlAmount, pricePerWL, rupiah) +
+            creditDetails(panel.amount, wlAmount, pricePerWL, rupiah, WL) +
             `> Berlaku sampai: <t:${Math.floor(panel.expiresAt / 1000)}:R>\n\n` +
-            `✅ Pembayaran **diverifikasi otomatis**. Balance masuk sendiri beberapa saat setelah kamu membayar, tidak perlu menunggu admin.\n` +
-            `⚠️ Bayar sesuai nominal **Rp${panel.amount.toLocaleString("id-ID")}** dan sebelum QR kedaluwarsa. Simpan Order ID di atas kalau ada kendala.`
+            `${paymentOk} Pembayaran **diverifikasi otomatis**. Balance masuk sendiri beberapa saat setelah kamu membayar, tidak perlu menunggu admin.\n` +
+            `${paymentWarning} Bayar sesuai nominal **Rp${panel.amount.toLocaleString("id-ID")}** dan sebelum QR kedaluwarsa. Simpan Order ID di atas kalau ada kendala.`
         )
         .setColor(COLOR)
         .setTimestamp();
@@ -99,7 +100,7 @@ async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah)
         }
         await sendDepositLog(qrisDoc);
         return sent ? interaction.editReply({
-            content: rupiah ? "✅ QR dikirim lewat DM. Setelah lunas, saldo Rupiah akan bertambah." : "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
+            content: `${paymentOk} ${rupiah ? "QR dikirim lewat DM. Setelah lunas, saldo Rupiah akan bertambah." : "QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!"}`,
         }) : interaction.editReply({ embeds: [embed], files, components });
     }
     let sentMessage;
@@ -122,7 +123,7 @@ async function handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah)
     sendDepositLog(qrisDoc).catch((err) => console.error("sendDepositLog error:", err.message));
 
     return interaction.editReply({
-        content: rupiah ? "✅ QR dikirim lewat DM. Setelah lunas, saldo Rupiah akan bertambah." : "✅ QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!",
+        content: `${paymentOk} ${rupiah ? "QR dikirim lewat DM. Setelah lunas, saldo Rupiah akan bertambah." : "QR Code deposit kamu sudah dikirim lewat **DM**. Bayar sesuai nominal, balance akan masuk **otomatis**!"}`,
     });
 }
 
@@ -134,6 +135,7 @@ client.on("interactionCreate", async (interaction) => {
         const wallet = await Bal.findOne({ DiscordID: interaction.user.id }).catch(console.error);
 
         if (!wallet) {
+            const { warning: Warning } = await interactionEmojis(interaction, rupiah ? models.model1 : models.classic);
             return interaction.reply({
                 content: `${Warning} **Set GrowID** kamu dulu sebelum melakukan deposit!`,
                 ephemeral: true,
@@ -161,11 +163,13 @@ client.on("interactionCreate", async (interaction) => {
     // Step 2: modal disubmit -> hitung WL, tampilkan QRIS statis, kirim log ke admin
     if (interaction.isModalSubmit() && ["depositqris_modal", "depositqris_modal_rp"].includes(interaction.customId)) {
         const rupiah = interaction.customId === "depositqris_modal_rp";
+        const model = rupiah ? models.model1 : models.classic;
         if (rupiah && interaction.guildId !== serverId) return;
         const nominalRaw = interaction.fields.getTextInputValue("nominal").replace(/[^0-9]/g, "");
         const nominal = Math.floor(Number(nominalRaw));
 
         if (!nominal || nominal < 100) {
+            const { warning: Warning } = await interactionEmojis(interaction, model);
             return interaction.reply({
                 content: `${Warning} Nominal tidak valid. Minimal deposit adalah **Rp100**`,
                 ephemeral: true,
@@ -173,6 +177,8 @@ client.on("interactionCreate", async (interaction) => {
         }
 
         await interaction.deferReply({ ephemeral: true });
+        const emojis = await interactionEmojis(interaction, model);
+        const { wl: WL, warning: Warning, paymentOk, paymentWarning } = emojis;
 
         try {
             const wallet = await Bal.findOne({ DiscordID: interaction.user.id }).catch(console.error);
@@ -208,7 +214,7 @@ client.on("interactionCreate", async (interaction) => {
                 if (rupiah && panel.creditCurrency !== rupiahCredit) {
                     return interaction.editReply("QRIS saldo Rupiah belum siap. Coba lagi sebentar.");
                 }
-                return handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah);
+                return handleAutoDeposit(interaction, wallet, panel, pricePerWL, rupiah, emojis);
             }
 
             const qrisImageUrl = await getQrisImageUrl();
@@ -228,8 +234,8 @@ client.on("interactionCreate", async (interaction) => {
                     `Scan QR di bawah ini menggunakan aplikasi e-wallet/mobile banking kamu\n\n` +
                     `> Order ID: \`${orderId}\`\n` +
                     `> Nominal: **Rp${nominal.toLocaleString("id-ID")}**\n` +
-                    creditDetails(nominal, wlAmount, pricePerWL, rupiah) + "\n" +
-                    `⚠️ QRIS ini **nominal bebas**, jadi pastikan kamu bayar dengan nominal yang **PAS/SESUAI** (Rp${nominal.toLocaleString("id-ID")}) supaya gampang diverifikasi.\n\n` +
+                    creditDetails(nominal, wlAmount, pricePerWL, rupiah, WL) + "\n" +
+                    `${paymentWarning} QRIS ini **nominal bebas**, jadi pastikan kamu bayar dengan nominal yang **PAS/SESUAI** (Rp${nominal.toLocaleString("id-ID")}) supaya gampang diverifikasi.\n\n` +
                     `Setelah bayar, tunggu **admin memverifikasi pembayaran secara manual**. Balance akan otomatis masuk begitu dikonfirmasi. Simpan Order ID di atas untuk referensi kalau ada kendala.`
                 )
                 .setImage(qrisImageUrl)
@@ -267,7 +273,7 @@ client.on("interactionCreate", async (interaction) => {
             sendDepositLog(qrisDoc).catch((err) => console.error("sendDepositLog error:", err.message));
 
             return interaction.editReply({
-                content: `✅ QR Code deposit kamu sudah dikirim lewat **DM**. Silakan cek DM kamu, bayar sesuai nominal, dan tunggu konfirmasi admin!`,
+                content: `${paymentOk} QR Code deposit kamu sudah dikirim lewat **DM**. Silakan cek DM kamu, bayar sesuai nominal, dan tunggu konfirmasi admin!`,
             });
         } catch (err) {
             console.error("Deposit QRIS modal error:", err);

@@ -3,35 +3,44 @@ const client = require("../index.js");
 const Qris = require("../Schema/qris.js");
 const Bal = require("../Schema/balance.js");
 const SettingChannel = require("../Schema/SettingChannel.js");
-const { WL, Benar, Warning, COLOR } = require("../config/configemoji.json");
-const { rupiahCredit } = require("../config/storefront");
+const { WL, COLOR } = require("../config/configemoji.json");
+const { serverId } = require("../config/config.json");
+const { rupiahCredit, models, interactionEmojis, componentEmoji } = require("../config/storefront");
 
 const LOG_STATUS = {
-    PENDING: { label: "⏳ PENDING", color: 0xfee75c },
-    SUCCESS: { label: "✅ SUCCESS", color: 0x57f287 },
-    CANCELLED: { label: "⛔ CANCELLED", color: 0xed4245 },
+    PENDING: { emoji: "paymentPending", color: 0xfee75c },
+    SUCCESS: { emoji: "paymentOk", color: 0x57f287 },
+    CANCELLED: { emoji: "paymentCancelled", color: 0xed4245 },
 };
 
-function formatDepositCredit(trx) {
+function formatDepositCredit(trx, wl = WL) {
     return trx.creditCurrency === rupiahCredit
-        ? `Rp${trx.grossAmount.toLocaleString("id-ID")} ke saldo Rupiah` : `${trx.wlAmount} ${WL}`;
+        ? `Rp${trx.grossAmount.toLocaleString("id-ID")} ke saldo Rupiah` : `${trx.wlAmount} ${wl}`;
 }
 
-function buildLogEmbed(trx, statusKey) {
+function depositEmojis(trx, channel) {
+    const guild = client.guilds?.cache.get(serverId);
+    const member = guild?.members.me;
+    const appPermissions = channel && member ? channel.permissionsFor?.(member) : member?.permissions;
+    return interactionEmojis({ guildId: serverId, guild, appPermissions },
+        trx.creditCurrency === rupiahCredit ? models.model1 : models.classic);
+}
+
+function buildLogEmbed(trx, statusKey, emojis) {
     const style = LOG_STATUS[statusKey];
     const rate = trx.wlAmount ? Math.round(trx.grossAmount / trx.wlAmount) : null;
 
     const embed = new EmbedBuilder()
-        .setTitle(trx.mode === "auto" ? "📥 QRIS Deposit (Otomatis)" : "📥 QRIS Deposit (Manual)")
+        .setTitle(`${emojis.paymentLog} QRIS Deposit (${trx.mode === "auto" ? "Otomatis" : "Manual"})`)
         .setColor(style.color)
         .addFields(
-            { name: "Status", value: style.label },
+            { name: "Status", value: `${emojis[style.emoji]} ${statusKey}` },
             { name: "User", value: `<@${trx.discordId}>`, inline: true },
             { name: "GrowID", value: `\`${trx.growId || "-"}\``, inline: true },
             { name: "Order ID", value: `\`${trx.orderId}\`` },
             { name: "Amount", value: `Rp${trx.grossAmount.toLocaleString("id-ID")}`, inline: true },
-            { name: "Saldo diterima", value: formatDepositCredit(trx), inline: true },
-            ...(trx.creditCurrency === rupiahCredit ? [] : [{ name: "Rate", value: rate ? `1 ${WL} = Rp${rate.toLocaleString("id-ID")}` : "-", inline: true }])
+            { name: "Saldo diterima", value: formatDepositCredit(trx, emojis.wl), inline: true },
+            ...(trx.creditCurrency === rupiahCredit ? [] : [{ name: "Rate", value: rate ? `1 ${emojis.wl} = Rp${rate.toLocaleString("id-ID")}` : "-", inline: true }])
         )
         .setFooter({ text: trx.mode === "auto" ? "Auto-Store QRIS Deposit • Otomatis" : "Auto-Store QRIS Deposit • Konfirmasi Manual" })
         .setTimestamp();
@@ -46,16 +55,16 @@ function buildLogEmbed(trx, statusKey) {
     return embed;
 }
 
-function buildAdminButtons(orderId) {
+function buildAdminButtons(orderId, emojis) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setLabel("Success")
-            .setEmoji("✅")
+            .setEmoji(componentEmoji(emojis.paymentOk))
             .setStyle(ButtonStyle.Success)
             .setCustomId(`qrisadmin_success_${orderId}`),
         new ButtonBuilder()
             .setLabel("Cancel")
-            .setEmoji("❌")
+            .setEmoji(componentEmoji(emojis.paymentCancelButton))
             .setStyle(ButtonStyle.Danger)
             .setCustomId(`qrisadmin_cancel_${orderId}`)
     );
@@ -99,12 +108,13 @@ async function sendDepositLog(trx) {
         const channel = await client.channels.fetch(channelId).catch(() => null);
         if (!channel) return null;
 
+        const emojis = await depositEmojis(trx, channel);
         const message = await channel.send({
-            embeds: [buildLogEmbed(trx, "PENDING")],
+            embeds: [buildLogEmbed(trx, "PENDING", emojis)],
             components: trx.panelManaged ? [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setLabel("Cancel").setEmoji("❌").setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setLabel("Cancel").setEmoji(componentEmoji(emojis.paymentCancelButton)).setStyle(ButtonStyle.Danger)
                     .setCustomId(`qrisadmin_cancel_${trx.orderId}`),
-            )] : [buildAdminButtons(trx.orderId)],
+            )] : [buildAdminButtons(trx.orderId, emojis)],
             nonce: String(trx._id),
             enforceNonce: true,
         });
@@ -146,7 +156,8 @@ async function updateDepositLog(trx, statusKey) {
         });
         if (!message) return false;
 
-        await message.edit({ embeds: [buildLogEmbed(trx, statusKey)], components: [] });
+        const emojis = await depositEmojis(trx, channel);
+        await message.edit({ embeds: [buildLogEmbed(trx, statusKey, emojis)], components: [] });
         console.log("[DEBUG QRIS] updateDepositLog: berhasil edit log jadi", statusKey);
         return true;
     } catch (err) {
@@ -233,19 +244,16 @@ async function creditDeposit(trx, message, processedBy, { allowCancelled = false
         { $inc: { Balance: trx.wlAmount, Deposit: trx.wlAmount } }
     );
 
-    const embed = new EmbedBuilder()
-        .setTitle("Deposit Berhasil")
-        .setDescription(
-            `${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil ${processedBy ? "dikonfirmasi oleh admin" : "diverifikasi otomatis"}!\n\n` +
-            `> Order ID: \`${trx.orderId}\`\n` +
-            `> Balance Diterima: **${formatDepositCredit(trx)}**`
-        )
-        .setColor(COLOR)
-        .setTimestamp();
-
     trx.processedBy = rupiah ? updated.processedBy : processedBy;
     const notify = async () => {
-        await editMessageSafely(message === undefined ? await fetchDmMessage(trx) : message, embed);
+        const dm = message === undefined ? await fetchDmMessage(trx) : message;
+        if (dm) {
+            const { success, wl } = await depositEmojis(trx);
+            const embed = new EmbedBuilder().setTitle("Deposit Berhasil").setColor(COLOR).setTimestamp()
+                .setDescription(`${success} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil ${processedBy ? "dikonfirmasi oleh admin" : "diverifikasi otomatis"}!\n\n` +
+                    `> Order ID: \`${trx.orderId}\`\n> Balance Diterima: **${formatDepositCredit(trx, wl)}**`);
+            await editMessageSafely(dm, embed);
+        }
         await updateDepositLog(trx, "SUCCESS");
     };
     if (background) notify().catch(error => console.error("Gagal mengirim notifikasi QRIS:", error.code || error.name));
@@ -275,10 +283,11 @@ async function cancelDeposit(trx, message, processedBy) {
         return false;
     }
 
+    const { warning } = await depositEmojis(trx);
     const embed = new EmbedBuilder()
         .setTitle("Deposit Dibatalkan")
         .setDescription(
-            `${Warning} Transaksi deposit kamu **dibatalkan oleh admin** (pembayaran tidak ditemukan/tidak valid).\n\n` +
+            `${warning} Transaksi deposit kamu **dibatalkan oleh admin** (pembayaran tidak ditemukan/tidak valid).\n\n` +
             `> Order ID: \`${trx.orderId}\`\n\n` +
             `Kalau kamu merasa ini keliru, silakan hubungi admin dan sertakan Order ID di atas.`
         )
@@ -300,5 +309,6 @@ module.exports = {
     getQrisImageUrl,
     creditDeposit,
     formatDepositCredit,
+    depositEmojis,
     cancelDeposit,
 };

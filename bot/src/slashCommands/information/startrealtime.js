@@ -16,8 +16,8 @@ let disc = require("../../Schema/discount.js");
 let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
-let { Warning, Benar, Salah, WL, CROWN, Buy, imageUrl2, COLOR, ARROW } = require("../../config/configemoji.json");
-const { collection, models, buttons, resolveEmojis, componentEmoji } = require("../../config/storefront");
+const { imageUrl2, COLOR } = require("../../config/configemoji.json");
+const { collection, models, buttons, resolveStorefrontEmojis, storefrontModel, componentEmoji } = require("../../config/storefront");
 
 const jobs = new Map();
 const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
@@ -151,10 +151,10 @@ async function renderCatalog(message, guildId, kategori) {
         mongoose.connection.collection(collection).findOne({ _id: guildId }),
     ]);
     const MT = !!maintenance;
-    const compact = storefront?.model === models.model1;
-    const permissions = compact && storefront.emojiSourceGuildId && message.guild?.members.me
+    const compact = storefrontModel(storefront) === models.model1;
+    const permissions = (storefront?.emojiSourceGuildId || storefront?.classicEmojiSourceGuildId) && message.guild?.members.me
         ? message.channel?.permissionsFor(message.guild.members.me) : null;
-    const emojis = compact ? await resolveEmojis(storefront.emojis, message.guild, storefront.emojiSourceGuildId, permissions) : null;
+    const emojis = await resolveStorefrontEmojis(storefront, message.guild, permissions);
 
     // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
     const { pricePerWL, pricePerDL } = await getEffectiveWLPrice();
@@ -201,16 +201,16 @@ async function renderCatalog(message, guildId, kategori) {
             }
         }
 
-        let statusEmoji = hasStock ? Benar : Salah;
+        let statusEmoji = hasStock ? emojis.stockAvailable : emojis.stockEmpty;
         let stockText = hasStock ? `**${stock}** ${statusEmoji}` : `**0** ${statusEmoji}`;
         let soldText = `**${code.sold ?? 0}**`;
 
         productBlocks.push(
-`${CROWN} **${code.name.toUpperCase()}** ${CROWN}
-${ARROW} Code: **${code.code}**
-${ARROW} Stock: ${stockText}
-${ARROW} Sold: ${soldText} ${Buy}
-${ARROW} Price: ${priceText} ${WL}${rupiahText}
+`${emojis.crown} **${code.name.toUpperCase()}** ${emojis.crown}
+${emojis.arrow} Code: **${code.code}**
+${emojis.arrow} Stock: ${stockText}
+${emojis.arrow} Sold: ${soldText} ${emojis.sold}
+${emojis.arrow} Price: ${priceText} ${emojis.wl}${rupiahText}
 ${DIVIDER}`
         );
 
@@ -226,17 +226,17 @@ ${DIVIDER}`
     }
 
     let howToBuySection = compact
-        ? `${Warning} **HOW TO BUY** ${Warning}\n${ARROW} Buka **My Profile** untuk mengatur GrowID.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown.`
+        ? `${emojis.warning} **HOW TO BUY** ${emojis.warning}\n${emojis.arrow} Buka **My Profile** untuk mengatur GrowID.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown.`
         :
-`${Warning} **HOW TO BUY** ${Warning}
-${ARROW} Click Button **Set GrowID**
-${ARROW} Click Button **Balance** To Check Your GrowID
-${ARROW} Click Button **Deposit** To See World Deposit
-${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
+`${emojis.warning} **HOW TO BUY** ${emojis.warning}
+${emojis.arrow} Click Button **Set GrowID**
+${emojis.arrow} Click Button **Balance** To Check Your GrowID
+${emojis.arrow} Click Button **Deposit** To See World Deposit
+${emojis.arrow} Click The **Dropdown Menu** Below To Buy An Item`;
 
     let kursText = pricePerWL
-        ? `${ARROW} Kurs: **1 ${WL} = Rp${Math.round(pricePerWL).toLocaleString("id-ID")}** | **1 DL = Rp${Math.round(pricePerDL).toLocaleString("id-ID")}**`
-        : `${ARROW} Kurs: Harga belum tersedia`;
+        ? `${emojis.arrow} Kurs: **1 ${emojis.wl} = Rp${Math.round(pricePerWL).toLocaleString("id-ID")}** | **1 DL = Rp${Math.round(pricePerDL).toLocaleString("id-ID")}**`
+        : `${emojis.arrow} Kurs: Harga belum tersedia`;
 
     let titleText = kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
 
@@ -249,7 +249,7 @@ ${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
     const description = header + shownProducts + footer;
 
     let productEmbed = new EmbedBuilder()
-        .setTitle(`${CROWN} ${titleText} ${CROWN}`)
+        .setTitle(`${emojis.crown} ${titleText} ${emojis.crown}`)
         .setDescription(description)
         .setColor(COLOR)
         .setImage(imageUrl2)
@@ -276,22 +276,22 @@ ${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
         new ButtonBuilder()
             .setLabel("Set GrowID")
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji("<a:SHRules:1269199498320809996>")
+            .setEmoji(componentEmoji(emojis.growIdButton))
             .setCustomId("growid23"),
         new ButtonBuilder()
             .setLabel("Balance")
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji("<a:uang:1269199494063456256>")
+            .setEmoji(componentEmoji(emojis.balanceButton))
             .setCustomId("balance1"),
         new ButtonBuilder()
             .setLabel("Deposit")
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji("<a:planet2:1269199500673683466>")
+            .setEmoji(componentEmoji(emojis.depositButton))
             .setCustomId("deposit"),
         new ButtonBuilder()
             .setLabel("Deposit QRIS")
             .setStyle(ButtonStyle.Success)
-            .setEmoji("💳")
+            .setEmoji(componentEmoji(emojis.qris))
             .setCustomId("depositqris_btn")
     );
 
@@ -308,19 +308,19 @@ ${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
             .setLabel("Maintenance")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(true)
-            .setEmoji("<a:SHRules:1269199498320809996>")
+            .setEmoji(componentEmoji(emojis.growIdButton))
             .setCustomId("growid23"),
         new ButtonBuilder()
             .setLabel("Maintenance")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(true)
-            .setEmoji("<a:uang:1269199494063456256>")
+            .setEmoji(componentEmoji(emojis.balanceButton))
             .setCustomId("balance1"),
         new ButtonBuilder()
             .setLabel("Maintenance")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(true)
-            .setEmoji("<a:planet2:1269199500673683466>")
+            .setEmoji(componentEmoji(emojis.depositButton))
             .setCustomId("deposit")
     );
 

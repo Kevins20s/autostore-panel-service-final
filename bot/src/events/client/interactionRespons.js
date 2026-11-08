@@ -13,7 +13,7 @@ let Bal = require("../../Schema/balance.js");
 let list = require("../../Schema/list.js");
 const Stock = require("../../Schema/shop.js");
 let { serverId } = require("../../config/config.json");
-let { BOT, Buy, COLOR, CROWN } = require("../../config/configemoji.json");
+const { interactionEmojis, componentEmoji } = require("../../config/storefront");
 let cd = new Map();
 
 module.exports = {
@@ -52,14 +52,6 @@ client.on("interactionCreate", async (interaction) => {
         if (interaction.isStringSelectMenu() && interaction.customId === "Howmanys") {
             let getBal = await Bal.findOne({ DiscordID: interaction.user.id }).catch((e) => console.error(e));
 
-            const rowGrowid = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setLabel("Set GrowID")
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji(BOT)
-                    .setCustomId("growid23")
-            );
-
             if (interaction.guildId !== serverId) return interaction.reply({
                 content: "You can use the button if not a server in config!",
                 ephemeral: true
@@ -67,10 +59,15 @@ client.on("interactionCreate", async (interaction) => {
 
             const code = interaction.values[0];
             if (!code || code === "none" || !await Stock.exists({ code, data: { $type: "string", $ne: "" } })) {
-                return interaction.reply({ content: "❌ Stok produk ini sedang habis.", ephemeral: true });
+                const emojis = await interactionEmojis(interaction);
+                return interaction.reply({ content: `${emojis.outOfStock} Stok produk ini sedang habis.`, ephemeral: true });
             }
 
             if (!getBal) {
+                const emojis = await interactionEmojis(interaction);
+                const rowGrowid = new ActionRowBuilder().addComponents(new ButtonBuilder()
+                    .setLabel("Set GrowID").setStyle(ButtonStyle.Secondary)
+                    .setEmoji(componentEmoji(emojis.growId)).setCustomId("growid23"));
                 return interaction.reply({
                     content: "**Set Growid** First Before Using This Button!",
                     components: [rowGrowid],

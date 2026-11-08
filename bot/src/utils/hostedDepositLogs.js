@@ -3,8 +3,8 @@
 const config = require("../config/config.json");
 const Qris = require("../Schema/qris");
 const { EmbedBuilder } = require("discord.js");
-const { COLOR, Benar } = require("../config/configemoji.json");
-const { sendDepositLog, updateDepositLog, fetchDmMessage, formatDepositCredit } = require("./depositWatcher");
+const { COLOR } = require("../config/configemoji.json");
+const { sendDepositLog, updateDepositLog, fetchDmMessage, formatDepositCredit, depositEmojis } = require("./depositWatcher");
 const { rupiahCredit } = require("../config/storefront");
 
 function headers() {
@@ -64,8 +64,9 @@ async function syncHostedDepositLogs() {
         const logged = await updateDepositLog(trx, "SUCCESS");
         const dm = await fetchDmMessage(trx);
         if (dm) {
+            const { success, wl } = await depositEmojis(trx);
             const embed = new EmbedBuilder().setTitle("Deposit Berhasil")
-                .setDescription(`${Benar} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil diverifikasi otomatis!\n\n> Order ID: \`${trx.orderId}\`\n> Balance Diterima: **${formatDepositCredit(trx)}**`)
+                .setDescription(`${success} Pembayaran **Rp${trx.grossAmount.toLocaleString("id-ID")}** berhasil diverifikasi otomatis!\n\n> Order ID: \`${trx.orderId}\`\n> Balance Diterima: **${formatDepositCredit(trx, wl)}**`)
                 .setColor(COLOR).setTimestamp();
             await dm.edit({ embeds: [embed], components: [], attachments: [] }).catch(() => {});
         }

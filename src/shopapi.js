@@ -3,7 +3,8 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
-const { collection: storefrontCollection, models: storefrontModels, emojiDefaults, customEmojiId } = require("../bot/src/config/storefront");
+const { collection: storefrontCollection, models: storefrontModels, emojiDefaultsFor, storefrontModel, emojiFields,
+    customEmojiId } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -354,7 +355,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             donationWebhookId: channels?.DonationWebhookId || "",
             storefront: {
                 guildId: req.shopGuildId,
-                model: storefront?.model === storefrontModels.model1 ? storefrontModels.model1 : storefrontModels.classic,
+                model: storefrontModel(storefront),
             } });
     }));
     r.put("/settings/storefront", wrap(async (req, res) => {
@@ -372,18 +373,26 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         const [storefront, { library, extraSource }] = await Promise.all([
             req.db.collection(storefrontCollection).findOne({ _id: guildId }), storeEmotes(req),
         ]);
-        const emotes = Object.fromEntries(Object.entries(storefront?.emojis || {}).filter(
-            ([key, value]) => Object.hasOwn(emojiDefaults, key) && customEmojiId(value)
+        const model = storefrontModel(storefront);
+        const defaults = emojiDefaultsFor(model);
+        const fields = emojiFields(model);
+        const emotes = Object.fromEntries(Object.entries(storefront?.[fields.values] || {}).filter(
+            ([key, value]) => Object.hasOwn(defaults, key) && customEmojiId(value)
         ));
-        res.set("Cache-Control", "no-store").json({ guildId, emotes, library, extraSource: extraSource?.name || null });
+        res.set("Cache-Control", "no-store").json({ guildId, model, defaults, emotes, library, extraSource: extraSource?.name || null });
     }));
     r.put("/settings/storefront/emojis", wrap(async (req, res) => {
-        const { guildId, emojis } = req.body || {};
+        const { guildId, emojis, model: requestedModel } = req.body || {};
         if (!ID_RE.test(req.shopGuildId) || guildId !== req.shopGuildId) {
             return fail(res, "Server toko belum diatur atau sudah berubah. Muat ulang halaman.", 409);
         }
+        const storefront = await req.db.collection(storefrontCollection).findOne({ _id: guildId });
+        const model = storefrontModel(storefront);
+        if (requestedModel !== undefined && requestedModel !== model) return fail(res, "Model toko sudah berubah. Buka kembali menu Emoji.", 409);
+        const defaults = emojiDefaultsFor(model);
+        const fields = emojiFields(model);
         if (!emojis || typeof emojis !== "object" || Array.isArray(emojis) || Object.entries(emojis).some(
-            ([key, value]) => !Object.hasOwn(emojiDefaults, key) || !customEmojiId(value)
+            ([key, value]) => !Object.hasOwn(defaults, key) || !customEmojiId(value)
         )) return fail(res, "Pilih emote custom Discord dari server toko.");
         const entries = Object.entries(emojis);
         const { library, extraSource } = entries.length ? await storeEmotes(req) : { library: [] };
@@ -393,7 +402,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         if (Object.values(normalized).some(code => !code)) return fail(res, "Ada emote yang sudah tidak tersedia. Muat ulang daftar emote.");
         const usesExtraSource = Object.values(normalized).some(code => byId.get(customEmojiId(code))?.source === "external");
         await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: {
-            emojis: normalized, emojiSourceGuildId: usesExtraSource ? extraSource.id : null,
+            [fields.values]: normalized, [fields.source]: usesExtraSource ? extraSource.id : null,
         } }, { upsert: true });
         res.json({ emotes: normalized });
     }));

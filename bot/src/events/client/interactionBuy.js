@@ -1,7 +1,8 @@
 const { InteractionType, EmbedBuilder } = require("discord.js");
 const mongoose = require("mongoose");
 const { Owner, Admin } = require("../../config/config.json");
-const { WL, COLOR, imageUrl, ARROW, Benar, CROWN, Dolar, BALANCE, Buy, Warning } = require("../../config/configemoji.json");
+const { COLOR, imageUrl } = require("../../config/configemoji.json");
+const { interactionEmojis } = require("../../config/storefront");
 const Balance = require("../../Schema/balance.js");
 const Stock = require("../../Schema/shop.js");
 const Product = require("../../Schema/list.js");
@@ -90,6 +91,8 @@ async function handlePurchase(interaction) {
     }
 
     const { orderNumber, product, total, baseTotal, balance, data } = result;
+    const { wl: WL, arrow: ARROW, success: Benar, crown: CROWN, price: Dolar, balanceMark: BALANCE,
+        sold: Buy, warning: Warning } = await interactionEmojis(interaction);
     const files = [{ attachment: Buffer.from(data), name: `order-${orderNumber}.txt` }];
     const receipt = new EmbedBuilder()
         .setTitle(`${CROWN} Purchase Details ${CROWN}`)

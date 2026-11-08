@@ -1,11 +1,10 @@
 "use strict";
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, escapeMarkdown } = require("discord.js");
-const mongoose = require("mongoose");
 const { randomUUID } = require("node:crypto");
 const { serverId } = require("../../config/config.json");
 const { COLOR } = require("../../config/configemoji.json");
-const { collection, buttons, resolveEmojis, componentEmoji } = require("../../config/storefront");
+const { buttons, interactionEmojis, componentEmoji } = require("../../config/storefront");
 const Balance = require("../../Schema/balance.js");
 const OrderLog = require("../../Schema/orderlog.js");
 const DepositWorld = require("../../Schema/deposition.js");
@@ -96,7 +95,7 @@ async function showWorldDeposit(embed, emojis) {
     embed.setTitle(`${emojis.deposit} Deposit via Growtopia`).setColor(0x57f287).setDescription(
         "Drop **World Lock** atau **Diamond Lock** di world berikut.\n\n" +
         `**WORLD** = ${code(deposit?.world)}\n**OWNER** = ${code(deposit?.owner)}\n**BOT** = ${code(deposit?.botName)}\n\n` +
-        "**⚠️ Penting**\n1. Pastikan GrowID sudah diatur di bot.\n2. Cek kembali GrowID dan pastikan bot deposit ada di world sebelum drop.\n3. Saldo WL bertambah setelah deposit tercatat.");
+        `**${emojis.paymentWarning} Penting**\n1. Pastikan GrowID sudah diatur di bot.\n2. Cek kembali GrowID dan pastikan bot deposit ada di world sebelum drop.\n3. Saldo WL bertambah setelah deposit tercatat.`);
     return [row(
         button(buttons.deposit, "Deposit WL/DL", emojis.deposit, ButtonStyle.Success),
         button(buttons.qris, "QRIS / E-Wallet", emojis.qris, ButtonStyle.Primary),
@@ -159,8 +158,7 @@ async function handleStorefront(interaction) {
     if (interaction.message?.flags.has(MessageFlags.Ephemeral)) await interaction.deferUpdate();
     else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-        const storefront = await mongoose.connection.collection(collection).findOne({ _id: interaction.guildId });
-        const emojis = await resolveEmojis(storefront?.emojis, interaction.guild, storefront?.emojiSourceGuildId, interaction.appPermissions);
+        const emojis = await interactionEmojis(interaction);
         const embed = new EmbedBuilder().setColor(COLOR).setTimestamp()
             .setFooter({ text: interaction.guild?.name || "GevraStore" });
         let actions;

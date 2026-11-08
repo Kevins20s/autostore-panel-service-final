@@ -192,7 +192,7 @@ async function main() {
         const firstReads = await Promise.all(Array.from({ length: 40 }, (_, i) =>
             request(i % tenants.length, "GET", "/shop/products")));
         assert.ok(firstReads.every(result => result.products.length === 0));
-        await client.db(tenants[0].dbName).collection("storefronts").insertOne({ _id: guilds[0], emojis: { profile: profileEmote } });
+        await client.db(tenants[0].dbName).collection("storefronts").insertOne({ _id: guilds[0], model: "model1", emojis: { profile: profileEmote } });
         await Promise.all(tenants.map(async (tenant, i) => {
             await request(i, "POST", "/shop/products", { code, name: "Store " + i, type: "yes", role, price: 10 });
             await request(i, "POST", "/shop/products/" + code + "/stock", { text: "STOCK-" + i });

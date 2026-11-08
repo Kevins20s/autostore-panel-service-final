@@ -106,6 +106,8 @@ const srv = http.createServer(app).listen(0, async () => {
         const custom = `<a:gem:${serverEmoteId}>`, botEmote = `<:bot_gem:${botEmoteId}>`;
         const settings = { profile: botEmote, qris: custom };
         const initial = (await j("GET", emojiPath)).j;
+        assert.strictEqual(initial.model, "model1");
+        assert.ok(initial.defaults.inStock && initial.defaults.crown && !initial.defaults.growIdButton);
         assert.deepStrictEqual(initial.emotes, {});
         assert.deepStrictEqual(initial.library.map(({ source, code }) => [source, code]), [["bot", botEmote], ["server", custom], ["external", sourceCode]]);
         assert.strictEqual(initial.extraSource, "Source store");
@@ -134,6 +136,17 @@ const srv = http.createServer(app).listen(0, async () => {
         }]]) };
         assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => true })).profile, sourceCode);
         assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => false })).profile, emojiDefaults.profile);
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "classic" })).s, 200);
+        const classic = (await j("GET", emojiPath)).j;
+        assert.strictEqual(classic.model, "classic");
+        assert.ok(classic.defaults.growIdButton && !classic.defaults.inStock);
+        assert.deepStrictEqual(classic.emotes, {});
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model1", emojis: {} })).s, 409);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "classic", emojis: { growIdButton: botEmote } })).s, 200);
+        assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { growIdButton: botEmote });
+        assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "model1" })).s, 200);
+        assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { profile: sourceCode });
+        assert.deepStrictEqual(storefronts.get(guildA).classicEmojis, { growIdButton: botEmote });
         console.log("ok  emoji Model 1: simpan per server, reset, validasi, dan fallback emoji Discord");
         console.log("\nSemua tes shopapi (tiruan) lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }

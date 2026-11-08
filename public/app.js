@@ -1152,15 +1152,39 @@ const STORE_EMOJI_FIELDS = [
     ["DepositQRIS", "Deposit QRIS"], ["AdminPanel", "Admin Panel"], ["Queue", "Queue"], ["Waiting", "Waiting"],
     ["COLOR", gsT("Warna Embed")]
 ];
-const MODEL_EMOJI_GROUPS = [
-    ["Katalog", "Catalog", [["cart", "Pilih produk", "Product picker"], ["inStock", "Stok tersedia", "In stock"], ["outOfStock", "Stok habis", "Sold out"]]],
-    ["Profil & navigasi", "Profile & navigation", [["profile", "Profil", "Profile"], ["discord", "Akun Discord", "Discord account"],
+const CATALOG_EMOJI_FIELDS = [["crown", "Mahkota judul dan produk", "Catalog and product crown"], ["arrow", "Panah detail produk", "Product detail arrow"],
+    ["wl", "Mata uang World Lock", "World Lock currency"], ["sold", "Produk terjual", "Products sold"],
+    ["stockAvailable", "Stok tersedia di daftar", "In-stock catalog marker"], ["stockEmpty", "Stok habis di daftar", "Sold-out catalog marker"]];
+const PROFILE_EMOJI_FIELDS = [["profile", "Profil", "Profile"], ["discord", "Akun Discord", "Discord account"],
         ["growId", "GrowID", "GrowID"], ["balance", "Saldo WL", "WL balance"], ["rupiah", "Saldo Rupiah", "Rupiah balance"],
         ["spent", "Total belanja", "Total spent"], ["joined", "Tanggal bergabung", "Join date"], ["history", "Riwayat", "History"],
-        ["previous", "Halaman sebelumnya", "Previous page"], ["next", "Halaman berikutnya", "Next page"]]],
-    ["Deposit & pembayaran", "Deposits & payments", [["deposit", "Deposit WL/DL", "WL/DL deposit"], ["qris", "Top Up QRIS", "QRIS top-up"],
-        ["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi", "Confirm"]]],
-];
+        ["previous", "Halaman sebelumnya", "Previous page"], ["next", "Halaman berikutnya", "Next page"]];
+const TRANSACTION_EMOJI_FIELDS = [["warning", "Peringatan", "Warning"], ["success", "Pembelian berhasil", "Purchase success"],
+    ["price", "Harga pada struk", "Receipt price"], ["balanceMark", "Saldo pada struk", "Receipt balance"],
+    ["paymentOk", "Status QRIS berhasil", "QRIS success"], ["paymentWarning", "Peringatan QRIS", "QRIS warning"],
+    ["paymentPending", "QRIS menunggu pembayaran", "QRIS awaiting payment"], ["paymentCancelled", "QRIS dibatalkan", "QRIS cancelled"],
+    ["paymentCancelButton", "Tombol batalkan QRIS", "QRIS cancel button"], ["paymentLog", "Judul log QRIS", "QRIS log title"]];
+const MODEL_EMOJI_GROUPS = {
+    model1: [
+        ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Panduan pilih produk", "Product picker instructions"],
+            ["inStock", "Stok tersedia di dropdown", "In-stock dropdown marker"], ["outOfStock", "Stok habis di dropdown", "Sold-out dropdown marker"]]],
+        ["Profil & navigasi", "Profile & navigation", PROFILE_EMOJI_FIELDS],
+        ["Deposit & pembayaran", "Deposits & payments", [["deposit", "Deposit WL/DL", "WL/DL deposit"], ["qris", "Top Up QRIS", "QRIS top-up"],
+            ["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi", "Confirm"]]],
+        ["Pesan transaksi", "Transaction messages", TRANSACTION_EMOJI_FIELDS],
+    ],
+    classic: [
+        ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["outOfStock", "Pesan produk habis", "Sold-out message"],
+            ["growIdButton", "Tombol Set GrowID", "Set GrowID button"], ["balanceButton", "Tombol Balance", "Balance button"],
+            ["depositButton", "Tombol Deposit", "Deposit button"], ["qris", "Tombol Deposit QRIS", "QRIS deposit button"]]],
+        ["Info toko & transaksi", "Store and transaction messages", [["world", "Dunia deposit", "Deposit world"],
+            ["bot", "Nama bot", "Bot name"], ["monitor", "Status bot", "Bot status"], ["online", "Bot online", "Bot online"],
+            ["offline", "Bot offline", "Bot offline"], ...TRANSACTION_EMOJI_FIELDS]],
+        ["Profil & konversi saldo Rupiah", "Profile and rupiah conversion", [...PROFILE_EMOJI_FIELDS,
+            ["deposit", "Petunjuk Deposit WL/DL", "WL/DL deposit instructions"], ["convert", "Konversi saldo", "Convert balance"],
+            ["confirm", "Konfirmasi", "Confirm"]]],
+    ],
+};
 async function modelEmojiEditor() {
     const endpoint = "/api/shop/settings/storefront/emojis";
     const t = (id, en) => gsLanguage === "en" ? en : id;
@@ -1168,14 +1192,15 @@ async function modelEmojiEditor() {
     let settings;
     try { settings = await api("GET", endpoint); }
     catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
-    const { guildId, library, extraSource } = settings;
+    const { guildId, library, extraSource, model, defaults } = settings;
+    const modelLabel = model === "model1" ? "Model 1" : t("Klasik", "Classic");
     let values = { ...settings.emotes };
     const botCount = library?.filter(emote => emote.source === "bot").length || 0;
-    const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS.map(([id, en, fields]) =>
+    const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS[model].map(([id, en, fields]) =>
         h("optgroup", { label: t(id, en) }, ...fields.map(([key, idLabel, enLabel]) => h("option", { value: key }, t(idLabel, enLabel))))));
     const input = h("input", { autocomplete: "off", spellcheck: "false", maxlength: 60, placeholder: "<:nama:id> / <a:nama:id>", "aria-label": t("Kode emote Discord", "Discord emote code") });
     const preview = h("div", { class: "store-media-preview emoji-slot-preview", "aria-hidden": "true" });
-    const drawPreview = () => preview.replaceChildren(input.value ? emojiVisual(input.value, 50) : h("span", { class: "mut" }, t("Bawaan", "Default")));
+    const drawPreview = () => preview.replaceChildren(emojiVisual(input.value || defaults[select.value], 50));
     const draw = () => {
         input.value = values[select.value] || "";
         drawPreview();
@@ -1247,7 +1272,7 @@ async function modelEmojiEditor() {
     const persist = async emojis => {
         controls.disabled = true;
         try {
-            const result = await api("PUT", endpoint, { guildId, emojis });
+            const result = await api("PUT", endpoint, { guildId, model, emojis });
             values = { ...result.emotes };
             draw();
             toast(t("Emoji toko tersimpan.", "Storefront emojis saved."));
@@ -1255,18 +1280,18 @@ async function modelEmojiEditor() {
     };
     save.onclick = guard(() => persist(values));
     reset.onclick = guard(async () => {
-        if (await gsConfirm(t("Kembalikan semua emoji Model 1 ke bawaan?", "Reset all Model 1 emojis to defaults?"), { danger: true })) await persist({});
+        if (await gsConfirm(t(`Kembalikan semua emoji ${modelLabel} ke bawaan?`, `Reset all ${modelLabel} emojis to defaults?`), { danger: true })) await persist({});
     });
     draw();
     drawGallery();
     controls.append(
         h("div", { class: "emoji-slot-row" }, h("div", {}, select, input), preview),
-        h("p", { class: "mut" }, t("Pilih bagian Model 1, lalu klik emote dari galeri atau tempel kode emote Discord.", "Choose a Model 1 slot, then pick a gallery emote or paste its Discord code.")),
+        h("p", { class: "mut" }, t("Pilih bagian toko, lalu klik emote dari galeri atau tempel kode emote Discord.", "Choose a storefront slot, then pick a gallery emote or paste its Discord code.")),
         h("div", { class: "row gap emoji-gallery-filter" }, search, source, format),
         galleryStatus, gallery, pagination,
         h("div", { class: "row gap mt" }, save, h("button", { type: "button", onclick: () => choose("") }, t("Pulihkan bagian ini", "Restore this slot")), reset),
     );
-    return card(h("h2", {}, title), controls);
+    return card(h("h2", {}, `${title} · ${modelLabel}`), controls);
 }
 
 async function storeCustomEmojis() {

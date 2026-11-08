@@ -6,7 +6,7 @@ let {
     ButtonBuilder,
 } = require("discord.js");
 let client = require('../../index');
-let { Warning, Benar, WL, ARROW, Loading, BALANCE, Dolar, BOT, EARTH, CROWN, imageUrl, COLOR } = require("../../config/configemoji.json");
+const { COLOR } = require("../../config/configemoji.json");
 let mt = require("../../Schema/maintenance.js");
 let Bal = require("../../Schema/balance.js");
 let shop = require("../../Schema/shop.js");
@@ -15,7 +15,7 @@ let Price = require("../../Schema/priceproduct.js");
 let { MessageEmbed } = require("discord.js");
 let depo = require("../../Schema/deposition.js");
 let cd = new Map();
-const { buttons } = require("../../config/storefront");
+const { buttons, models, interactionEmojis, componentEmoji } = require("../../config/storefront");
 
 module.exports = {
     name: "ButtonMessage"
@@ -23,11 +23,12 @@ module.exports = {
 
 client.on("interactionCreate", async (interaction) => {
     if (interaction.customId === "balance1") {
+        const { growId: BOT, crown: CROWN, balanceMark: BALANCE, wl: WL, price: Dolar, convert } = await interactionEmojis(interaction, models.classic);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setLabel("Set GrowID")
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji(BOT)
+                .setEmoji(componentEmoji(BOT))
                 .setCustomId("growid23")
         );
 
@@ -72,17 +73,18 @@ client.on("interactionCreate", async (interaction) => {
         if (wallet1.BalanceRp > 0) {
             embed.addFields({ name: "Saldo Rupiah", value: "Rp" + wallet1.BalanceRp.toLocaleString("id-ID") });
             components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(buttons.convert)
-                .setLabel("Convert Rp to WL").setEmoji("🔄").setStyle(ButtonStyle.Success)));
+                .setLabel("Convert Rp to WL").setEmoji(componentEmoji(convert)).setStyle(ButtonStyle.Success)));
         }
         await interaction.reply({ embeds: [embed], components, ephemeral: true });
     }
 
     if (interaction.customId === "deposit") {
+        const { growId, bot: BOT, world: EARTH, crown: CROWN } = await interactionEmojis(interaction, models.classic);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setLabel("Set GrowID")
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji(BOT)
+                .setEmoji(componentEmoji(growId))
                 .setCustomId("growid23")
         );
 
@@ -204,6 +206,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.customId === "status") {
+        const emojis = await interactionEmojis(interaction, models.classic);
         let stats = await depo
             .findOne({})
             .then((d) => {
@@ -220,7 +223,7 @@ client.on("interactionCreate", async (interaction) => {
             await interaction.reply({
                 embeds:[
                     {
-                        description:`[${BOT}] Name Bot: **${stats?.botName ? stats?.botName : "Not Set Right Now!"}**\n[<:monitor:1197853474973552691>] Status: **Online <a:online:1197850211914088448>**`,
+                        description:`[${emojis.bot}] Name Bot: **${stats?.botName ? stats?.botName : "Not Set Right Now!"}**\n[${emojis.monitor}] Status: **Online ${emojis.online}**`,
                     },
                 ],
                 ephemeral: true,
@@ -229,7 +232,7 @@ client.on("interactionCreate", async (interaction) => {
             await interaction.reply({
                 embeds:[
                     {
-                        description:`[${BOT}] Name Bot: **${stats?.botName ? stats?.botName : "Not Set Right Now!"}**\n[<:monitor:1197853474973552691>] Status: **Offline (${stats?.reason ? stats?.reason : "Inposible"})** <a:offline:1197850388846616586>`,
+                        description:`[${emojis.bot}] Name Bot: **${stats?.botName ? stats?.botName : "Not Set Right Now!"}**\n[${emojis.monitor}] Status: **Offline (${stats?.reason ? stats?.reason : "Inposible"})** ${emojis.offline}`,
                     },
                 ],
                 ephemeral: true,

@@ -108,18 +108,20 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
 
     // ---------- produk ----------
     r.get("/products", wrap(async (req, res) => {
-        const [lists, prices, stocks, discs, bulks, rate, api] = await Promise.all([
+        const [lists, prices, stocks, discs, bulks, rate, api, storefront] = await Promise.all([
             c(req, "list").find({}).sort({ code: 1 }).toArray(),
             c(req, "price").find({}).toArray(),
-            c(req, "shop").aggregate([{ $group: { _id: "$code", n: { $sum: 1 } } }]).toArray(),
+            c(req, "shop").aggregate([{ $match: { data: { $type: "string", $ne: "" } } }, { $group: { _id: "$code", n: { $sum: 1 } } }]).toArray(),
             c(req, "discount").find({}).toArray(),
             c(req, "bulk").find({}).sort({ minQty: 1 }).toArray(),
             c(req, "wlrate").findOne({}), c(req, "api").findOne({}),
+            req.shopGuildId ? req.db.collection(storefrontCollection).findOne({ _id: req.shopGuildId }) : null,
         ]);
         const priceBy = Object.fromEntries(prices.map((p) => [p.code, p.price]));
         const stockBy = Object.fromEntries(stocks.map((s) => [s._id, s.n]));
         const discBy = Object.fromEntries(discs.map((d) => [d.code, d.discount]));
         res.json({
+            model: storefrontModel(storefront),
             rate: { pricePerWL: rate?.pricePerWL || null, useLiveApi: api?.useLiveApi ?? true },
             products: lists.map((p) => ({
                 code: p.code, name: p.name, type: p.type, role: p.role, kategori: p.kategori || "ALL", sold: p.sold || 0,

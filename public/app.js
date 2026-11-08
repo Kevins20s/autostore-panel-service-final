@@ -336,6 +336,9 @@ async function storeOrders() {
 async function products() {
     const wrap = h("div", {});
     let data = null;
+    const isQris = () => data?.model === "model3";
+    const hasPrice = p => isQris() ? Number.isSafeInteger(p.priceIdr) && p.priceIdr >= 1000 && p.priceIdr <= 1000000 : !!p.price;
+    const qrisText = (id, en) => gsLanguage === "en" ? en : id;
     const q = h("input", { type: "search", placeholder: gsT("Cari kode, nama, atau kategori"), autocomplete: "off", "aria-label": gsT("Cari produk") });
     const flt = h("select", { "aria-label": gsT("Filter status") },
         h("option", { value: "all" }, gsT("Semua status")), h("option", { value: "ready" }, gsT("Siap jual")),
@@ -344,9 +347,9 @@ async function products() {
     const matches = (p) => {
         const t = q.value.trim().toLowerCase();
         if (t && !`${p.code} ${p.name} ${p.kategori}`.toLowerCase().includes(t)) return false;
-        if (flt.value === "ready") return p.price && p.stock > 0;
-        if (flt.value === "nostock") return p.price && p.stock <= 0;
-        if (flt.value === "noprice") return !p.price;
+        if (flt.value === "ready") return hasPrice(p) && p.stock > 0;
+        if (flt.value === "nostock") return p.stock <= 0 && (isQris() || hasPrice(p));
+        if (flt.value === "noprice") return !hasPrice(p);
         return true;
     };
     function draw() {
@@ -355,19 +358,23 @@ async function products() {
         const shown = list.filter(matches);
         const body = h("tbody", {});
         for (const p of shown) {
-            const ready = p.price && p.stock > 0;
+            const priced = hasPrice(p);
+            const ready = priced && p.stock > 0;
+            const price = isQris()
+                ? priced ? h("b", {}, rpf(p.priceIdr)) : h("span", { class: "pill no" }, qrisText("Harga QRIS belum diatur", "QRIS price missing"))
+                : p.price ? h("div", {}, fmt(p.price) + " WL", p.discount ? h("span", { class: "mut" }, ` (-${p.discount}%)`) : null,
+                    h("div", { class: "mut" }, `${fmt(p.price / 100)} DL  ${rpText(p.price, manualRate)}`)) : h("span", { class: "pill no" }, gsT("Belum ada harga"));
             body.append(h("tr", {},
                 h("td", {}, h("b", {}, p.code), " ", copyBtn(p.code)),
                 h("td", {}, h("div", {}, p.name), h("div", { class: "mut" }, gsT`${p.kategori}  tipe ${p.type}`)),
-                h("td", {}, p.price ? h("div", {}, fmt(p.price) + " WL", p.discount ? h("span", { class: "mut" }, ` (-${p.discount}%)`) : null,
-                    h("div", { class: "mut" }, `${fmt(p.price / 100)} DL  ${rpText(p.price, manualRate)}`)) : h("span", { class: "pill no" }, gsT("Belum ada harga"))),
+                h("td", {}, price),
                 h("td", {}, `${fmt(p.stock)} / ${fmt(p.sold)}`),
                 h("td", { class: "mut" }, p.role),
-                h("td", {}, h("span", { class: "pill " + (ready ? "ok" : "no") }, ready ? gsT("Siap jual") : p.price ? gsT("Stok kosong") : gsT("Atur harga"))),
+                h("td", {}, h("span", { class: "pill " + (ready ? "ok" : "no") }, ready ? gsT("Siap jual") : priced ? gsT("Stok kosong") : gsT("Atur harga"))),
                 h("td", {}, h("div", { class: "row gap" },
                     h("button", { class: "sm", onclick: () => stockModal(p, load) }, gsT("Stok")),
                     h("button", { class: "sm", onclick: () => discountModal(p, load) }, gsT("Diskon")),
-                    h("button", { class: "sm", onclick: () => productModal(p, load) }, "Edit"),
+                    h("button", { class: "sm", onclick: () => productModal(p, load, isQris()) }, isQris() && !priced ? qrisText("Isi harga QRIS", "Set QRIS price") : "Edit"),
                     h("button", { class: "sm bad", onclick: guard(async () => {
                         if (!(await gsConfirm(gsT`Hapus produk ${p.code}? Harga, diskon, dan ${p.stock} stok miliknya ikut terhapus.`, { danger: true, okText: gsT("Hapus produk") }))) return;
                         await api("DELETE", "/api/shop/products/" + encodeURIComponent(p.code)); toast(gsT("Produk dihapus.")); load();
@@ -382,10 +389,11 @@ async function products() {
         data = await api("GET", "/api/shop/products");
         const { products: list, rate } = data;
         wrap.replaceChildren(
-            head(gsT("Manajemen Produk"), gsT("Kelola katalog produk, harga (WL/DL/Rp), stok, dan auto-role Discord."),
-                h("button", { class: "pri", onclick: () => productModal(null, load) }, gsT("+ Tambah Produk Baru"))),
+            head(gsT("Manajemen Produk"), isQris() ? qrisText("Untuk Model 3, tombol Buy aktif setelah harga QRIS dan stok diisi.",
+                "For Model 3, Buy is enabled when the QRIS price and stock are set.") : gsT("Kelola katalog produk, harga (WL/DL/Rp), stok, dan auto-role Discord."),
+                h("button", { class: "pri", onclick: () => productModal(null, load, isQris()) }, gsT("+ Tambah Produk Baru"))),
             card(list.length > 5 ? h("div", { class: "toolbar" }, q, flt) : null, tableHost),
-            rate.useLiveApi ? h("p", { class: "mut" }, gsT("Harga Rp memakai kurs manual di Settings. Saat harga live aktif, bot memakai kurs live sehingga angka Rp di bot bisa berbeda.")) : null);
+            !isQris() && rate.useLiveApi ? h("p", { class: "mut" }, gsT("Harga Rp memakai kurs manual di Settings. Saat harga live aktif, bot memakai kurs live sehingga angka Rp di bot bisa berbeda.")) : null);
         draw();
     }
     q.oninput = () => data && draw(); flt.onchange = () => data && draw();
@@ -393,7 +401,7 @@ async function products() {
     return wrap;
 }
 
-function productModal(p, reload) {
+function productModal(p, reload, qrisModel) {
     const edit = !!p;
     const f = {
         code: h("input", { value: p?.code || "", disabled: edit, autocomplete: "off" }),
@@ -406,19 +414,22 @@ function productModal(p, reload) {
         priceIdr: h("input", { value: p?.priceIdr ?? "", autocomplete: "off", inputmode: "numeric" }),
     };
     f.type.value = p?.type || "yes";
+    const qrisAvailable = qrisModel || me?.hostedBotConfigured;
+    const priceIdrField = qrisAvailable ? field("Harga QRIS (Rp)", f.priceIdr, gsLanguage === "en"
+        ? "Fixed price for Model 3. Enter 200000 for Rp200.000." : "Harga tetap untuk Model 3. Isi 200000 untuk Rp200.000.") : null;
     const m = modal(edit ? gsT("Edit Produk") : gsT("Tambah Produk Baru"),
         field(gsT("Kode"), f.code, gsT("Huruf, angka, - dan _. Tidak bisa diubah setelah dibuat.")),
         field(gsT("Nama produk"), f.name), field(gsT("Tipe"), f.type),
         field(gsLanguage === "en" ? "Short description (optional)" : "Deskripsi singkat (opsional)", f.description),
         field(gsT("ID Role Discord (diberikan ke pembeli)"), f.role, gsT("Aktifkan Developer Mode di Discord, klik kanan role, Copy Role ID.")),
         field(gsT("Kategori (opsional)"), f.kategori, gsT("Kosong = ALL.")),
+        qrisModel ? priceIdrField : null,
         field(gsT("Harga (dalam WL)"), f.price, gsT("Contoh: 20 atau 9,5. 100 WL = 1 DL.")),
-        me?.hostedBotConfigured ? field("Harga QRIS (Rp)", f.priceIdr, gsLanguage === "en"
-            ? "Model 3 uses a fixed price. Enter 200000 for Rp200.000." : "Harga tetap untuk Model 3. Isi 200000 untuk Rp200.000.") : null,
+        qrisModel ? null : priceIdrField,
         h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => {
             const body = { code: f.code.value, name: f.name.value, type: f.type.value, role: f.role.value, kategori: f.kategori.value,
                 price: f.price.value, description: f.description.value };
-            if (me?.hostedBotConfigured) body.priceIdr = f.priceIdr.value.trim();
+            if (qrisAvailable) body.priceIdr = f.priceIdr.value.trim();
             if (edit) await api("PUT", "/api/shop/products/" + encodeURIComponent(p.code), body); else await api("POST", "/api/shop/products", body);
             toast(gsT("Tersimpan.")); m.close(); reload();
         }) }, gsT("Simpan"))));

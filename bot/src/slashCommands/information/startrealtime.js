@@ -139,12 +139,12 @@ function productCards({ title, header, footer, products, maintenance, emojis }) 
     const container = new ContainerBuilder().setAccentColor(resolveColor(COLOR)).addTextDisplayComponents(display(`## ${title}\n${header}`));
     for (const product of products) {
         const { name, code, description, priceIdr, sold, stock } = product;
-        const price = priceIdr ? `**Rp${priceIdr.toLocaleString("id-ID")}**` : "Belum diatur";
+        const price = priceIdr ? `Price: **Rp${priceIdr.toLocaleString("id-ID")}**` : "Harga QRIS belum diatur";
         const details = [
             `${emojis.crown} **${escapeMarkdown(name.toUpperCase())}** ${emojis.crown}`,
             `${emojis.arrow} ${description ? "Desc: " + escapeMarkdown(description) : "Code: " + escapeMarkdown(code)}`,
             `${emojis.arrow} Stock: **${stock}** ${stock ? emojis.stockAvailable : emojis.stockEmpty}`,
-            `${emojis.arrow} Price: ${price}`,
+            `${emojis.arrow} ${price}`,
             `${emojis.sold} Product Sold: **${sold}**`,
         ];
         const buy = new ButtonBuilder().setCustomId(qrisBuyPrefix + code).setLabel("Buy")
@@ -204,6 +204,12 @@ function classicActionRow(maintenance, emojis) {
 const pageSize = 8;
 const catalogTitle = kategori => kategori === "ALL" ? "PRODUCT LIST" : `PRODUCT LIST — ${kategori.toUpperCase()}`;
 const sellableStock = code => ({ code, data: { $type: "string", $ne: "" } });
+const catalogProducts = (kategori, model) => {
+    if (kategori === "ALL") return {};
+    if (model !== models.model3) return { kategori };
+    const escaped = kategori.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return { kategori: new RegExp("^" + escaped + "$", "i") };
+};
 
 function rateText({ pricePerWL, pricePerDL }, emojis) {
     return pricePerWL
@@ -213,7 +219,7 @@ function rateText({ pricePerWL, pricePerDL }, emojis) {
 
 async function publishQrisCatalog(message, target, maintenance, emojis) {
     const { kategori } = target;
-    const filter = kategori === "ALL" ? {} : { kategori };
+    const filter = catalogProducts(kategori, models.model3);
     const [items, rates] = await Promise.all([list.find(filter).sort({ _id: 1 }).lean(), getEffectiveWLPrice()]);
     const pages = Math.max(1, Math.ceil(items.length / pageSize));
     const updated = `**Last Update:** <t:${Math.floor(Date.now() / 1000)}:R>`;
@@ -294,7 +300,8 @@ module.exports = {
             ephemeral: true
         });
 
-        if (!await list.exists(kategori === "ALL" ? {} : { kategori })) return interaction.reply({
+        const storefront = kategori === "ALL" ? null : await mongoose.connection.collection(collection).findOne({ _id: interaction.guildId });
+        if (!await list.exists(catalogProducts(kategori, storefrontModel(storefront)))) return interaction.reply({
             content: kategori === "ALL"
                 ? `**/addproduct first before use this commands!**`
                 : `**Belum ada produk dengan kategori (type) "${kategori}"!** Cek lagi field 'type' di /addproduct.`,
@@ -315,7 +322,6 @@ module.exports = {
 
 async function renderCatalog(message, guildId, target) {
     const { kategori } = target;
-    const productFilter = kategori === "ALL" ? {} : { kategori };
     const [maintenance, storefront] = await Promise.all([
         mt.exists({ mt: true }),
         mongoose.connection.collection(collection).findOne({ _id: guildId }),
@@ -338,7 +344,7 @@ async function renderCatalog(message, guildId, target) {
         .findOneAndUpdate({}, { $inc: { OdeOder: 1 } }, { upsert: true, new: true })
         .catch(console.error);
 
-    const getCodes = await list.find(productFilter);
+    const getCodes = await list.find(catalogProducts(kategori, model));
 
     let now = new Date();
     let format = `<t:${Math.floor(now.getTime() / 1000)}:R>`;

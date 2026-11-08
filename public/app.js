@@ -1022,6 +1022,7 @@ function emojiVisual(v, size = 52) {
         const img = h('img', {
             alt: '',
             title: text,
+            loading: 'lazy',
             width: size,
             height: size,
             style: `width:${size}px;height:${size}px;object-fit:contain;display:block`
@@ -1151,8 +1152,125 @@ const STORE_EMOJI_FIELDS = [
     ["DepositQRIS", "Deposit QRIS"], ["AdminPanel", "Admin Panel"], ["Queue", "Queue"], ["Waiting", "Waiting"],
     ["COLOR", gsT("Warna Embed")]
 ];
-function storeCustomEmojis() {
-    return customEmojiEditor({
+const MODEL_EMOJI_GROUPS = [
+    ["Katalog", "Catalog", [["cart", "Pilih produk", "Product picker"], ["inStock", "Stok tersedia", "In stock"], ["outOfStock", "Stok habis", "Sold out"]]],
+    ["Profil & navigasi", "Profile & navigation", [["profile", "Profil", "Profile"], ["discord", "Akun Discord", "Discord account"],
+        ["growId", "GrowID", "GrowID"], ["balance", "Saldo WL", "WL balance"], ["rupiah", "Saldo Rupiah", "Rupiah balance"],
+        ["spent", "Total belanja", "Total spent"], ["joined", "Tanggal bergabung", "Join date"], ["history", "Riwayat", "History"],
+        ["previous", "Halaman sebelumnya", "Previous page"], ["next", "Halaman berikutnya", "Next page"]]],
+    ["Deposit & pembayaran", "Deposits & payments", [["deposit", "Deposit WL/DL", "WL/DL deposit"], ["qris", "Top Up QRIS", "QRIS top-up"],
+        ["convert", "Konversi saldo", "Convert balance"], ["confirm", "Konfirmasi", "Confirm"]]],
+];
+async function modelEmojiEditor() {
+    const endpoint = "/api/shop/settings/storefront/emojis";
+    const t = (id, en) => gsLanguage === "en" ? en : id;
+    const title = t("Koleksi Emote Discord", "Discord Emote Collection");
+    let settings;
+    try { settings = await api("GET", endpoint); }
+    catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
+    const { guildId, library } = settings;
+    let values = { ...settings.emotes };
+    const botCount = library?.filter(emote => emote.source === "bot").length || 0;
+    const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS.map(([id, en, fields]) =>
+        h("optgroup", { label: t(id, en) }, ...fields.map(([key, idLabel, enLabel]) => h("option", { value: key }, t(idLabel, enLabel))))));
+    const input = h("input", { autocomplete: "off", spellcheck: "false", maxlength: 60, placeholder: "<:nama:id> / <a:nama:id>", "aria-label": t("Kode emote Discord", "Discord emote code") });
+    const preview = h("div", { class: "store-media-preview emoji-slot-preview", "aria-hidden": "true" });
+    const drawPreview = () => preview.replaceChildren(input.value ? emojiVisual(input.value, 50) : h("span", { class: "mut" }, t("Bawaan", "Default")));
+    const draw = () => {
+        input.value = values[select.value] || "";
+        drawPreview();
+        markSelection();
+    };
+    const choose = value => {
+        if (value) values[select.value] = value;
+        else delete values[select.value];
+        draw();
+    };
+    select.onchange = draw;
+    input.oninput = () => {
+        if (input.value.trim()) values[select.value] = input.value.trim();
+        else delete values[select.value];
+        drawPreview();
+        markSelection();
+    };
+    const search = h("input", { type: "search", placeholder: t("Cari nama emote…", "Search emotes…"), "aria-label": t("Cari emote", "Search emotes") });
+    const source = h("select", { "aria-label": t("Sumber emote", "Emote source") },
+        h("option", { value: "bot" }, t(`Koleksi bot (${botCount})`, `Bot collection (${botCount})`)),
+        h("option", { value: "" }, t("Semua sumber", "All sources")),
+        h("option", { value: "server" }, t("Server toko", "Store server")));
+    const format = h("select", { "aria-label": t("Jenis emote", "Emote type") },
+        h("option", { value: "" }, t("Semua jenis", "All types")),
+        h("option", { value: "gif" }, t("Animasi GIF", "Animated GIF")),
+        h("option", { value: "static" }, t("Gambar diam", "Static image")));
+    const gallery = h("div", { class: "emote-gallery" });
+    const galleryStatus = h("p", { class: "mut", role: "status" });
+    const prev = h("button", { type: "button" }, t("Sebelumnya", "Previous"));
+    const next = h("button", { type: "button" }, t("Berikutnya", "Next"));
+    const pagination = h("div", { class: "row gap" }, prev, next);
+    const pageSize = 36;
+    let page = 0;
+    function markSelection() {
+        for (const item of gallery.children) item.setAttribute("aria-pressed", String(item.dataset.code === input.value.trim()));
+    }
+    const drawGallery = () => {
+        const query = search.value.trim().toLowerCase();
+        const matches = (library || []).filter(({ name, source: origin, code }) => {
+            const kind = code.startsWith("<a:") ? "gif" : "static";
+            return (!source.value || source.value === origin) && (!format.value || format.value === kind) && name.toLowerCase().includes(query);
+        });
+        const start = page * pageSize;
+        const end = Math.min(start + pageSize, matches.length);
+        gallery.replaceChildren(...matches.slice(start, end).map(({ name, code }) => h("button", {
+            type: "button", onclick: () => choose(code), title: name, "data-code": code,
+        }, emojiVisual(code, 32), h("span", { class: "emote-name" }, name),
+        code.startsWith("<a:") ? h("span", { class: "emote-kind" }, "GIF") : null)));
+        gallery.scrollTop = 0;
+        markSelection();
+        prev.disabled = page === 0;
+        next.disabled = end >= matches.length;
+        pagination.classList.toggle("hide", matches.length <= pageSize);
+        if (matches.length) {
+            galleryStatus.textContent = t(`${start + 1}–${end} dari ${matches.length} emote`, `${start + 1}–${end} of ${matches.length} emotes`);
+        } else if (!library) {
+            galleryStatus.textContent = t("Daftar emote dari Discord belum bisa dimuat. Coba muat ulang halaman.", "Could not load emotes from Discord. Reload to try again.");
+        } else {
+            galleryStatus.textContent = t("Tidak ada emote untuk filter ini.", "No emotes match these filters.");
+        }
+    };
+    search.oninput = source.onchange = format.onchange = () => { page = 0; drawGallery(); };
+    prev.onclick = () => { page--; drawGallery(); };
+    next.onclick = () => { page++; drawGallery(); };
+    const save = h("button", { type: "button", class: "pri" }, t("Simpan emote", "Save emotes"));
+    const reset = h("button", { type: "button" }, t("Reset semua", "Reset all"));
+    const controls = h("fieldset", { class: "emoji-slot-controls" });
+    const persist = async emojis => {
+        controls.disabled = true;
+        try {
+            const result = await api("PUT", endpoint, { guildId, emojis });
+            values = { ...result.emotes };
+            draw();
+            toast(t("Emoji toko tersimpan.", "Storefront emojis saved."));
+        } finally { controls.disabled = false; }
+    };
+    save.onclick = guard(() => persist(values));
+    reset.onclick = guard(async () => {
+        if (await gsConfirm(t("Kembalikan semua emoji Model 1 ke bawaan?", "Reset all Model 1 emojis to defaults?"), { danger: true })) await persist({});
+    });
+    draw();
+    drawGallery();
+    controls.append(
+        h("div", { class: "emoji-slot-row" }, h("div", {}, select, input), preview),
+        h("p", { class: "mut" }, t("Pilih bagian Model 1, lalu klik emote dari galeri atau tempel kode emote Discord.", "Choose a Model 1 slot, then pick a gallery emote or paste its Discord code.")),
+        h("div", { class: "row gap emoji-gallery-filter" }, search, source, format),
+        galleryStatus, gallery, pagination,
+        h("div", { class: "row gap mt" }, save, h("button", { type: "button", onclick: () => choose("") }, t("Pulihkan bagian ini", "Restore this slot")), reset),
+    );
+    return card(h("h2", {}, title), controls);
+}
+
+async function storeCustomEmojis() {
+    const model = await modelEmojiEditor();
+    const own = me.hostedBot?.enabled ? null : await customEmojiEditor({
         title: "Custom Emoji AutoStore",
         subtitle: gsT("Atur emoji yang digunakan bot AutoStore untuk produk, pembelian, saldo, dan notifikasi."),
         fields: STORE_EMOJI_FIELDS,
@@ -1160,6 +1278,8 @@ function storeCustomEmojis() {
         resetEndpoint: "/api/emojis/reset",
         includeBanner: false
     });
+    return h("div", {}, head(gsT("Emoji"), gsLanguage === "en" ? "Customize the emojis in your Discord storefront." : "Pilih emoji untuk tampilan toko di Discord."), model,
+        own ? h("details", { class: "card mt" }, h("summary", {}, gsLanguage === "en" ? "Existing bot emoji settings" : "Pengaturan emoji bot lainnya"), own) : null);
 }
 
 // ---------- AutoStore: Custom Banner ----------

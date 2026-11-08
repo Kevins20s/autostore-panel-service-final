@@ -17,7 +17,7 @@ let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
 let { Warning, Benar, Salah, WL, CROWN, Buy, imageUrl2, COLOR, ARROW } = require("../../config/configemoji.json");
-const { collection, models, buttons } = require("../../config/storefront");
+const { collection, models, buttons, resolveEmojis, componentEmoji } = require("../../config/storefront");
 
 const jobs = new Map();
 const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
@@ -69,23 +69,26 @@ async function resumeRealtime(client) {
     }
 }
 
-function compactRows(options, maintenance) {
-    const available = options.filter(option => option.emoji.name === "✅");
+function compactRows(options, maintenance, emojis) {
+    const available = options.filter(option => option.hasStock);
     const soldOut = !available.length;
-    const displayed = (options.length > 25 ? [...available, ...options.filter(option => option.emoji.name === "❌")] : options).slice(0, 25);
+    const displayed = (options.length > 25 ? [...available, ...options.filter(option => !option.hasStock)] : options).slice(0, 25)
+        .map(({ hasStock, ...option }) => ({ ...option, emoji: componentEmoji(hasStock ? emojis.inStock : emojis.outOfStock) }));
+    const icon = soldOut ? emojis.outOfStock : emojis.cart;
+    const placeholderIcon = componentEmoji(icon).id ? (soldOut ? "❌" : "🛒") : icon;
     const select = new StringSelectMenuBuilder().setCustomId("Howmanys")
-        .setPlaceholder(maintenance ? "Under Maintenance" : soldOut ? "❌ Semua produk sedang habis" : "🛒 Select product to buy...")
+        .setPlaceholder(maintenance ? "Under Maintenance" : placeholderIcon + (soldOut ? " Semua produk sedang habis" : " Select product to buy..."))
         .setDisabled(maintenance || soldOut)
         .addOptions(displayed.length ? displayed : [{ label: "Semua produk sedang habis", value: "none" }]);
     const actions = [
-        [buttons.profile, "My Profile", "👤"],
-        [buttons.deposit, "Top Up WL", "💎"],
-        [buttons.qris, "QRIS Top Up", "💳"],
-        [buttons.history, "History", "📜"],
+        [buttons.profile, "My Profile", emojis.profile],
+        [buttons.deposit, "Top Up WL", emojis.deposit],
+        [buttons.qris, "QRIS Top Up", emojis.qris],
+        [buttons.history, "History", emojis.history],
     ];
     return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(
         actions.map(([id, label, emoji]) => new ButtonBuilder().setCustomId(id).setLabel(label)
-            .setStyle(ButtonStyle.Success).setEmoji(emoji).setDisabled(maintenance)))];
+            .setStyle(ButtonStyle.Success).setEmoji(componentEmoji(emoji)).setDisabled(maintenance)))];
 }
 
 module.exports = {
@@ -149,6 +152,7 @@ async function renderCatalog(message, guildId, kategori) {
     ]);
     const MT = !!maintenance;
     const compact = storefront?.model === models.model1;
+    const emojis = compact ? await resolveEmojis(storefront.emojis, message.guild) : null;
 
     // Ambil harga 1 WL sekarang dalam Rupiah (live gtid.pro kalau nyala, atau manual /setwlprice kalau API dimatikan/down)
     const { pricePerWL, pricePerDL } = await getEffectiveWLPrice();
@@ -214,13 +218,13 @@ ${DIVIDER}`
                 label: code.name.length > 100 ? code.name.slice(0, 97) + "..." : code.name,
                 description: (compact ? `Code: ${code.code} | Stock: ${stock}` : `Stock: ${stock} | Price: ${plainPrice}`).slice(0, 100),
                 value: code.code,
-                ...(compact ? { emoji: { name: hasStock ? "✅" : "❌" } } : {}),
+                ...(compact ? { hasStock } : {}),
             });
         }
     }
 
     let howToBuySection = compact
-        ? `${Warning} **HOW TO BUY** ${Warning}\n${ARROW} Buka **My Profile** untuk mengatur GrowID.\n${ARROW} Pilih produk yang bertanda ✅ dari dropdown.`
+        ? `${Warning} **HOW TO BUY** ${Warning}\n${ARROW} Buka **My Profile** untuk mengatur GrowID.\n${emojis.cart} Pilih produk yang bertanda ${emojis.inStock} dari dropdown.`
         :
 `${Warning} **HOW TO BUY** ${Warning}
 ${ARROW} Click Button **Set GrowID**
@@ -250,7 +254,7 @@ ${ARROW} Click The **Dropdown Menu** Below To Buy An Item`;
         .setTimestamp();
 
     if (compact) {
-        await message.edit({ content: null, embeds: [productEmbed], components: compactRows(selectOptions, MT) });
+        await message.edit({ content: null, embeds: [productEmbed], components: compactRows(selectOptions, MT, emojis) });
         return;
     }
 

@@ -7,5 +7,49 @@ const buttons = Object.freeze({
     deposit: "storefront_deposit", qris: "storefront_qris", convert: "storefront_convert",
 });
 const rupiahCredit = "idr";
+const emojiDefaults = Object.freeze({
+    profile: "👤", balance: "💰", history: "📜", deposit: "💎", qris: "💳", convert: "🔄", growId: "✏️",
+    previous: "⬅️", next: "➡️", confirm: "✅", cart: "🛒", inStock: "✅", outOfStock: "❌",
+    discord: "🪪", rupiah: "💵", spent: "🛍️", joined: "🗓️",
+});
+const customEmoji = /^<(a?):([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
+const applicationEmojiLists = new WeakMap();
 
-module.exports = { collection, models, buttons, rupiahCredit };
+function customEmojiId(value) {
+    return typeof value === "string" && value === value.trim() ? customEmoji.exec(value)?.[3] : undefined;
+}
+
+function applicationEmojis(guild) {
+    const manager = guild?.client?.application?.emojis;
+    if (!manager) return null;
+    const current = applicationEmojiLists.get(manager);
+    if (current && current.until > Date.now()) return current.list;
+    const list = manager.fetch().catch(() => null);
+    applicationEmojiLists.set(manager, { list, until: Date.now() + 30000 });
+    return list;
+}
+
+async function resolveEmojis(config, guild) {
+    const emojis = { ...emojiDefaults };
+    const configured = Object.keys(emojiDefaults).map(key => [key, customEmojiId(config?.[key])]).filter(([, id]) => id);
+    const owned = configured.some(([, id]) => !guild?.emojis?.cache.has(id)) ? await applicationEmojis(guild) : null;
+    for (const [key, id] of configured) {
+        const appEmoji = owned?.get(id);
+        if (appEmoji) {
+            emojis[key] = appEmoji.toString();
+            continue;
+        }
+        const emoji = guild?.emojis?.cache.get(id);
+        if (emoji?.available && (!emoji.roles.cache.size || emoji.roles.cache.some(role => guild.members.me?.roles.cache.has(role.id)))) {
+            emojis[key] = emoji.toString();
+        }
+    }
+    return emojis;
+}
+
+function componentEmoji(value) {
+    const custom = customEmoji.exec(value);
+    return custom ? { animated: custom[1] === "a", name: custom[2], id: custom[3] } : { name: value };
+}
+
+module.exports = { collection, models, buttons, rupiahCredit, emojiDefaults, customEmojiId, resolveEmojis, componentEmoji };

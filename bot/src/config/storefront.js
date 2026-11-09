@@ -69,6 +69,12 @@ function emojiDefaultsFor(model, hosted = false) {
 }
 const emojiDefaults = Object.freeze(emojiDefaultsFor(models.model1));
 const restockEmojiDefaults = Object.freeze({ restockTitle: "✅", restockProduct: "🎁", restockQuantity: "🟢" });
+const hostedRestockEmojiDefaults = Object.freeze({
+    restockTitle: "<a:Benar:1568807352159838281>",
+    restockProduct: "<:productdet:1568808022988423220>",
+    restockQuantity: "<a:a_online:1568807334707204177>",
+});
+const restockDefaultsFor = hosted => hosted ? hostedRestockEmojiDefaults : restockEmojiDefaults;
 const customEmoji = /^<(a?):([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
 const applicationEmojiLists = new WeakMap();
 
@@ -111,7 +117,8 @@ function resolveEmojis(config, guild, sourceGuildId, permissions, model = models
 }
 
 function resolveRestockEmojis(storefront, guild, permissions) {
-    return resolveConfiguredEmojis({ ...restockEmojiDefaults }, {}, storefront?.restockEmojis, guild, storefront?.restockEmojiSourceGuildId, permissions);
+    const preset = process.env.HOSTED_PILOT_BINDING ? hostedRestockEmojiDefaults : {};
+    return resolveConfiguredEmojis({ ...restockEmojiDefaults }, preset, storefront?.restockEmojis, guild, storefront?.restockEmojiSourceGuildId, permissions);
 }
 
 function resolveStorefrontEmojis(storefront, guild, permissions, model = storefrontModel(storefront)) {
@@ -138,4 +145,4 @@ function componentEmoji(value) {
 }
 
 module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, storefrontBannerUrl, emojiFields,
-    customEmojiId, resolveEmojis, resolveStorefrontEmojis, restockEmojiDefaults, resolveRestockEmojis, interactionEmojis, componentEmoji, qrisPriceMin, qrisPriceMax, validQrisPrice };
+    customEmojiId, resolveEmojis, resolveStorefrontEmojis, restockDefaultsFor, resolveRestockEmojis, interactionEmojis, componentEmoji, qrisPriceMin, qrisPriceMax, validQrisPrice };

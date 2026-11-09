@@ -6,7 +6,7 @@ const { hostedTenant } = require("./shared-tenants");
 const { changeStorefrontPayment } = require("./storefront-payment");
 const { imageUrl2: defaultBanner } = require("../bot/src/config/configemoji.json");
 const { collection: storefrontCollection, models: storefrontModels, emojiDefaultsFor, storefrontModel, emojiFields,
-    restockEmojiDefaults, customEmojiId, validQrisPrice } = require("../bot/src/config/storefront");
+    restockDefaultsFor, customEmojiId, validQrisPrice } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -422,14 +422,15 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         ]);
         const model = storefrontModel(storefront);
         const defaults = emojiDefaultsFor(model, req.shopDiscord.hosted);
+        const restockDefaults = restockDefaultsFor(req.shopDiscord.hosted);
         const fields = emojiFields(model);
         const emotes = Object.fromEntries(Object.entries(storefront?.[fields.values] || {}).filter(
             ([key, value]) => Object.hasOwn(defaults, key) && customEmojiId(value)
         ));
         const restockEmotes = Object.fromEntries(Object.entries(storefront?.restockEmojis || {}).filter(
-            ([key, value]) => Object.hasOwn(restockEmojiDefaults, key) && customEmojiId(value)
+            ([key, value]) => Object.hasOwn(restockDefaults, key) && customEmojiId(value)
         ));
-        res.set("Cache-Control", "no-store").json({ guildId, model, defaults: { ...defaults, ...restockEmojiDefaults },
+        res.set("Cache-Control", "no-store").json({ guildId, model, defaults: { ...defaults, ...restockDefaults },
             emotes, restockEmotes, library, extraSource: extraSource?.name || null });
     }));
     r.put("/settings/storefront/emojis", wrap(async (req, res) => {
@@ -445,7 +446,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         const validMap = (map, slots) => map && typeof map === "object" && !Array.isArray(map) &&
             Object.entries(map).every(([key, value]) => Object.hasOwn(slots, key) && customEmojiId(value));
         const updateRestock = restockEmojis !== undefined;
-        if (!validMap(emojis, defaults) || (updateRestock && !validMap(restockEmojis, restockEmojiDefaults))) {
+        if (!validMap(emojis, defaults) || (updateRestock && !validMap(restockEmojis, restockDefaultsFor(req.shopDiscord.hosted)))) {
             return fail(res, "Pilih emote custom Discord dari server toko.");
         }
         const entries = Object.entries(emojis);

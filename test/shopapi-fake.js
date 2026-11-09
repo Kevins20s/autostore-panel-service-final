@@ -2,7 +2,7 @@
 // Yang diuji: bentuk respons dan alur kode. Sintaks pipeline MongoDB tetap perlu diuji ke database asli (test/shop.js dengan SHOP_TEST_MONGO).
 const assert = require("assert"), http = require("http"), express = require("express");
 const shopdb = require("../src/shopdb");
-const { emojiDefaults, resolveEmojis, resolveRestockEmojis, componentEmoji, customEmojiId, menuActions, menuId, storefrontAction } = require("../bot/src/config/storefront");
+const { emojiDefaults, resolveEmojis, restockDefaultsFor, resolveRestockEmojis, componentEmoji, customEmojiId, menuActions, menuId, storefrontAction } = require("../bot/src/config/storefront");
 const model1Preset = require("../bot/src/config/model1-emoji-preset.json");
 const model2Preset = require("../bot/src/config/model2-emoji-preset.json");
 
@@ -143,7 +143,8 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => true })).profile, sourceCode);
         assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => false })).profile, emojiDefaults.profile);
         const restock = { restockTitle: botEmote, restockProduct: custom, restockQuantity: sourceCode };
-        assert.strictEqual(initial.defaults.restockTitle, "✅");
+        assert.strictEqual(initial.defaults.restockTitle, restockDefaultsFor(true).restockTitle);
+        assert.strictEqual((await resolveRestockEmojis(null, guild)).restockTitle, "✅");
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: {}, restockEmojis: { restockTitle: "👑" } })).s, 400);
         const savedRestock = await j("PUT", emojiPath, { guildId: guildA, emojis: { profile: sourceCode }, restockEmojis: restock });
         assert.strictEqual(savedRestock.s, 200);
@@ -183,7 +184,8 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { profile: sourceCode });
         assert.deepStrictEqual(storefronts.get(guildA).classicEmojis, { growIdButton: botEmote });
         assert.deepStrictEqual(storefronts.get(guildA).model2Emojis, { inStock: custom });
-        const owned = new Map([model1Preset.profile, model2Preset.growIdButton]
+        const restockPreset = restockDefaultsFor(true);
+        const owned = new Map([model1Preset.profile, model2Preset.growIdButton, ...Object.values(restockPreset)]
             .map(code => [customEmojiId(code), { toString: () => code }]));
         guild.client.application.emojis = { fetch: async () => owned };
         process.env.HOSTED_PILOT_BINDING = "test";
@@ -193,7 +195,11 @@ const srv = http.createServer(app).listen(0, async () => {
             assert.strictEqual((await resolveEmojis({}, guild)).qris, emojiDefaults.qris);
             assert.strictEqual((await resolveEmojis({}, guild, null, null, "model2")).growIdButton, model2Preset.growIdButton);
             assert.strictEqual((await resolveEmojis({ growIdButton: custom }, guild, null, null, "model2")).growIdButton, custom);
-            assert.strictEqual((await resolveEmojis({}, guild, null, null, "model2")).inStock, "✅");
+            assert.strictEqual((await resolveEmojis({}, guild, null, null, "model2")).inStock, model2Preset.inStock);
+            assert.deepStrictEqual(await resolveRestockEmojis(null, guild), restockPreset);
+            assert.deepStrictEqual(await resolveRestockEmojis({ restockEmojis: { restockTitle: custom } }, guild),
+                { ...restockPreset, restockTitle: custom });
+            assert.deepStrictEqual(await resolveRestockEmojis(null), restockDefaultsFor(false));
         } finally {
             delete process.env.HOSTED_PILOT_BINDING;
         }

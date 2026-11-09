@@ -24,9 +24,9 @@ let disc = require("../../Schema/discount.js");
 let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let order = require("../../Schema/orderproduct.js");
 let { getEffectiveWLPrice } = require("../../utils/gtidPrice.js");
-const { imageUrl2, COLOR } = require("../../config/configemoji.json");
+const { COLOR } = require("../../config/configemoji.json");
 const { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, emojiFields,
-    resolveStorefrontEmojis, storefrontModel, componentEmoji, validQrisPrice } = require("../../config/storefront");
+    resolveStorefrontEmojis, storefrontModel, storefrontBannerUrl, componentEmoji, validQrisPrice } = require("../../config/storefront");
 
 const jobs = new Map();
 const validDelay = delay => Number.isFinite(delay) && delay >= 1 && delay <= 86400;
@@ -95,9 +95,8 @@ function buySelectRow(options, maintenance, emojis) {
 }
 
 const display = content => new TextDisplayBuilder().setContent(content);
-const discordBannerUrl = url => /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//.test(url) ? url.split("?")[0] : url;
 const banner = url => new MediaGalleryBuilder().addItems({
-    media: { url: discordBannerUrl(url) },
+    media: { url },
 });
 
 async function editModernCatalog(message, container, rows = []) {
@@ -333,7 +332,7 @@ async function renderCatalog(message, guildId, target) {
     const permissions = storefront?.[emojiFields(model).source] && message.guild?.members.me
         ? message.channel?.permissionsFor(message.guild.members.me) : null;
     const emojis = await resolveStorefrontEmojis(storefront, message.guild, permissions);
-    const bannerUrl = storefront?.bannerUrl || imageUrl2;
+    const bannerUrl = storefrontBannerUrl(storefront);
     if (model === models.model3) {
         return publishQrisCatalog(message, target, MT, emojis, bannerUrl);
     }
@@ -432,7 +431,7 @@ ${emojis.cart} Click The **Dropdown Menu** Below To Buy An Item`;
         .setTitle(`${emojis.crown} ${titleText} ${emojis.crown}`)
         .setDescription(description)
         .setColor(COLOR)
-        .setImage(discordBannerUrl(bannerUrl))
+        .setImage(bannerUrl)
         .setTimestamp();
 
     if (compact || model === models.model2) {

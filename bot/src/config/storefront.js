@@ -30,6 +30,8 @@ const model1EmojiDefaults = Object.freeze({
     discord: "🪪", rupiah: "💵", spent: "🛍️", joined: "🗓️",
 });
 const storefrontModel = storefront => Object.hasOwn(models, storefront?.model) ? models[storefront.model] : models.classic;
+const discordBannerUrl = url => /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\//.test(url) ? url.split("?")[0] : url;
+const storefrontBannerUrl = storefront => discordBannerUrl(storefront?.bannerUrl || require("./configemoji.json").imageUrl2);
 const modelEmojiFields = {
     [models.classic]: { values: "classicEmojis", source: "classicEmojiSourceGuildId" },
     [models.model1]: { values: "emojis", source: "emojiSourceGuildId" },
@@ -127,5 +129,5 @@ function componentEmoji(value) {
     return custom ? { animated: custom[1] === "a", name: custom[2], id: custom[3] } : { name: value };
 }
 
-module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, emojiFields,
+module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, storefrontBannerUrl, emojiFields,
     customEmojiId, resolveEmojis, resolveStorefrontEmojis, interactionEmojis, componentEmoji, qrisPriceMin, qrisPriceMax, validQrisPrice };

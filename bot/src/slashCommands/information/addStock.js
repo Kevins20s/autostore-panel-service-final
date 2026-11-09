@@ -1,19 +1,15 @@
 let {
     EmbedBuilder,
-    Client,
-    CommandInteraction,
-    ChannelType,
-    AttachmentBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
+    escapeMarkdown,
     ApplicationCommandOptionType,
 } = require("discord.js");
 let list = require("../../Schema/list.js");
 let shop = require("../../Schema/shop.js");
 let setchannel = require("../../Schema/SettingChannel.js");
 let path = require("path");
-let { Loading, Benar, Salah, Megaphone, COLOR } = require("../../config/configemoji.json");
+let { Loading, Benar, Salah } = require("../../config/configemoji.json");
+const { connection } = require("mongoose");
+const { collection, storefrontBannerUrl } = require("../../config/storefront");
 
 console.log("[VERSION CHECK] addStock.js versi FIXED (deferReply di awal) berhasil dimuat.");
 
@@ -37,28 +33,35 @@ async function fetchTextWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
     }
 }
 
+async function saveStockItems(code, items) {
+    let added = 0;
+    for (const data of items) {
+        try {
+            await new shop({ code, data }).save();
+            added++;
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    return added;
+}
+
 // Kirim notifikasi restock ke channel yang sudah di-set lewat /setrestockchannel
-async function sendRestockNotif(clientObj, guildId, code, added, tag, actor) {
+async function sendRestockNotif(client, guildId, productName, added, tag) {
+    if (!added) return;
     try {
-        let channelData = await setchannel.findOne({}).catch(() => null);
+        const channelData = await setchannel.findOne({}).catch(() => null);
         if (!channelData?.ChannelRestock) return;
 
-        let product = await list.findOne({ code }).catch(() => null);
-        let totalStock = await shop.countDocuments({ code }).catch(() => 0);
+        const channel = await client.channels.fetch(channelData.ChannelRestock).catch(() => null);
+        if (!channel || channel.guildId !== guildId) return;
 
-        let channel = await clientObj.channels.fetch(channelData.ChannelRestock).catch(() => null);
-        if (!channel) return;
-
-        let embed = new EmbedBuilder()
-            .setAuthor({ name: "Stock Baru Masuk!" })
-            .setTitle(`${product?.name ?? code}`)
-            .addFields(
-                { name: "Kode Produk", value: `\`${code}\``, inline: true },
-                { name: "Ditambahkan", value: `+${added}`, inline: true },
-                { name: "Stock Sekarang", value: `${totalStock}`, inline: true }
-            )
-            .setColor(COLOR)
-            .setFooter({ text: actor ? `Direstock oleh ${actor}` : "Restock Otomatis" })
+        const storefront = await connection.collection(collection).findOne({ _id: guildId }).catch(() => null);
+        const embed = new EmbedBuilder()
+            .setTitle("✅ Restock Notification")
+            .setDescription(`· Product: **${escapeMarkdown(productName)}** 🎁\n· Added QTY: **x ${added}** 🟢`)
+            .setColor(0x39e914)
+            .setImage(storefrontBannerUrl(storefront))
             .setTimestamp();
 
         await channel.send({
@@ -165,7 +168,7 @@ module.exports = {
                         ephemeral: true
                     });
 
-                    sendRestockNotif(client, interaction.guildId, code, 1, tag, interaction.user.tag);
+                    sendRestockNotif(client, interaction.guildId, getCode.name || code, 1, tag);
                 } else {
                     let items = body.split(/[\n\r\s]+/).filter((i) => i.length > 0);
 
@@ -173,30 +176,30 @@ module.exports = {
                         return interaction.followUp({ content: `No Item In This File!`, ephemeral: true });
                     }
 
-                    for (let item of items) {
-                        await new shop({ code, data: item }).save().catch(console.error);
-                    }
+                    const added = await saveStockItems(code, items);
 
                     await interaction.followUp({
-                        content: `Write File Succesffully And Added Into the database! ${Benar}`,
+                        content: added === items.length
+                            ? `Write File Succesffully And Added Into the database! ${Benar}`
+                            : `Stok ditambahkan: ${added}/${items.length}`,
                         ephemeral: true
                     });
 
-                    sendRestockNotif(client, interaction.guildId, code, items.length, tag, interaction.user.tag);
+                    sendRestockNotif(client, interaction.guildId, getCode.name || code, added, tag);
                 }
             } else {
                 let items = itemo.split(/\s+/).filter((i) => i.length > 0);
 
-                for (let item of items) {
-                    await new shop({ code, data: item }).save().catch(console.error);
-                }
+                const added = await saveStockItems(code, items);
 
                 await interaction.followUp({
-                    content: `The All Item Has Been Added Into Database ${Benar}`,
+                    content: added === items.length
+                        ? `The All Item Has Been Added Into Database ${Benar}`
+                        : `Stok ditambahkan: ${added}/${items.length}`,
                     ephemeral: true
                 });
 
-                sendRestockNotif(client, interaction.guildId, code, items.length, tag, interaction.user.tag);
+                sendRestockNotif(client, interaction.guildId, getCode.name || code, added, tag);
             }
         } catch (error) {
             console.error("addstock error:", error);

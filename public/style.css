@@ -1049,6 +1049,8 @@ html[data-theme="light"] .app .side .panel-nav-group a.on::before { background: 
   border-color: var(--workspace-accent);
 }
 .app .content .head :is(.panel-action, button.pri):hover { opacity: .9; }
+.orders-export { gap: 8px; }
+.orders-export svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .app .setup-guide .card { border-inline-start: 4px solid var(--workspace-accent); }
 .setup-guide .steps { gap: 6px; }
 .setup-guide .steps li { background: var(--workspace-guide-surface); margin: 0; }

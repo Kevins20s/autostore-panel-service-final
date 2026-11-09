@@ -9,6 +9,7 @@ const gsLanguage = (() => {
 const gsLocale = gsLanguage === "en" ? "en-US" : "id-ID";
 
 const gsEnglish = {
+  "Ekspor CSV": "Export CSV",
   "Paket mulai {0}": "Plans from {0}",
   "Setara {0} per bulan": "Equivalent to {0} per month",
   "Kenali pelangganmu": "Know your customers",

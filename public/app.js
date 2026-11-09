@@ -319,6 +319,8 @@ async function storeOrders() {
     let q = "", skip = 0, timer = null;
     const body = h("tbody", {}), sum = h("div", { class: "grid" }), more = h("button", { class: "sm hide" }, gsT("Muat lebih banyak")), host = h("div", {});
     const search = h("input", { type: "search", placeholder: gsT("Cari produk, kode, Grow ID, atau ID Discord"), autocomplete: "off", "aria-label": gsT("Cari order") });
+    const exportUrl = () => "/api/shop/orders/export.csv?" + new URLSearchParams({ q: search.value.trim() });
+    const exportCsv = h("a", { class: "panel-action orders-export", href: exportUrl() }, navIcon("download"), gsT("Ekspor CSV"));
     const stat = (l, v) => h("div", { class: "stat" }, h("span", { class: "mut" }, l), h("b", {}, v));
     async function load(reset) {
         if (reset) { skip = 0; body.replaceChildren(); }
@@ -335,9 +337,13 @@ async function storeOrders() {
             : empty("clipboard", q ? gsT("Tidak ada order yang cocok") : gsT("Belum ada order tercatat"), q ? gsT("Coba kata kunci lain.") : gsT("Riwayat mulai tercatat sejak bot diperbarui ke versi ini. Pembelian lama tidak ikut tampil.")));
     }
     more.onclick = guard(() => load(false));
-    search.oninput = () => { clearTimeout(timer); timer = setTimeout(guard(() => { q = search.value.trim(); return load(true); }), 300); };
+    search.oninput = () => {
+        exportCsv.href = exportUrl();
+        clearTimeout(timer);
+        timer = setTimeout(guard(() => { q = search.value.trim(); return load(true); }), 300);
+    };
     await load(true);
-    return h("div", {}, head(gsT("Pesanan"), gsT("Riwayat pembelian produk di Discord.")), sum, card(h("div", { class: "toolbar" }, search), host, h("div", { class: "row mt" }, more)));
+    return h("div", {}, head(gsT("Pesanan"), gsT("Riwayat pembelian produk di Discord."), exportCsv), sum, card(h("div", { class: "toolbar" }, search), host, h("div", { class: "row mt" }, more)));
 }
 
 // ---------- Products ----------
@@ -1919,6 +1925,7 @@ const SERVICE_NAV = [
     [gsT("Akun"), [["subscription", gsT("Langganan"), "credit-card"]]]
 ];
 const NAV_ICON_PATHS = {
+    download: ['M12 3v12m-4-4 4 4 4-4','M4 16v4h16v-4'],
     dashboard: ['M3 3h7v7H3z','M14 3h7v4h-7z','M14 10h7v11h-7z','M3 14h7v7H3z'],
     package: ['m12 3 9 5-9 5-9-5 9-5Z','m3 8 9 5 9-5','M12 13v8','M7.5 5.5 16.5 10.5'],
     users: ['M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2','M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M20 21v-2a4 4 0 0 0-3-3.87','M16 3.13a4 4 0 0 1 0 7.75'],

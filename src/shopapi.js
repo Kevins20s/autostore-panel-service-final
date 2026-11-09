@@ -1,6 +1,8 @@
 // API kelola toko (produk, stok, user, pengaturan) langsung ke MongoDB pembeli.
 const express = require("express");
 const { ObjectId } = require("mongodb");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 const { getDb, COL } = require("./shopdb");
 const { hostedTenant } = require("./shared-tenants");
 const { changeStorefrontPayment } = require("./storefront-payment");
@@ -12,6 +14,40 @@ const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
 const num = (v) => (typeof v === "number" ? v : Number(String(v ?? "").trim().replace(",", ".")));
 const okNum = (n, min, max) => Number.isFinite(n) && n >= min && n <= max;
+
+function orderSearch(query) {
+    const q = String(query || "").trim().slice(0, 50);
+    if (!q) return {};
+    const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    return { $or: ["productName", "code", "discordId", "growId"].map(field => ({ [field]: rx })) };
+}
+
+function csvCell(value, asText = false) {
+    if (value == null) return "";
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+    const text = String(value);
+    // Keep Discord snowflakes exact and prevent spreadsheet formula execution.
+    const prefix = text && (asText || /^\s*[=+\-@]|^[\t\r\n]/u.test(text)) ? "'" : "";
+    return '"' + prefix + text.replaceAll('"', '""') + '"';
+}
+
+async function* orderCsv(cursor) {
+    try {
+        yield "\uFEFFNomor Pesanan,Waktu (UTC),GrowID,ID Discord,Kode Produk,Nama Produk,Jumlah,Total (WL),Total (Rp)\r\n";
+        for await (const order of cursor) {
+            const date = order.createdAt ? new Date(order.createdAt) : null;
+            const at = date && Number.isFinite(date.getTime()) ? date.toISOString() : "";
+            const fields = [
+                csvCell(order.orderNumber), csvCell(at), csvCell(order.growId), csvCell(order.discordId, true),
+                csvCell(order.code), csvCell(order.productName || order.code),
+                csvCell(order.qty), csvCell(order.total), csvCell(order.totalIdr),
+            ];
+            yield fields.join(",") + "\r\n";
+        }
+    } finally {
+        await cursor.close();
+    }
+}
 
 async function discordEmotes(guildId, token, botId, sourceGuildId, discordUserId) {
     if (!token) return { library: null };
@@ -311,11 +347,25 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
     }));
 
     // ---------- riwayat order & statistik (dicatat bot di koleksi orderlogs) ----------
+    r.get("/orders/export.csv", wrap(async (req, res) => {
+        const cursor = c(req, "orderlog").find(orderSearch(req.query.q), { projection: {
+            _id: 0, orderNumber: 1, createdAt: 1, growId: 1, discordId: 1, code: 1, productName: 1, qty: 1, total: 1, totalIdr: 1,
+        } }).sort({ createdAt: -1 });
+        const date = new Date().toISOString().slice(0, 10);
+        res.attachment(`pesanan-gevrastore-${date}.csv`);
+        res.set({ "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "no-store" });
+        try {
+            await pipeline(Readable.from(orderCsv(cursor)), res);
+        } catch (error) {
+            if (error.code !== "ERR_STREAM_PREMATURE_CLOSE" && error.code !== "ECONNRESET") {
+                console.error("[SHOP] Ekspor pesanan:", error.message);
+            }
+        }
+    }));
+
     r.get("/orders", wrap(async (req, res) => {
-        const q = String(req.query.q || "").trim().slice(0, 50);
         const skip = Math.max(0, Math.floor(Number(req.query.skip)) || 0);
-        const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
-        const filter = q ? { $or: [{ productName: rx }, { code: rx }, { discordId: rx }, { growId: rx }] } : {};
+        const filter = orderSearch(req.query.q);
         const col = c(req, "orderlog");
         const [total, rows, sum] = await Promise.all([
             col.countDocuments(filter),

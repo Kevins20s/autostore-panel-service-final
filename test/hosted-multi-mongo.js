@@ -342,11 +342,20 @@ async function main() {
             assert.equal(orderPage.total, 2);
             assert.equal(orderPage.idr, order.amount);
             assert.equal(orderPage.wl, 10);
+            const exportPath = "/shop/orders/export.csv?" + new URLSearchParams({ q: "Store " + i });
+            const response = await fetch(origin + exportPath, { headers: { "X-Test-License": fixtures[i].id } });
+            assert.equal(response.status, 200);
+            const exported = await response.text();
+            assert.equal(exported.trimEnd().split("\r\n").length, 3);
+            assert.ok(exported.includes(`"Store ${i}",${order.quantity},,${order.amount}`));
+            assert.ok(!exported.includes(`"Store ${1 - i}"`));
+            assert.ok(!exported.includes("QR-STOCK"));
             const stats = await request(i, "GET", "/shop/stats?days=1");
             assert.equal(stats.daily[0].idr, order.amount);
             assert.equal(orderPage.qty, order.quantity + 1);
             assert.equal((await (await claim(tenants[i], order)).json()).data, files[i]);
         }
+        assert.equal((await fetch(origin + "/shop/orders/export.csv")).status, 401);
         await request(0, "POST", "/shop/products/" + code + "/stock", { text: "EXPIRED-QR-STOCK-A\nEXPIRED-QR-STOCK-B" });
         const expired = await buy(tenants[0], 2);
         assert.equal(expired.status, 200);

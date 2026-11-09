@@ -7,6 +7,7 @@ const model1Preset = require("../bot/src/config/model1-emoji-preset.json");
 const model2Preset = require("../bot/src/config/model2-emoji-preset.json");
 
 const inserted = []; let lastFind = null;
+let csvFilter, csvClosed = false;
 const cur = (rows) => { const c = { sort: () => c, skip: () => c, limit: () => c, project: () => c, toArray: async () => rows }; return c; };
 const now = Date.now();
 const storefronts = new Map();
@@ -52,7 +53,21 @@ const cols = {
     },
     orderlogs: {
         countDocuments: async () => 2,
-        find: () => cur([{ orderNumber: 7, discordId: "111", growId: "Budi", code: "P2", productName: "Akun B", qty: 2, total: 4000, createdAt: new Date(now) }, { code: "P1", qty: 1, total: 900, createdAt: new Date(now - 864e5) }]),
+        find: (filter, options) => {
+            if (options?.projection) {
+                csvFilter = filter;
+                return {
+                    sort() { return this; },
+                    async *[Symbol.asyncIterator]() {
+                        yield { orderNumber: 7, discordId: "123456789012345678", growId: "=1+1", code: "P2",
+                            productName: 'Paket "Spesial", A', qty: 2, totalIdr: 15000, createdAt: new Date(now) };
+                        for (let i = 0; i < 50; i++) yield { code: "P1", qty: 1, total: 900 };
+                    },
+                    async close() { csvClosed = true; },
+                };
+            }
+            return cur([{ orderNumber: 7, discordId: "111", growId: "Budi", code: "P2", productName: "Akun B", qty: 2, total: 4000, createdAt: new Date(now) }, { code: "P1", qty: 1, total: 900, createdAt: new Date(now - 864e5) }]);
+        },
         aggregate: (p) => ({ toArray: async () => {
             const g = p.find((s) => s.$group)?.$group;
             if (g._id === null) return [{ _id: null, qty: 3, wl: 4900 }];
@@ -79,6 +94,18 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.deepStrictEqual(o.j.orders[0], { number: 7, discordId: "111", growId: "Budi", code: "P2", name: "Akun B", qty: 2, total: 4000, totalIdr: 0, at: now });
         assert.strictEqual(o.j.orders[1].number, null);
         console.log("ok  /orders: bentuk respons, ringkasan, pencarian aman");
+
+        const exported = await fetch(base + "/orders/export.csv?q=" + encodeURIComponent("a.b("));
+        assert.strictEqual(exported.status, 200);
+        assert.match(exported.headers.get("content-disposition"), /attachment; filename="pesanan-gevrastore-\d{4}-\d{2}-\d{2}\.csv"/);
+        assert.strictEqual(exported.headers.get("cache-control"), "no-store");
+        const csv = Buffer.from(await exported.arrayBuffer()).toString("utf8");
+        assert.ok(csv.startsWith("\uFEFFNomor Pesanan,"));
+        assert.strictEqual(csv.trimEnd().split("\r\n").length, 52);
+        assert.ok(csv.includes(`"'=1+1","'123456789012345678","P2","Paket ""Spesial"", A",2,,15000`));
+        assert.deepStrictEqual(csvFilter.$or[0].productName, { $regex: "a\\.b\\(", $options: "i" });
+        assert.ok(csvClosed);
+        console.log("ok  ekspor CSV: semua halaman, filter, angka, dan proteksi formula");
 
         const s = await j("GET", "/stats?days=14");
         assert.strictEqual(s.s, 200); assert.strictEqual(s.j.days, 14); assert.strictEqual(s.j.daily.length, 2); assert.strictEqual(s.j.top[0].code, "P2");

@@ -1049,8 +1049,38 @@ html[data-theme="light"] .app .side .panel-nav-group a.on::before { background: 
   border-color: var(--workspace-accent);
 }
 .app .content .head :is(.panel-action, button.pri):hover { opacity: .9; }
-.orders-export { gap: 8px; }
-.orders-export svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#view a.orders-export {
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 7px 14px 7px 8px;
+  border-radius: 11px;
+  color: var(--workspace-button-text);
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgb(0 0 0 / .2);
+}
+#view a.orders-export:hover {
+  color: var(--workspace-button-text);
+  background: var(--workspace-accent-hover);
+  border-color: var(--workspace-accent-hover);
+  text-decoration: none;
+  opacity: 1;
+}
+#view a.orders-export:focus-visible {
+  outline: 2px solid var(--workspace-hero-text);
+  outline-offset: 3px;
+}
+.orders-export .nav-icon {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+}
+.orders-export svg { display: block; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .app .setup-guide .card { border-inline-start: 4px solid var(--workspace-accent); }
 .setup-guide .steps { gap: 6px; }
 .setup-guide .steps li { background: var(--workspace-guide-surface); margin: 0; }

@@ -9,7 +9,7 @@ let setchannel = require("../../Schema/SettingChannel.js");
 let path = require("path");
 let { Loading, Benar, Salah } = require("../../config/configemoji.json");
 const { connection } = require("mongoose");
-const { collection, storefrontBannerUrl } = require("../../config/storefront");
+const { collection, storefrontBannerUrl, resolveRestockEmojis } = require("../../config/storefront");
 
 console.log("[VERSION CHECK] addStock.js versi FIXED (deferReply di awal) berhasil dimuat.");
 
@@ -57,9 +57,12 @@ async function sendRestockNotif(client, guildId, productName, added, tag) {
         if (!channel || channel.guildId !== guildId) return;
 
         const storefront = await connection.collection(collection).findOne({ _id: guildId }).catch(() => null);
+        const guild = channel.guild;
+        const permissions = guild?.members?.me ? channel.permissionsFor(guild.members.me) : null;
+        const emojis = await resolveRestockEmojis(storefront, guild, permissions);
         const embed = new EmbedBuilder()
-            .setTitle("✅ Restock Notification")
-            .setDescription(`· Product: **${escapeMarkdown(productName)}** 🎁\n· Added QTY: **x ${added}** 🟢`)
+            .setTitle(`${emojis.restockTitle} Restock Notification`)
+            .setDescription(`· Product: **${escapeMarkdown(productName)}** ${emojis.restockProduct}\n· Added QTY: **x ${added}** ${emojis.restockQuantity}`)
             .setColor(0x39e914)
             .setImage(storefrontBannerUrl(storefront))
             .setTimestamp();

@@ -6,7 +6,7 @@ const { hostedTenant } = require("./shared-tenants");
 const { changeStorefrontPayment } = require("./storefront-payment");
 const { imageUrl2: defaultBanner } = require("../bot/src/config/configemoji.json");
 const { collection: storefrontCollection, models: storefrontModels, emojiDefaultsFor, storefrontModel, emojiFields,
-    customEmojiId, validQrisPrice } = require("../bot/src/config/storefront");
+    restockEmojiDefaults, customEmojiId, validQrisPrice } = require("../bot/src/config/storefront");
 
 const CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const ID_RE = /^\d{17,20}$/;
@@ -426,10 +426,14 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         const emotes = Object.fromEntries(Object.entries(storefront?.[fields.values] || {}).filter(
             ([key, value]) => Object.hasOwn(defaults, key) && customEmojiId(value)
         ));
-        res.set("Cache-Control", "no-store").json({ guildId, model, defaults, emotes, library, extraSource: extraSource?.name || null });
+        const restockEmotes = Object.fromEntries(Object.entries(storefront?.restockEmojis || {}).filter(
+            ([key, value]) => Object.hasOwn(restockEmojiDefaults, key) && customEmojiId(value)
+        ));
+        res.set("Cache-Control", "no-store").json({ guildId, model, defaults: { ...defaults, ...restockEmojiDefaults },
+            emotes, restockEmotes, library, extraSource: extraSource?.name || null });
     }));
     r.put("/settings/storefront/emojis", wrap(async (req, res) => {
-        const { guildId, emojis, model: requestedModel } = req.body || {};
+        const { guildId, emojis, restockEmojis, model: requestedModel } = req.body || {};
         if (!ID_RE.test(req.shopGuildId) || guildId !== req.shopGuildId) {
             return fail(res, "Server toko belum diatur atau sudah berubah. Muat ulang halaman.", 409);
         }
@@ -438,20 +442,32 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
         if (requestedModel !== undefined && requestedModel !== model) return fail(res, "Model toko sudah berubah. Buka kembali menu Emoji.", 409);
         const defaults = emojiDefaultsFor(model);
         const fields = emojiFields(model);
-        if (!emojis || typeof emojis !== "object" || Array.isArray(emojis) || Object.entries(emojis).some(
-            ([key, value]) => !Object.hasOwn(defaults, key) || !customEmojiId(value)
-        )) return fail(res, "Pilih emote custom Discord dari server toko.");
+        const validMap = (map, slots) => map && typeof map === "object" && !Array.isArray(map) &&
+            Object.entries(map).every(([key, value]) => Object.hasOwn(slots, key) && customEmojiId(value));
+        const updateRestock = restockEmojis !== undefined;
+        if (!validMap(emojis, defaults) || (updateRestock && !validMap(restockEmojis, restockEmojiDefaults))) {
+            return fail(res, "Pilih emote custom Discord dari server toko.");
+        }
         const entries = Object.entries(emojis);
-        const { library, extraSource } = entries.length ? await storeEmotes(req) : { library: [] };
+        const restockEntries = Object.entries(restockEmojis || {});
+        const { library, extraSource } = entries.length || restockEntries.length ? await storeEmotes(req) : { library: [] };
         if (!library) return fail(res, "Daftar emote dari Discord belum tersedia. Coba lagi.", 502);
         const byId = new Map(library.map(item => [customEmojiId(item.code), item]));
-        const normalized = Object.fromEntries(entries.map(([key, code]) => [key, byId.get(customEmojiId(code))?.code]));
-        if (Object.values(normalized).some(code => !code)) return fail(res, "Ada emote yang sudah tidak tersedia. Muat ulang daftar emote.");
-        const usesExtraSource = Object.values(normalized).some(code => byId.get(customEmojiId(code))?.source === "external");
-        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: {
-            [fields.values]: normalized, [fields.source]: usesExtraSource ? extraSource.id : null,
-        } }, { upsert: true });
-        res.json({ emotes: normalized });
+        const normalize = list => Object.fromEntries(list.map(([key, code]) => [key, byId.get(customEmojiId(code))?.code]));
+        const externalSource = values => Object.values(values).some(code => byId.get(customEmojiId(code))?.source === "external")
+            ? extraSource.id : null;
+        const normalized = normalize(entries);
+        const restock = normalize(restockEntries);
+        if ([...Object.values(normalized), ...Object.values(restock)].some(code => !code)) {
+            return fail(res, "Ada emote yang sudah tidak tersedia. Muat ulang daftar emote.");
+        }
+        const changes = { [fields.values]: normalized, [fields.source]: externalSource(normalized) };
+        if (updateRestock) {
+            changes.restockEmojis = restock;
+            changes.restockEmojiSourceGuildId = externalSource(restock);
+        }
+        await req.db.collection(storefrontCollection).updateOne({ _id: guildId }, { $set: changes }, { upsert: true });
+        res.json({ emotes: normalized, ...(updateRestock ? { restockEmotes: restock } : {}) });
     }));
     r.put("/settings/donation-webhook", wrap(async (req, res) => {
         if (!hostedTenant(req.lic, licenses())) return fail(res, "Pengaturan ini untuk Bot GevraStore.", 403);

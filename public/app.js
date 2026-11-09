@@ -1338,6 +1338,12 @@ MODEL_EMOJI_GROUPS.model2 = [
 MODEL_EMOJI_GROUPS.model3 = [
     ["Katalog", "Catalog", [...CATALOG_EMOJI_FIELDS, ["cart", "Tombol Buy", "Buy button"], ["warning", "Panduan beli", "Purchase instructions"]]],
 ];
+const RESTOCK_EMOJI_FIELDS = [
+    ["restockTitle", "Judul notifikasi", "Notification title"],
+    ["restockProduct", "Nama produk", "Product name"],
+    ["restockQuantity", "Jumlah ditambahkan", "Added quantity"],
+];
+const isRestockEmoji = key => RESTOCK_EMOJI_FIELDS.some(([slot]) => slot === key);
 
 function storefrontEmojiPreview(model, selected, emojis, t) {
     const icon = (key) => h("span", { class: "emoji-preview-icon" + (key === selected ? " is-target" : ""),
@@ -1349,6 +1355,11 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
         h("div", { class: "emoji-preview-author" }, "GevraStore", h("span", {}, "BOT")),
         h("div", { class: "emoji-preview-embed" }, h("strong", { class: "emoji-preview-heading" }, ...title), ...content));
 
+    if (isRestockEmoji(selected)) {
+        return message([icon("restockTitle"), "Restock Notification"],
+            line("· Product:", h("strong", {}, "Voucher Digital"), icon("restockProduct")),
+            line("· Added QTY:", h("strong", {}, "x 200"), icon("restockQuantity")));
+    }
     if (["inStock", "outOfStock"].includes(selected)) {
         return message([t("Pilihan produk", "Product options")],
             h("div", { class: "emoji-preview-select" }, line(icon("inStock"), "Voucher Game · Code: GAME01 | Stock: 12"),
@@ -1435,9 +1446,11 @@ async function modelEmojiEditor() {
     catch (error) { return card(h("h2", {}, title), h("p", { class: "mut" }, error.message)); }
     const { guildId, library, extraSource, model, defaults } = settings;
     const modelLabel = { model1: "Model 1", model2: "Model 2", model3: "Model 3", classic: t("Klasik", "Classic") }[model];
-    let values = { ...settings.emotes };
+    let savedRestock = settings.restockEmotes || {};
+    let values = { ...settings.emotes, ...savedRestock };
     const botCount = library?.filter(emote => emote.source === "bot").length || 0;
-    const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...MODEL_EMOJI_GROUPS[model].map(([id, en, fields]) =>
+    const groups = [...MODEL_EMOJI_GROUPS[model], ["Notifikasi restock", "Restock notification", RESTOCK_EMOJI_FIELDS]];
+    const select = h("select", { "aria-label": t("Bagian toko", "Storefront area") }, ...groups.map(([id, en, fields]) =>
         h("optgroup", { label: t(id, en) }, ...fields.map(([key, idLabel, enLabel]) => h("option", { value: key }, t(idLabel, enLabel))))));
     const input = h("input", { autocomplete: "off", spellcheck: "false", maxlength: 60, placeholder: "<:nama:id> / <a:nama:id>", "aria-label": t("Kode emote Discord", "Discord emote code") });
     const previewName = h("p", { class: "emoji-preview-name" });
@@ -1514,16 +1527,23 @@ async function modelEmojiEditor() {
     const save = h("button", { type: "button", class: "pri" }, t("Simpan emote", "Save emotes"));
     const reset = h("button", { type: "button" }, t("Reset semua", "Reset all"));
     const controls = h("fieldset", { class: "emoji-slot-controls" });
-    const persist = async emojis => {
+    const persist = async (emojis, restockEmojis) => {
         controls.disabled = true;
         try {
-            const result = await api("PUT", endpoint, { guildId, model, emojis });
-            values = { ...result.emotes };
+            const result = await api("PUT", endpoint, { guildId, model, emojis, restockEmojis });
+            savedRestock = result.restockEmotes ?? savedRestock;
+            values = { ...result.emotes, ...savedRestock };
             draw();
             toast(t("Emoji toko tersimpan.", "Storefront emojis saved."));
         } finally { controls.disabled = false; }
     };
-    save.onclick = guard(() => persist(values));
+    save.onclick = guard(() => {
+        const entries = Object.entries(values);
+        const emojis = Object.fromEntries(entries.filter(([key]) => !isRestockEmoji(key)));
+        const restock = Object.fromEntries(entries.filter(([key]) => isRestockEmoji(key)));
+        const restockChanged = RESTOCK_EMOJI_FIELDS.some(([key]) => restock[key] !== savedRestock[key]);
+        return persist(emojis, restockChanged ? restock : undefined);
+    });
     reset.onclick = guard(async () => {
         if (await gsConfirm(t(`Kembalikan semua emoji ${modelLabel} ke bawaan?`, `Reset all ${modelLabel} emojis to defaults?`), { danger: true })) await persist({});
     });

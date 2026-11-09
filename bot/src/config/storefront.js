@@ -68,6 +68,7 @@ function emojiDefaultsFor(model, hosted = false) {
     return hosted ? { ...base, ...hostedPresets[model] } : base;
 }
 const emojiDefaults = Object.freeze(emojiDefaultsFor(models.model1));
+const restockEmojiDefaults = Object.freeze({ restockTitle: "✅", restockProduct: "🎁", restockQuantity: "🟢" });
 const customEmoji = /^<(a?):([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
 const applicationEmojiLists = new WeakMap();
 
@@ -90,9 +91,7 @@ function availableGuildEmoji(guild, id) {
     if (emoji?.available && (!emoji.roles.cache.size || emoji.roles.cache.some(role => guild.members.me?.roles.cache.has(role.id)))) return emoji;
 }
 
-async function resolveEmojis(config, guild, sourceGuildId, permissions, model = models.model1) {
-    const emojis = emojiDefaultsFor(model);
-    const preset = (process.env.HOSTED_PILOT_BINDING && hostedPresets[model]) || {};
+async function resolveConfiguredEmojis(emojis, preset, config, guild, sourceGuildId, permissions) {
     const configured = Object.keys(emojis).map(key => [key, customEmojiId(config?.[key]), customEmojiId(preset[key])]);
     const source = sourceGuildId && sourceGuildId === process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID && permissions?.has("UseExternalEmojis")
         ? guild?.client?.guilds?.cache.get(sourceGuildId) : null;
@@ -104,6 +103,15 @@ async function resolveEmojis(config, guild, sourceGuildId, permissions, model = 
         if (emoji) emojis[key] = emoji.toString();
     }
     return emojis;
+}
+
+function resolveEmojis(config, guild, sourceGuildId, permissions, model = models.model1) {
+    const preset = (process.env.HOSTED_PILOT_BINDING && hostedPresets[model]) || {};
+    return resolveConfiguredEmojis(emojiDefaultsFor(model), preset, config, guild, sourceGuildId, permissions);
+}
+
+function resolveRestockEmojis(storefront, guild, permissions) {
+    return resolveConfiguredEmojis({ ...restockEmojiDefaults }, {}, storefront?.restockEmojis, guild, storefront?.restockEmojiSourceGuildId, permissions);
 }
 
 function resolveStorefrontEmojis(storefront, guild, permissions, model = storefrontModel(storefront)) {
@@ -130,4 +138,4 @@ function componentEmoji(value) {
 }
 
 module.exports = { collection, models, buttons, menuId, menuActions, qrisBuyPrefix, qrisSelectId, qrisPagePrefix, storefrontAction, rupiahCredit, emojiDefaults, emojiDefaultsFor, storefrontModel, storefrontBannerUrl, emojiFields,
-    customEmojiId, resolveEmojis, resolveStorefrontEmojis, interactionEmojis, componentEmoji, qrisPriceMin, qrisPriceMax, validQrisPrice };
+    customEmojiId, resolveEmojis, resolveStorefrontEmojis, restockEmojiDefaults, resolveRestockEmojis, interactionEmojis, componentEmoji, qrisPriceMin, qrisPriceMax, validQrisPrice };

@@ -45,6 +45,7 @@ const settings = new Schema({
     guildId: { type: String, required: true, unique: true },
     panelChannelId: String,
     panelMessageId: String,
+    listMessageId: { type: String, default: null },
     categoryId: String,
     staffRoleId: { type: String, default: null },
     panelPage: { type: Number, default: 0 },

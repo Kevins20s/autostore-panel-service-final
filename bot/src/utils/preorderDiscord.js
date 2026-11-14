@@ -5,6 +5,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBui
 const { Order, Settings } = require("../Schema/preorder");
 const { Owner, Admin = [] } = require("../config/config.json");
 const { createPreorders, PreorderError, progress } = require("./preorders");
+const { collection: storefrontCollection, resolvePreorderEmojis } = require("../config/storefront");
 const orders = createPreorders();
 const refreshes = new Map();
 const privateReply = { ephemeral: true };
@@ -189,29 +190,26 @@ async function readStockFile(attachment) {
     return Buffer.from(bytes).toString("utf8");
 }
 
-async function panelPayload(guildId, requestedPage = 0) {
+async function panelPayload(guildId, requestedPage = 0, context = {}) {
     const total = await Order.countDocuments({ guildId });
+    const storefront = await Order.db.collection(storefrontCollection).findOne({ _id: guildId });
+    const emojis = await resolvePreorderEmojis(storefront, context.guild, context.permissions);
     const pages = Math.max(1, Math.ceil(total / 8));
     const page = Math.max(0, Math.min(pages - 1, Number(requestedPage) || 0));
     const list = await Order.find({ guildId }).select("code buyerId productName quantity depositedQty collectedQty paidAt status handledBy")
         .sort({ createdAt: -1, _id: -1 }).skip(page * 8).limit(8).lean();
-    const description = list.map((order, index) => `**${page * 8 + index + 1}. ${escapeMarkdown(order.productName)}**\n` +
-        `👤 <@${order.buyerId}> · \`${order.code}\`\n` +
-        `📦 **${order.depositedQty}/${order.quantity}** disetor · 📥 **${order.collectedQty}** diambil\n${displayStatus(order).text}`).join("\n\n");
-    return { embeds: [
-        { title: "🛍️ Preorder Center", color: 0x5865f2, description: "Pesan produk sesuai kebutuhanmu dan pantau progresnya dari satu tempat.\nTekan **Buat Preorder** untuk membuka tiket privat bersama admin.",
-            fields: [
-                { name: "📝 Buat pesanan", value: "Isi produk dan jumlah yang kamu butuhkan.", inline: true },
-                { name: "💳 Pembayaran", value: "Konfirmasi pembayaran bersama admin di tiket.", inline: true },
-                { name: "📦 Ambil bertahap", value: "Ambil stok yang sudah siap tanpa menunggu semuanya.", inline: true },
-            ], footer: { text: "GevraStore • Tiket privat • Progres transparan" } },
-        { title: "📋 Daftar Preorder", color: 0x65efd0, description: description || "📭 Belum ada preorder. Tekan Buat Preorder untuk membuat pesanan pertama.",
-            footer: { text: `Halaman ${page + 1}/${pages} · ${total} preorder · Diperbarui otomatis` } },
-    ], components: [
-        row(button("po:create", "Buat Preorder", ButtonStyle.Success), button("po:mine:0", "Pesanan saya")),
-        row(button(`po:panel:${page - 1}`, "Sebelumnya").setEmoji("◀️").setDisabled(page === 0),
-            button(`po:panel:${page}`, "Perbarui daftar"), button(`po:panel:${page + 1}`, "Selanjutnya").setEmoji("▶️").setDisabled(page === pages - 1)),
-    ], allowedMentions: { parse: [] } };
+    const description = list.map((order, index) => `**${page * 8 + index + 1}.** <@${order.buyerId}> · **${escapeMarkdown(order.productName)}**\n` +
+        `\`${order.depositedQty}/${order.quantity}\` disetor · \`${order.collectedQty}\` diambil · ${displayStatus(order).text}`).join("\n\n");
+    const navigation = [row(button("po:mine:0", "Pesanan saya"), button(`po:panel:${page}`, "Perbarui daftar"))];
+    if (pages > 1) navigation.push(row(button(`po:panel:${page - 1}`, "Sebelumnya").setEmoji("◀️").setDisabled(page === 0),
+        button(`po:panel:${page + 1}`, "Selanjutnya").setEmoji("▶️").setDisabled(page === pages - 1)));
+    return {
+        panel: { embeds: [{ title: `${emojis.preorderTitleLeft} Create Ticket PreOrder ${emojis.preorderTitleRight}`,
+            color: 0x3498db, description: "Klik tombol di bawah, lalu isi produk dan jumlah preorder kamu.", footer: { text: "GevraStore" } }],
+            components: [row(button("po:create", "Create PreOrder", ButtonStyle.Secondary).setEmoji("🎫"))], allowedMentions: { parse: [] } },
+        list: { embeds: [{ title: "Daftar PreOrder", color: 0x3498db, description: description || "Belum ada preorder.",
+            footer: { text: `${page + 1}/${pages} · ${total} preorder` } }], components: navigation, allowedMentions: { parse: [] } },
+    };
 }
 
 async function refreshPanel(client, guildId) {
@@ -223,7 +221,19 @@ async function refreshPanel(client, guildId) {
         const channel = await client.channels.fetch(settings.panelChannelId);
         if (channel?.guildId !== guildId) throw new PreorderError("Channel panel preorder tidak tersedia.");
         const message = await channel.messages.fetch(settings.panelMessageId);
-        await message.edit(await panelPayload(guildId, settings.panelPage));
+        const guild = channel.guild || client.guilds?.cache.get(guildId);
+        const permissions = guild?.members.me ? channel.permissionsFor(guild.members.me) : undefined;
+        const payload = await panelPayload(guildId, settings.panelPage, { guild, permissions });
+        await message.edit(payload.panel);
+        let listMessage = settings.listMessageId ? await channel.messages.fetch(settings.listMessageId).catch(error => {
+            if (error.code === 10008) return null;
+            throw error;
+        }) : null;
+        if (listMessage) await listMessage.edit(payload.list);
+        else {
+            listMessage = await channel.send({ ...payload.list, nonce: "pol-" + settings.panelMessageId, enforceNonce: true });
+            await Settings.updateOne({ guildId, panelMessageId: settings.panelMessageId }, { $set: { listMessageId: listMessage.id } });
+        }
         const revision = settings.panelRevision === undefined ? { $exists: false } : settings.panelRevision;
         await Settings.updateOne({ guildId, panelRevision: revision }, { $set: { panelDirty: false, panelRevision: settings.panelRevision || 0 } });
     });
@@ -261,14 +271,24 @@ async function setup(client, interaction) {
     const member = interaction.guild.members.me || await interaction.guild.members.fetchMe();
     checkPermissions(channel, member, [P.ViewChannel, P.SendMessages, P.EmbedLinks, P.ReadMessageHistory]);
     checkPermissions(category, member, [P.ViewChannel, P.ManageChannels, P.ManageRoles]);
-    const payload = await panelPayload(interaction.guildId);
+    const payload = await panelPayload(interaction.guildId, 0, { guild: interaction.guild, permissions: channel.permissionsFor(member) });
     const existing = previous?.panelChannelId === channel.id && previous.panelMessageId
         ? await channel.messages.fetch(previous.panelMessageId).catch(() => null) : null;
-    const message = existing ? await existing.edit(payload) : await channel.send(payload);
+    const message = existing ? await existing.edit(payload.panel) : await channel.send(payload.panel);
+    let listMessage;
+    let existingList;
     try {
+        existingList = previous?.panelChannelId === channel.id && previous.listMessageId
+            ? await channel.messages.fetch(previous.listMessageId).catch(error => { if (error.code === 10008) return null; throw error; }) : null;
+        listMessage = existingList ? await existingList.edit(payload.list)
+            : await channel.send({ ...payload.list, nonce: "pol-" + message.id, enforceNonce: true });
         await Settings.findOneAndUpdate({ guildId: interaction.guildId }, { $set: { panelChannelId: channel.id, panelMessageId: message.id,
-            categoryId: category.id, panelPage: 0, panelDirty: true }, $inc: { panelRevision: 1 } }, { upsert: true });
-    } catch (error) { if (!existing) await message.delete().catch(() => {}); throw error; }
+            listMessageId: listMessage.id, categoryId: category.id, panelPage: 0, panelDirty: true }, $inc: { panelRevision: 1 } }, { upsert: true });
+    } catch (error) {
+        if (!existing) await message.delete().catch(() => {});
+        if (listMessage && !existingList) await listMessage.delete().catch(() => {});
+        throw error;
+    }
     await interaction.editReply({ content: `Panel dan daftar preorder dibuat di ${channel}. Tiket akan masuk kategori **${escapeMarkdown(category.name || "Preorder")}**. Selanjutnya buyer dan admin cukup memakai tombol.` });
 }
 

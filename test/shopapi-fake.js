@@ -2,7 +2,7 @@
 // Yang diuji: bentuk respons dan alur kode. Sintaks pipeline MongoDB tetap perlu diuji ke database asli (test/shop.js dengan SHOP_TEST_MONGO).
 const assert = require("assert"), http = require("http"), express = require("express");
 const shopdb = require("../src/shopdb");
-const { emojiDefaults, resolveEmojis, restockDefaultsFor, resolveRestockEmojis, componentEmoji, customEmojiId, menuActions, menuId, storefrontAction } = require("../bot/src/config/storefront");
+const { emojiDefaults, resolveEmojis, restockDefaultsFor, resolveRestockEmojis, preorderEmojiDefaults, resolvePreorderEmojis, componentEmoji, customEmojiId, menuActions, menuId, storefrontAction } = require("../bot/src/config/storefront");
 const model1Preset = require("../bot/src/config/model1-emoji-preset.json");
 const model2Preset = require("../bot/src/config/model2-emoji-preset.json");
 
@@ -40,6 +40,7 @@ const cols = {
     wlrates: { findOne: async () => null },
     apisettings: { findOne: async () => null },
     setchannels: { findOne: async () => null },
+    preordersettings: { updateOne: async () => ({ matchedCount: 0 }) },
     storefronts: {
         findOne: async ({ _id }) => storefronts.get(_id),
         updateOne: async ({ _id }, { $set }) => storefronts.set(_id, { ...storefronts.get(_id), ...$set }),
@@ -180,12 +181,23 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.deepStrictEqual(await resolveRestockEmojis(storefronts.get(guildA), guild, { has: () => true }), restock);
         assert.strictEqual((await resolveRestockEmojis(storefronts.get(guildA), guild, { has: () => false })).restockQuantity, "🟢");
         assert.deepStrictEqual((await j("GET", emojiPath, null, "B")).j.restockEmotes, {});
+        const preorder = { preorderTitleLeft: botEmote, preorderTitleRight: custom };
+        assert.strictEqual(initial.defaults.preorderTitleLeft, preorderEmojiDefaults.preorderTitleLeft);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: {}, preorderEmojis: { unknown: custom } })).s, 400);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: {}, preorderEmojis: { preorderTitleLeft: "<:locked:623456789012345678>" } })).s, 400);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: { profile: sourceCode }, preorderEmojis: preorder })).s, 200);
+        assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { profile: sourceCode }, "saving preorder emoji preserves the submitted model choices");
+        assert.deepStrictEqual((await j("GET", emojiPath)).j.preorderEmotes, preorder);
+        assert.deepStrictEqual((await j("GET", emojiPath, null, "B")).j.preorderEmotes, {});
+        assert.deepStrictEqual(await resolvePreorderEmojis({ preorderEmojis: preorder }, guild), preorder);
+        assert.deepStrictEqual(await resolvePreorderEmojis({ preorderEmojis: { preorderTitleLeft: "<:gone:100000000000000009>" } }, guild), preorderEmojiDefaults);
         assert.strictEqual((await j("PUT", "/settings/storefront", { guildId: guildA, model: "classic" })).s, 200);
         const classic = (await j("GET", emojiPath)).j;
         assert.strictEqual(classic.model, "classic");
         assert.ok(classic.defaults.growIdButton && classic.defaults.inStock === "✅");
         assert.deepStrictEqual(classic.emotes, {});
         assert.deepStrictEqual(classic.restockEmotes, restock, "emoji restock sama saat model toko diganti");
+        assert.deepStrictEqual(classic.preorderEmotes, preorder, "emoji preorder tetap sama saat model toko diganti");
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "model1", emojis: {} })).s, 409);
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, model: "classic", emojis: { growIdButton: botEmote } })).s, 200);
         assert.deepStrictEqual((await j("GET", emojiPath)).j.emotes, { growIdButton: botEmote });

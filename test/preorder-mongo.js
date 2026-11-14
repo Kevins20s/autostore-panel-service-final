@@ -83,11 +83,25 @@ async function main() {
     assert.deepEqual(command.options.map(option => option.name), ["channel", "kategori"]);
     assert.equal(require("node:fs").existsSync(require("node:path").join(__dirname, "../bot/src/slashCommands/information/preorder.js")), false);
     let createdChannels = 0, creationPayload;
-    let lastPanel;
-    const panelMessage = { id: "100000000000000030", edit: async value => { lastPanel = value; return panelMessage; } };
+    let lastPanel, mainPanel;
+    const panelMessages = new Collection();
+    let nextMessage = 40n;
+    const savePanelView = value => {
+        if (value.embeds[0].title.includes("Create Ticket PreOrder")) mainPanel = value;
+        else lastPanel = value;
+    };
     const panel = { id: "100000000000000031", guildId, type: ChannelType.GuildText,
-        permissionsFor: () => ({ has: () => true }), messages: { fetch: async () => panelMessage },
-        send: async value => { lastPanel = value; return panelMessage; }, toString: () => "<#panel>" };
+        permissionsFor: () => ({ has: () => true }), messages: { fetch: async id => {
+            if (!panelMessages.has(id)) throw Object.assign(new Error("Unknown message"), { code: 10008 });
+            return panelMessages.get(id);
+        } },
+        send: async value => {
+            savePanelView(value);
+            const message = { id: String(100000000000000000n + nextMessage++),
+                edit: async updated => { savePanelView(updated); return message; }, delete: async () => panelMessages.delete(message.id) };
+            panelMessages.set(message.id, message);
+            return message;
+        }, toString: () => "<#panel>" };
     const channels = new Collection();
     const channel = {
         id: "100000000000000008", guildId, messages: { fetch: async () => ({ edit: async () => {} }) },
@@ -115,8 +129,12 @@ async function main() {
     await assert.rejects(discord.runCommand(client, interaction), error => /Send Messages/.test(error.message) && !/Manage Roles/.test(error.message));
     panel.permissionsFor = fullPanelPermissions;
     await discord.runCommand(client, interaction);
-    assert.equal(lastPanel.embeds.length, 2);
-    assert.ok(lastPanel.embeds[1].title.endsWith("Daftar Preorder"));
+    assert.equal(panelMessages.size, 2);
+    assert.equal(mainPanel.embeds.length, 1);
+    assert.equal(mainPanel.embeds[0].title, "🎫 Create Ticket PreOrder 🎫");
+    assert.ok(mainPanel.embeds[0].description.length < 100);
+    assert.equal(mainPanel.components[0].toJSON().components[0].label, "Create PreOrder");
+    assert.equal(lastPanel.embeds[0].title, "Daftar PreOrder");
     assert.ok(lastPanel.components[0].toJSON().components.some(button => button.custom_id === "po:mine:0"));
     interaction.user.id = buyerId;
     await discord.handleComponent(client, interaction);
@@ -189,7 +207,7 @@ async function main() {
         }]]);
         await discord.handleComponent(client, interaction);
         assert.equal((await service.get(guildId, ticket._id)).depositedQty, 110);
-        assert.match(lastPanel.embeds[1].description, /110\/200/);
+        assert.match(lastPanel.embeds[0].description, /110\/200/);
         assert.equal(JSON.stringify(lastPanel).includes("FILE-SECRET"), false);
     } finally { global.fetch = originalFetch; }
     await Order.insertMany(Array.from({ length: 10 }, (_, i) => ({ guildId, buyerId: "another-buyer", requestId: "page-" + i,
@@ -199,11 +217,25 @@ async function main() {
     interaction.isModalSubmit = () => false;
     interaction.deferUpdate = async () => {};
     await discord.handleComponent(client, interaction);
-    assert.match(lastPanel.embeds[1].footer.text, /Halaman 2/);
+    assert.match(lastPanel.embeds[0].footer.text, /^2\//);
+    assert.equal(panelMessages.size, 2, "updates keep the same two panel and list messages");
     for (const row of lastPanel.components) row.toJSON();
+    await Order.updateOne({ _id: second._id }, { $set: { productName: "Other store product" } });
     const isolatedPanel = await discord.panelPayload(otherGuild);
-    assert.ok(isolatedPanel.embeds[1].description.includes(second.code));
-    assert.equal(isolatedPanel.embeds[1].description.includes(ticket.code), false);
+    assert.ok(isolatedPanel.list.embeds[0].description.includes("Other store product"));
+    assert.equal(isolatedPanel.list.embeds[0].description.includes("Private product"), false);
+    const custom = "<:preorder_test:100000000000000099>";
+    guild.emojis = { cache: new Collection([["100000000000000099", { available: true, roles: { cache: new Collection() }, toString: () => custom }]]) };
+    await mongoose.connection.collection("storefronts").updateOne({ _id: guildId },
+        { $set: { preorderEmojis: { preorderTitleLeft: custom } } }, { upsert: true });
+    const customPanel = await discord.panelPayload(guildId, 0, { guild });
+    assert.equal(customPanel.panel.embeds[0].title, custom + " Create Ticket PreOrder 🎫");
+    const oldSettings = await Settings.findOne({ guildId }).lean();
+    panelMessages.delete(oldSettings.listMessageId);
+    await Settings.updateOne({ guildId }, { $unset: { listMessageId: "" } });
+    await discord.handleComponent(client, interaction);
+    assert.equal(panelMessages.size, 2, "legacy or missing list messages are recreated once");
+    assert.ok((await Settings.findOne({ guildId }).lean()).listMessageId);
     interaction.user.id = buyerId;
     interaction.customId = `po:cancel:${ticket._id}`;
     await assert.rejects(discord.handleComponent(client, interaction), /Hanya admin/);

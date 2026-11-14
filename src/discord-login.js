@@ -14,8 +14,8 @@ const DISCORD_ID = /^\d{17,20}$/;
 const CAN_INSTALL = (1n << 3n) | (1n << 5n); // Administrator atau Manage Server
 const CHANGE_NICKNAME = 1n << 26n;
 // View channels, send messages, embed links, attach files, read history, use
-// external emoji, change nickname, and grant product roles.
-const STORE_PERMISSIONS = 1024n | 2048n | 16384n | 32768n | 65536n | 262144n | CHANGE_NICKNAME | (1n << 28n);
+// external emoji, change nickname, grant product roles, and create preorder tickets.
+const STORE_PERMISSIONS = 16n | 1024n | 2048n | 16384n | 32768n | 65536n | 262144n | CHANGE_NICKNAME | (1n << 28n);
 
 module.exports = function registerDiscordLogin(app, { buyer, valid, save, licenses }) {
     const clientId = process.env.DISCORD_LOGIN_CLIENT_ID;

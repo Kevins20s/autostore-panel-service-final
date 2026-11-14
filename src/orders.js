@@ -36,13 +36,53 @@ const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(Strin
 const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 const rp = (n) => "Rp" + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
-function createOrders({ store, issueLicense, encrypt, decrypt, notify = async () => {}, now = Date.now, ttlMin = 30, publicUrl = "",
+function createOrders({ store, issueLicense, encrypt, decrypt, notify = async () => {}, testimonial = null, now = Date.now, ttlMin = 30, publicUrl = "",
                        autoko = null, autoOrders = false, getLicense = () => null, extendLicense = () => { throw new OrderError("Perpanjangan belum didukung.", 501); } }) {
     const ttl = ttlMin * 60e3;
     const all = () => (store.data.orders ||= []);
     const isActive = (o) => o.status === "pending" || o.status === "claimed";
     const rate = [];
     const ipRate = new Map(); // ipKey -> [waktu]
+    let publishingTestimonials;
+
+    function publishTestimonials() {
+        if (!testimonial?.enabled) return Promise.resolve();
+        if (publishingTestimonials) return publishingTestimonials;
+        publishingTestimonials = sendPendingTestimonials()
+            .catch(() => console.error("[ORDERS] Antrean testimoni belum bisa diproses."))
+            .finally(() => { publishingTestimonials = null; });
+        return publishingTestimonials;
+    }
+
+    async function sendPendingTestimonials() {
+        const pending = all().filter(o => o.status === "done" && o.testimonialPending && !(o.testimonialRetryAt > now())).slice(0, 20);
+        for (const o of pending) {
+            try {
+                if (!o.testimonialMessageId) {
+                    const retry = o.testimonialAttemptedAt !== undefined;
+                    o.testimonialAttemptedAt = now();
+                    store.save();
+                    o.testimonialMessageId = await testimonial.send({
+                        id: o.id, code: o.code, packageName: PACKAGES[o.type]?.name || o.type,
+                        days: o.days, lifetime: o.lifetime, amount: o.amount, confirmedAt: o.confirmedAt,
+                        paymentMethod: o.paymentMethod, amountWL: o.amountWL,
+                        buyer: o.name === o.code ? "Pembeli web" : o.name,
+                        discordId: o.renewLicenseId ? getLicense(o.renewLicenseId)?.discordLoginId : undefined,
+                        retry,
+                    });
+                }
+                delete o.testimonialPending;
+                delete o.testimonialRetryAt;
+                delete o.testimonialAttemptedAt;
+                store.save();
+            } catch {
+                o.testimonialPending = true;
+                o.testimonialRetryAt = now() + 60000;
+                try { store.save(); } catch { /* Retry after the store becomes writable again. */ }
+                console.error("[ORDERS] Testimoni belum terkirim untuk", o.code);
+            }
+        }
+    }
 
     function sweep() {
         const t = now(); let changed = false;
@@ -211,12 +251,16 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
             // Perpanjangan: tambah masa aktif key lama, tidak ada key baru.
             const until = extendLicense(o.renewLicenseId, o.days);
             o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.renewedUntil = until; delete o.qrString; delete o.qrImageUrl;
+            if (testimonial?.enabled) o.testimonialPending = true;
             store.save();
+            void publishTestimonials();
             return { order: adminView(o), key: null, renewed: true, expiresAt: until, already: false };
         }
         const key = issueLicense(o.name, o.licType || o.type, o.days, { save: false, lifetime: o.lifetime });
         o.status = "done"; o.confirmedAt = t; o.endedAt = t; o.keyEnc = encrypt({ key }); o.keyUntil = t + KEY_VISIBLE_MS; delete o.qrString; delete o.qrImageUrl;
+        if (testimonial?.enabled) o.testimonialPending = true;
         store.save(); // satu kali simpan: key dan pesanan berubah bersamaan
+        void publishTestimonials();
         return { order: adminView(o), key, already: false };
     }
 
@@ -314,7 +358,7 @@ function createOrders({ store, issueLicense, encrypt, decrypt, notify = async ()
         return handlePaid({ orderId: o.autoRef });
     }
 
-    return { create, get, claim, adminList, confirm, reject, removeRejected, PACKAGES, sweep, packages, setPackage, createRenewal, renewPackages, upgradeToAuto, handlePaid, ownsRef, sweepAuto, autoEnabled, isMock, mockPay };
+    return { create, get, claim, adminList, confirm, reject, removeRejected, PACKAGES, sweep, packages, setPackage, createRenewal, renewPackages, upgradeToAuto, handlePaid, ownsRef, sweepAuto, autoEnabled, isMock, mockPay, publishTestimonials };
 }
 
 module.exports = { createOrders, OrderError, PACKAGES, rp };

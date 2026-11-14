@@ -253,9 +253,10 @@ function extendLicense(id, days) {
     reconcile(l);
     return l.expiresAt;
 }
+const orderTestimonial = require("./src/order-testimonial").createOrderTestimonial();
 const orders = createOrders({
     store, issueLicense, encrypt, decrypt, notify: notifier, ttlMin: ORDER_TTL_MIN, publicUrl: process.env.PUBLIC_URL || "",
-    autoko, autoOrders: process.env.ORDER_AUTO === "1", getLicense: findLicense, extendLicense,
+    autoko, autoOrders: process.env.ORDER_AUTO === "1", getLicense: findLicense, extendLicense, testimonial: orderTestimonial,
 });
 registerOrderRoutes(app, { admin, buyer, orders, ttlMin: ORDER_TTL_MIN, turnstile });
 registerWalletRoutes(app, { wallet, autoko, productQris, buyer, admin, licenses, findLicense, valid, store });
@@ -555,6 +556,10 @@ if (wallet) {
     setInterval(() => wallet.sweep().catch((e) => console.error("[WALLET] sweep:", e.message)), numEnv("WALLET_SWEEP_MS", 60000)).unref();
 }
 if (orders.autoEnabled()) setInterval(() => orders.sweepAuto().catch((e) => console.error("[ORDERS] sweep:", e.message)), numEnv("ORDER_SWEEP_MS", 60000)).unref();
+if (orderTestimonial.enabled) {
+    setTimeout(() => orders.publishTestimonials(), 5000).unref();
+    setInterval(() => orders.publishTestimonials(), 60000).unref();
+}
 if (wallet) {
     // Cek harian: saldo di dokumen wallet harus sama dengan hitungan ulang dari ledger. Kalau beda (dua kali cek), kabari lewat notifikasi.
     const checkConsistency = async () => {

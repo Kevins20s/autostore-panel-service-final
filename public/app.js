@@ -792,7 +792,8 @@ async function settings() {
             field(gsT("Harga 1 WL dalam Rupiah (kurs manual)"), rate), h("div", { class: "row mt" }, h("button", { class: "pri", onclick: guard(async () => { await api("PUT", "/api/shop/settings/wlrate", { pricePerWL: rate.value }); toast(gsT("Kurs tersimpan.")); }) }, gsT("Simpan kurs")))),
         me.hostedBot?.enabled ? card(h("h2", {}, gsLanguage === "en" ? "Donation webhook" : "Webhook donasi"),
             field(gsLanguage === "en" ? "Donation webhook ID" : "ID webhook donasi", webhook,
-                gsLanguage === "en" ? "Use /setchannel in Discord to select the donation log channel." : "Pilih channel Donation Log melalui /setchannel di Discord."),
+                gsLanguage === "en" ? "Linked automatically when generating a Deposit Script. For manual setup, use the ID after /webhooks/ in your webhook URL. Select the log channel with /setchannel."
+                    : "Terhubung otomatis saat membuat Script Deposit. Untuk pengaturan manual, ambil ID setelah /webhooks/ pada URL webhook. Pilih channel log melalui /setchannel."),
             h("button", { class: "pri", onclick: guard(async () => {
                 await api("PUT", "/api/shop/settings/donation-webhook", { webhookId: webhook.value });
                 toast(gsT("Tersimpan."));

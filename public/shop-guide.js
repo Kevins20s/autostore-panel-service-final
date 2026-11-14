@@ -148,6 +148,7 @@ async function depositScript() {
     const response = await fetch("/api/deposit-template", { cache: "no-store" });
     if (!response.ok) throw new Error(guideText("Script deposit tersedia untuk lisensi AutoStore aktif.", "The deposit script requires an active AutoStore license."));
     const template = await response.text();
+    const hosted = typeof me !== "undefined" && !!me?.hostedBot?.enabled;
     const fields = [
         ["WorldDonation", "World deposit", "DEPOSITWORLD", "text", "[A-Za-z0-9]{1,24}"],
         ["WebhookDonation", "Webhook donasi", "https://discord.com/api/webhooks/…", "password"],
@@ -173,11 +174,12 @@ async function depositScript() {
         (required ? form : extras).append(field(guideText(label, labels[index]), input));
     }
     form.append(extras);
-    form.append(h("div", { class: "row gap mt" }, h("button", { type: "submit" }, guideText("Buat script", "Generate script")), copy), message);
-    form.addEventListener("submit", event => {
+    const generate = h("button", { type: "submit" }, guideText("Buat script", "Generate script"));
+    form.append(h("div", { class: "row gap mt" }, generate, copy), message);
+    form.addEventListener("submit", async event => {
         event.preventDefault();
         const values = Object.fromEntries(Array.from(new FormData(form), ([key, value]) => [key, value.trim()]));
-        const hook = /^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/;
+        const hook = /^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\/\d{17,20}\/[A-Za-z0-9_-]+$/;
         const imageUrl = /^https:\/\/[^"\\\s]+$/i;
         if (!/^[A-Za-z0-9]{1,24}$/.test(values.WorldDonation) ||
             !hook.test(values.WebhookDonation) ||
@@ -187,11 +189,27 @@ async function depositScript() {
             message.textContent = guideText("Periksa nama world, URL webhook Discord, nama webhook, dan URL gambar HTTPS.", "Check the world name, Discord webhook URLs, webhook name, and HTTPS image URLs.");
             return;
         }
-        values.WorldDonation = values.WorldDonation.toUpperCase();
-        values.UsernameWebhook ||= "AutoStore Deposit";
-        preview.value = luaDepositScript(template, values);
-        copy.disabled = false;
-        message.textContent = guideText("Script siap disalin.", "Your script is ready to copy.");
+        const inputs = Array.from(form.querySelectorAll("input"));
+        inputs.forEach(input => { input.disabled = true; });
+        generate.disabled = copy.disabled = true;
+        message.textContent = guideText("Menyiapkan script…", "Preparing script…");
+        try {
+            if (hosted) {
+                const webhookId = new URL(values.WebhookDonation).pathname.split("/")[3];
+                await api("PUT", "/api/shop/settings/donation-webhook", { webhookId });
+            }
+            values.WorldDonation = values.WorldDonation.toUpperCase();
+            values.UsernameWebhook ||= "AutoStore Deposit";
+            preview.value = luaDepositScript(template, values);
+            copy.disabled = false;
+            message.textContent = hosted ? guideText("Webhook donasi terhubung. Script siap disalin.", "Donation webhook linked. Your script is ready to copy.")
+                : guideText("Script siap disalin.", "Your script is ready to copy.");
+        } catch (error) {
+            message.textContent = error.message;
+        } finally {
+            generate.disabled = false;
+            inputs.forEach(input => { input.disabled = false; });
+        }
     });
     return h("div", { class: "guide-page" },
         head(guideText("Script Deposit", "Deposit Script"), guideText("Isi konfigurasi, buat script Lua, lalu salin ke runtime bot depositmu.", "Fill in the configuration, generate the Lua script, then copy it to your deposit bot runtime.")),
@@ -199,7 +217,9 @@ async function depositScript() {
             card(h("h2", {}, guideText("Konfigurasi", "Configuration")),
                 h("p", { class: "mut" }, guideText("Cukup isi nama world dan URL webhook donasi. Webhook status, startup, dan gambar bisa ditambahkan bila diperlukan.",
                     "Enter the world name and donation webhook URL. Status and startup webhooks and images are optional.")),
-                h("p", { class: "mut" }, guideText("Webhook diproses di browser dan tidak disimpan panel. Jaga kerahasiaan script hasil salinan.", "Webhook values are processed in your browser. Keep the generated script private.")),
-                h("p", { class: "mut" }, guideText("Atur channel donasi lewat /setchannel. Di Bot GevraStore, simpan ID angka webhook donasi di Pengaturan toko pada panel.", "Set the donation channel via /setchannel. For hosted GevraStore, save the donation webhook's numeric ID in the panel Store settings.")), form),
+                h("p", { class: "mut" }, hosted
+                    ? guideText("ID webhook donasi otomatis dihubungkan saat membuat script. URL dan token webhook tetap diproses di browser. Jaga kerahasiaan script hasil salinan.", "The donation webhook ID is linked when generating your script. Its URL and token stay in your browser. Keep the generated script private.")
+                    : guideText("Webhook diproses di browser dan tidak disimpan panel. Jaga kerahasiaan script hasil salinan.", "Webhook values are processed in your browser. Keep the generated script private.")),
+                h("p", { class: "mut" }, guideText("Pilih channel Donation Log melalui /setchannel dan gunakan webhook dari channel yang sama.", "Choose the Donation Log channel via /setchannel and use a webhook from that same channel.")), form),
             card(h("h2", {}, guideText("Pratinjau Lua", "Lua preview")), preview)));
 }

@@ -3,6 +3,7 @@ const {
     Client,
     CommandInteraction,
     ApplicationCommandOptionType,
+    PermissionFlagsBits,
 } = require("discord.js");
 let RealtimeChannel = require("../../Schema/RealtimeChannel.js");
 let { Owner } = require("../../config/config.json");
@@ -35,17 +36,27 @@ module.exports = {
         const kategoriInput = interaction.options.getString("kategori");
         const kategori = kategoriInput ? kategoriInput.trim() : "ALL";
 
-        const ChanelID = interaction.guild.channels.cache.get(`${data1.id}`);
-
-        if (!ChanelID.viewable) {
-            return interaction.reply({
-                content: "The provided channel is not visible to me",
-                ephemeral: true
-            })
+        await interaction.deferReply({ ephemeral: true });
+        if (!data1 || data1.guildId !== interaction.guildId || !data1.isTextBased() || typeof data1.send !== "function") {
+            return interaction.editReply({ content: "Pilih channel teks di server ini untuk katalog toko." });
+        }
+        const member = interaction.guild.members.me || await interaction.guild.members.fetchMe();
+        const permissions = data1.permissionsFor(member);
+        const required = [
+            [PermissionFlagsBits.ViewChannel, "Lihat Channel (View Channel)"],
+            [data1.isThread() ? PermissionFlagsBits.SendMessagesInThreads : PermissionFlagsBits.SendMessages, "Kirim Pesan (Send Messages)"],
+            [PermissionFlagsBits.EmbedLinks, "Sematkan Tautan (Embed Links)"],
+            [PermissionFlagsBits.ReadMessageHistory, "Baca Riwayat Pesan (Read Message History)"],
+        ];
+        const missing = required.filter(([flag]) => !permissions?.has(flag)).map(([, label]) => label);
+        if (missing.length) {
+            return interaction.editReply({ content: `Bot belum punya izin di ${data1}: **${missing.join(", ")}**.\n` +
+                "Buka Edit Channel → Permissions → pilih role bot → izinkan akses tersebut, lalu ulangi /setrealtime." });
         }
 
-        if (ChanelID) {
-            const guya = await data1.send({
+        let message;
+        try {
+            message = await data1.send({
                 content: kategori === "ALL"
                     ? `Prepare Auto Store Gevra`
                     : `Prepare Auto Store Gevra — Kategori: **${kategori}**`
@@ -53,17 +64,16 @@ module.exports = {
 
             await RealtimeChannel.findOneAndUpdate(
                 { kategori },
-                { $set: { channelId: data1.id, messageId: guya.id }, $unset: { intervalSeconds: "" } },
+                { $set: { channelId: data1.id, messageId: message.id }, $unset: { intervalSeconds: "" } },
                 { upsert: true, new: true }
-            )
-                .then(async (res) => {
-                    console.log(res);
-                    await interaction.reply({
-                        content: `Successfully Set Your Realtime To ${data1} (Kategori: **${kategori}**), MessageID: ${guya.id}`,
-                        ephemeral: true
-                    });
-                })
-                .catch(console.error);
+            );
+        } catch (error) {
+            if (message) await message.delete().catch(() => {});
+            if (error.code === 50013 || error.code === 50001) {
+                return interaction.editReply({ content: `Discord menolak akses bot ke ${data1}. Periksa izin role bot dan izin khusus channel, lalu ulangi /setrealtime.` });
+            }
+            throw error;
         }
+        await interaction.editReply({ content: `Successfully Set Your Realtime To ${data1} (Kategori: **${kategori}**), MessageID: ${message.id}` });
     }
 }

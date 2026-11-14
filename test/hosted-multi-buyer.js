@@ -98,6 +98,9 @@ async function testRouting() {
         assert.equal(invite.searchParams.get("guild_id"), guildB);
         assert.equal(invite.searchParams.get("disable_guild_select"), "true");
         assert.equal(BigInt(invite.searchParams.get("permissions")) & (1n << 26n), 1n << 26n);
+        const storePermissions = 1024n | 2048n | 16384n | 32768n | 65536n | 262144n | (1n << 28n);
+        assert.equal(BigInt(invite.searchParams.get("permissions")) & storePermissions, storePermissions);
+        assert.equal(BigInt(invite.searchParams.get("permissions")) & 8n, 0n, "store installation does not request Administrator by default");
         assert.equal((await bind(b, guildB)).statusCode, 409);
         installed.add(guildB);
         assert.equal((await list(b)).value.servers.find(server => server.id === guildB).installed, true);

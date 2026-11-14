@@ -13,6 +13,9 @@ const INSTALL = "gs_discord_install";
 const DISCORD_ID = /^\d{17,20}$/;
 const CAN_INSTALL = (1n << 3n) | (1n << 5n); // Administrator atau Manage Server
 const CHANGE_NICKNAME = 1n << 26n;
+// View channels, send messages, embed links, attach files, read history, use
+// external emoji, change nickname, and grant product roles.
+const STORE_PERMISSIONS = 1024n | 2048n | 16384n | 32768n | 65536n | 262144n | CHANGE_NICKNAME | (1n << 28n);
 
 module.exports = function registerDiscordLogin(app, { buyer, valid, save, licenses }) {
     const clientId = process.env.DISCORD_LOGIN_CLIENT_ID;
@@ -115,7 +118,7 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
             const servers = guilds.map(({ id, name }) => {
                 const params = new URLSearchParams({
                     client_id: botId, scope: "bot applications.commands",
-                    permissions: (BigInt(botPermissions) | CHANGE_NICKNAME).toString(),
+                    permissions: (BigInt(botPermissions) | STORE_PERMISSIONS).toString(),
                     integration_type: "0", guild_id: id, disable_guild_select: "true",
                 });
                 return { id, name, invite: "https://discord.com/oauth2/authorize?" + params, installed: installedIds.has(id) };

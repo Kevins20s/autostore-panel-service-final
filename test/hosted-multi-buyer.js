@@ -160,6 +160,43 @@ async function testRouting() {
     console.log("OK: race for one server rejects a claimant; same user can use two isolated QRIS routes and DM buttons");
 }
 
+async function testPublicRouting() {
+    Object.assign(env, { DISCORD_HOSTED_PUBLIC_ENABLED: "1", DISCORD_HOSTED_TEST_LICENSE_IDS: "", DISCORD_HOSTED_TEST_MANAGED_GUILDS: "0" });
+    Object.assign(process.env, env);
+    const { app, invoke } = captureRoutes();
+    require("../src/discord-login")(app, { buyer() {}, valid, save() {}, licenses });
+    const originalFetch = global.fetch;
+    let permission = "32";
+    global.fetch = async url => {
+        if (String(url).includes("/users/@me/guilds")) {
+            return { ok: true, json: async () => [
+                { id: guildA, name: "Other shop", permissions: permission },
+                { id: guildB, name: "Buyer shop", permissions: permission },
+            ] };
+        }
+        return { ok: true };
+    };
+    const authenticated = body => ({ lic: b, body, headers: { cookie: "gs_discord_install=" + encodeURIComponent(encrypt({
+        id: owner, accessToken: "synthetic", licenseId: b.id, exp: Date.now() + 10000,
+    })) } });
+    try {
+        const listing = await invoke("get", "/api/discord-install/servers", authenticated());
+        assert.equal(listing.statusCode, 200);
+        assert.equal(listing.value.canActivate, true);
+        assert.deepEqual(listing.value.servers.map(server => server.id), [guildB]);
+        assert.equal((await invoke("put", "/api/discord-install/setup", authenticated({ guildId: guildB, enabled: true }))).statusCode, 200);
+        assert.equal((await invoke("put", "/api/discord-install/setup", authenticated({ guildId: guildA, enabled: true }))).statusCode, 409);
+        permission = "0";
+        assert.equal((await invoke("get", "/api/discord-install/servers", authenticated())).value.emptyReason, "missing_permission");
+        assert.equal((await invoke("put", "/api/discord-install/setup", authenticated({ guildId: guildB, enabled: true }))).statusCode, 403);
+        permission = "32";
+        for (const lic of [{ ...b, revoked: true }, { ...b, expiresAt: Date.now() - 1 }, { ...b, type: "service" }]) {
+            assert.equal((await invoke("get", "/api/discord-install/servers", { ...authenticated(), lic })).statusCode, 403);
+        }
+        console.log("OK: buyer outside the test list can install and activate; server permissions and reservations are enforced");
+    } finally { global.fetch = originalFetch; }
+}
+
 function testWorkerLifecycle() {
     const queue = [], workers = new Map(), cleared = [];
     let time = Date.now();
@@ -205,4 +242,4 @@ function testWorkerLifecycle() {
     console.log("OK: two workers online together; stopping A leaves B online and preserves its command registration");
 }
 
-testRouting().then(testWorkerLifecycle).catch(error => { console.error(error); process.exitCode = 1; });
+testRouting().then(testPublicRouting).then(testWorkerLifecycle).catch(error => { console.error(error); process.exitCode = 1; });

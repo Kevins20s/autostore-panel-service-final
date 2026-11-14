@@ -2,9 +2,7 @@
 
 const { createHash } = require('node:crypto');
 
-// Foundation for shared-bot routing. This module is deliberately not wired into
-// production startup until command/event handlers have been converted to use a
-// tenant-scoped database and config context.
+// Shared-bot access and database routing used by the panel and hosted workers.
 const DISCORD_ID = /^\d{17,20}$/;
 const PRODUCTS = new Set(['autostore', 'service']);
 const hostedDbName = (product, licenseId) =>
@@ -73,13 +71,16 @@ const csv = value => (value || "").split(",").map(item => item.trim()).filter(Bo
 function eligibleHostedLicense(license, env = process.env) {
     return !!(license?.id && (license.type || "autostore") === "autostore" && !license.revoked &&
         Number(license.expiresAt) > Date.now() && env.DISCORD_CATALOG_PILOT_MONGO_URL &&
-        (license.id === env.DISCORD_HOSTED_PILOT_LICENSE_ID ||
+        (env.DISCORD_HOSTED_PUBLIC_ENABLED === "1" ||
+            license.id === env.DISCORD_HOSTED_PILOT_LICENSE_ID ||
             csv(env.DISCORD_HOSTED_TEST_LICENSE_IDS).includes(license.id)));
 }
 
 function eligibleHostedGuild(guildId, license, env = process.env) {
     if (!DISCORD_ID.test(guildId)) return false;
     if (csv(env.DISCORD_HOSTED_PILOT_GUILD_IDS).includes(guildId)) return true;
+    if (env.DISCORD_HOSTED_PUBLIC_ENABLED === "1" && eligibleHostedLicense(license, env) &&
+        license.id !== env.DISCORD_HOSTED_PILOT_LICENSE_ID) return true;
     return env.DISCORD_HOSTED_TEST_MANAGED_GUILDS === "1" &&
         license?.id !== env.DISCORD_HOSTED_PILOT_LICENSE_ID &&
         csv(env.DISCORD_HOSTED_TEST_LICENSE_IDS).includes(license?.id);

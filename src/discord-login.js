@@ -28,7 +28,8 @@ module.exports = function registerDiscordLogin(app, { buyer, valid, save, licens
     const botId = process.env.DISCORD_HOSTED_BOT_CLIENT_ID || "";
     const botPermissions = process.env.DISCORD_HOSTED_BOT_PERMISSIONS || "0";
     const installEnabled = enabled && DISCORD_ID.test(botId) && /^\d+$/.test(botPermissions);
-    const hostingConfigured = !!(process.env.DISCORD_HOSTED_PILOT_LICENSE_ID || process.env.DISCORD_HOSTED_TEST_LICENSE_IDS);
+    const hostingConfigured = process.env.DISCORD_HOSTED_PUBLIC_ENABLED === "1" ||
+        !!(process.env.DISCORD_HOSTED_PILOT_LICENSE_ID || process.env.DISCORD_HOSTED_TEST_LICENSE_IDS);
     const eligible = license => installEnabled && license.type !== "service" && valid(license) &&
         (!hostingConfigured || eligibleHostedLicense(license));
     const options = { httpOnly: true, sameSite: "lax", secure: !!redirectUri?.startsWith("https:"), path: "/api" };

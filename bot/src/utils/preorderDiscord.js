@@ -9,7 +9,7 @@ const { collection: storefrontCollection, resolvePreorderEmojis } = require("../
 const orders = createPreorders();
 const refreshes = new Map();
 const privateReply = { ephemeral: true };
-const buttonIcons = { create: "🛒", mine: "📋", panel: "🔄", collect: "📦", download: "📥", refresh: "🔄",
+const buttonIcons = { create: "🛒", mine: "📋", manage: "⚙️", panel: "🔄", collect: "📦", refresh: "🔄",
     deposit: "📝", upload: "📤", paid: "💳", handle: "🙌", close: "🔒", cancel: "⛔", remaining: "🗂️", open: "🎫" };
 const button = (id, label, style = ButtonStyle.Secondary) => {
     const component = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
@@ -41,14 +41,15 @@ function summary(order) {
     const filled = Math.floor(order.depositedQty / order.quantity * 10);
     const status = displayStatus(order);
     const cancelled = progress(order) === "Dibatalkan";
+    const pendingDelivery = order.claims?.some(claim => !claim.deliveredAt);
     const components = [
-        row(button(`po:collect:${order._id}`, "Ambil stok", ButtonStyle.Success).setDisabled(order.status !== "open" || !order.paidAt || order.depositedQty <= order.collectedQty),
-            button(`po:download:${order._id}`, "Unduh pesanan").setDisabled(!order.collectedQty), button(`po:refresh:${order._id}`, "Cek status")),
+        row(button(`po:collect:${order._id}`, "Ambil pesanan", ButtonStyle.Success).setDisabled(!pendingDelivery && (order.status !== "open" || !order.paidAt || order.depositedQty <= order.collectedQty)),
+            button(`po:refresh:${order._id}`, "Cek status")),
         row(button(`po:deposit:${order._id}`, "Setor teks").setDisabled(order.status !== "open" || order.depositedQty === order.quantity),
             button(`po:upload:${order._id}`, "Upload .txt").setDisabled(order.status !== "open" || order.depositedQty === order.quantity),
             button(`po:paid:${order._id}`, "Tandai lunas", ButtonStyle.Success).setDisabled(!!order.paidAt || order.status !== "open")),
         row(button(`po:handle:${order._id}`, order.handledBy ? "Sudah ditangani" : "Claim tiket", ButtonStyle.Primary).setDisabled(!!order.handledBy || order.status !== "open"),
-            button(`po:close:${order._id}`, "Tutup tiket").setDisabled(order.status !== "open"),
+            button(`po:close:${order._id}`, "Tutup tiket").setDisabled(!!order.ticketDeletedAt || !!order.ticketClosing),
             button(`po:cancel:${order._id}`, "Batalkan paksa", ButtonStyle.Danger).setDisabled(order.status !== "open" || order.collectedQty === order.quantity)),
     ];
     if (order.status === "cancelled" && order.depositedQty > order.collectedQty) {
@@ -70,12 +71,12 @@ function summary(order) {
     return { content: `<@${order.buyerId}> · <@${Owner}>`, embeds: [{
         title: cancelled ? "⛔ Preorder Dibatalkan" : order.status === "closed" ? "🔒 Preorder Selesai" : "🎫 Tiket Preorder",
         color: status.color,
-        description: (order.status !== "open" ? "Riwayat dan file pengambilanmu tetap tersimpan.\n\n"
+        description: (order.status !== "open" ? "Riwayat preorder tetap tersimpan.\n\n"
             : `Halo <@${order.buyerId}>! Selamat datang di tiket privatmu. Admin akan membantu pembayaran dan menyiapkan pesanan.\n\n`) +
             `📦 **${escapeMarkdown(order.productName)}**\n${status.text}\n\n` +
             `${"▰".repeat(filled)}${"▱".repeat(10 - filled)} **${Math.round(order.depositedQty / order.quantity * 100)}%**\n` +
             `\`${order.depositedQty}/${order.quantity} stok disetor\``,
-        fields, footer: { text: "GevraStore • Stok bertahap • Pengambilan dapat diunduh ulang" },
+        fields, footer: { text: "GevraStore • Stok bertahap • Pembayaran manual" },
     }], components, allowedMentions: { parse: [] } };
 }
 
@@ -84,7 +85,7 @@ async function refresh(client, guildId, id) {
     const previous = refreshes.get(key) || Promise.resolve();
     const current = previous.catch(() => {}).then(async () => {
         const order = await orders.get(guildId, id);
-        if (!order.channelId) return;
+        if (!order.channelId || order.ticketClosing || order.ticketDeletedAt) return;
         const channel = await client.channels.fetch(order.channelId);
         if (channel?.guildId !== guildId) throw new PreorderError("Channel tiket tidak ditemukan di server ini.");
         let message = order.messageId ? await channel.messages.fetch(order.messageId).catch(() => null) : null;
@@ -167,15 +168,35 @@ function requireStaff(interaction, settings) {
     if (!isStaff(interaction, settings)) throw new PreorderError("Hanya admin preorder yang boleh melakukan tindakan ini.");
 }
 
-async function deliver(interaction, order, lines, requestId) {
+async function deliver(client, interaction, order, lines, requestId) {
     const file = { attachment: Buffer.from(lines.join("\n"), "utf8"), name: `${order.code}-${requestId}.txt` };
+    let sentByDm = false;
     try {
         await interaction.user.send({ content: `Pengambilan ${order.code} · ${escapeMarkdown(order.productName)} · ${lines.length} stok.`,
             files: [file], allowedMentions: { parse: [] }, nonce: "po-" + requestId, enforceNonce: true });
-        await interaction.editReply({ content: `📥 **${lines.length} stok** sudah dikirim ke DM. Kamu bisa mengunduhnya ulang melalui tombol Unduh pesanan.` });
-    } catch {
-        await interaction.editReply({ content: `📥 DM belum bisa dikirim. Unduh **${lines.length} stok** di sini. Tombol Unduh pesanan tetap tersedia jika perlu mengambil file lagi.`, files: [file] });
+        sentByDm = true;
+    } catch { /* Deliver privately in the interaction when the buyer has closed DMs. */ }
+    if (!sentByDm) await interaction.editReply({ content: `📦 DM belum bisa dikirim. File **${lines.length} stok pesananmu** tersedia di sini.`, files: [file] });
+    await Order.updateOne({ _id: order._id, guildId: order.guildId, buyerId: interaction.user.id, "claims.requestId": requestId },
+        { $set: { "claims.$.deliveredAt": new Date(), summaryDirty: true }, $inc: { revision: 1 } });
+    if (sentByDm) await interaction.editReply({ content: `📦 **${lines.length} stok pesananmu** sudah dikirim ke DM.` });
+    await refreshQuietly(client, order);
+}
+
+async function deleteTicket(client, order) {
+    if (order.ticketDeletedAt) return;
+    const channel = order.channelId ? await client.channels.fetch(order.channelId).catch(error => {
+        if (error.code === 10003) return null;
+        throw error;
+    }) : null;
+    if (channel) {
+        if (channel.guildId !== order.guildId || channel.topic !== ticketTopic(order)) throw new PreorderError("Identitas channel tidak cocok dengan tiket preorder ini.");
+        await channel.delete("Tiket preorder " + order.code + " ditutup oleh admin").catch(error => {
+            if (error.code !== 10003) throw error;
+        });
     }
+    await Order.updateOne({ _id: order._id, guildId: order.guildId, ticketClosing: true },
+        { $set: { ticketClosing: false, ticketDeletedAt: new Date(), summaryDirty: false } });
 }
 
 async function readStockFile(attachment) {
@@ -204,7 +225,7 @@ async function panelPayload(guildId, requestedPage = 0, context = {}) {
         const product = escapeMarkdown(order.productName.replace(/\s+/g, " "));
         return `**${page * 8 + index + 1}.** <@${order.buyerId}> · **${product}** · \`${order.depositedQty}/${order.quantity}\` ${icon}${cancelled ? " · Dibatalkan" : ""}`;
     }).join("\n");
-    const navigation = [row(button("po:mine:0", "Pesanan saya"), button(`po:panel:${page}`, "Perbarui daftar"))];
+    const navigation = [row(button("po:mine:0", "Pesanan saya"), button("po:manage:0", "Kelola (admin)"), button(`po:panel:${page}`, "Perbarui daftar"))];
     if (pages > 1) navigation.push(row(button(`po:panel:${page - 1}`, "Sebelumnya").setEmoji("◀️").setDisabled(page === 0),
         button(`po:panel:${page + 1}`, "Selanjutnya").setEmoji("▶️").setDisabled(page === pages - 1)));
     return {
@@ -246,8 +267,8 @@ async function refreshPanel(client, guildId) {
     finally { if (refreshes.get(key) === current) refreshes.delete(key); }
 }
 
-async function showMyOrders(interaction, requestedPage) {
-    const scope = { guildId: interaction.guildId, buyerId: interaction.user.id };
+async function showMyOrders(interaction, requestedPage, manage = false) {
+    const scope = { guildId: interaction.guildId, ...(manage ? {} : { buyerId: interaction.user.id }) };
     const total = await Order.countDocuments(scope);
     const pages = Math.max(1, Math.ceil(total / 5));
     const page = Math.max(0, Math.min(pages - 1, Number(requestedPage) || 0));
@@ -258,7 +279,7 @@ async function showMyOrders(interaction, requestedPage) {
     const components = list.length ? [row(...list.map(order => button(`po:open:${order._id}`, order.code)))] : [];
     if (pages > 1) components.push(row(button(`po:mine:${page - 1}`, "Sebelumnya").setEmoji("◀️").setDisabled(page === 0),
         button(`po:mine:${page + 1}`, "Selanjutnya").setEmoji("▶️").setDisabled(page === pages - 1)));
-    await interaction.editReply({ embeds: [{ title: "📋 Preorder Kamu", color: 0x65efd0,
+    await interaction.editReply({ embeds: [{ title: manage ? "⚙️ Kelola Preorder" : "📋 Preorder Kamu", color: 0x65efd0,
         description: description || "Kamu belum mempunyai preorder.", footer: { text: `Halaman ${page + 1}/${pages} · Tekan kode pesanan untuk membuka tiket dan status` } }],
         components, allowedMentions: { parse: [] } });
 }
@@ -311,9 +332,10 @@ async function handleComponent(client, interaction) {
         await Settings.updateOne({ guildId: interaction.guildId }, { $set: { panelPage: Number(id) || 0, panelDirty: true }, $inc: { panelRevision: 1 } });
         return refreshPanel(client, interaction.guildId);
     }
-    if (action === "mine" && interaction.isButton()) {
+    if (["mine", "manage"].includes(action) && interaction.isButton()) {
+        if (action === "manage") requireStaff(interaction, settings);
         await interaction.deferReply(privateReply);
-        return showMyOrders(interaction, id);
+        return showMyOrders(interaction, id, action === "manage");
     }
     if (action === "create" && interaction.isButton()) {
         if (!settings) throw new PreorderError("Admin belum mengatur preorder. Jalankan /setpreorder.");
@@ -346,13 +368,18 @@ async function handleComponent(client, interaction) {
             { id: "reason", label: "Alasan pembatalan", long: true, max: 300, placeholder: "Jelaskan alasan agar pembeli mengetahui penyelesaiannya." },
         ]));
         if (action === "paid" || action === "close") return interaction.showModal(modal(`po:${action}confirm:${id}`,
-            action === "paid" ? "Konfirmasi Pembayaran Manual" : "Tutup Tiket Preorder", [
-                { id: "confirm", label: action === "paid" ? "Ketik LUNAS jika pembayaran sudah diterima" : "Ketik TUTUP untuk menutup preorder", max: 10 },
+            action === "paid" ? "Konfirmasi Pembayaran Manual" : "Tutup dan Hapus Channel Tiket", [
+                { id: "confirm", label: action === "paid" ? "Ketik LUNAS jika pembayaran sudah diterima" : "Ketik TUTUP untuk menghapus channel tiket", max: 10 },
             ]));
         if (action === "collect") {
             if (!buyer) throw new PreorderError("Hanya pembeli pemilik preorder yang bisa mengambil stok.");
-            return interaction.showModal(modal(`po:take:${id}`, "Ambil Stok Preorder", [
-                { id: "amount", label: "Jumlah stok yang ingin diambil", max: 5, placeholder: `Tersedia: ${order.depositedQty - order.collectedQty}` },
+            const pending = order.claims.find(claim => !claim.deliveredAt);
+            if (pending) {
+                await interaction.deferReply(privateReply);
+                return deliver(client, interaction, order, order.items.slice(pending.start, pending.start + pending.quantity), pending.requestId);
+            }
+            return interaction.showModal(modal(`po:take:${id}`, "Ambil Pesanan", [
+                { id: "amount", label: "Jumlah yang ingin diambil", max: 5, placeholder: `Tersedia: ${order.depositedQty - order.collectedQty}` },
             ]));
         }
     }
@@ -367,7 +394,7 @@ async function handleComponent(client, interaction) {
     if (action === "open" && interaction.isButton()) {
         if (!order.channelId && settings && order.status === "open") order = await ensureTicket(client, interaction.guild, order, settings);
         await refreshQuietly(client, order);
-        return interaction.editReply({ ...summary(order), content: order.channelId ? `Buka tiketmu di <#${order.channelId}>.` : "Tiket belum tersedia." });
+        return interaction.editReply({ ...summary(order), content: order.ticketDeletedAt ? "Channel tiket sudah ditutup." : order.channelId ? `Buka tiketmu di <#${order.channelId}>.` : "Tiket belum tersedia." });
     }
     if (action === "cancelconfirm" && interaction.isModalSubmit()) {
         requireStaff(interaction, settings);
@@ -389,15 +416,18 @@ async function handleComponent(client, interaction) {
         if (interaction.fields.getTextInputValue("confirm").trim().toUpperCase() !== expected) throw new PreorderError(`Ketik ${expected} untuk konfirmasi.`);
         order = action === "paidconfirm" ? await orders.markPaid(interaction.guildId, id, interaction.user.id)
             : await orders.close(interaction.guildId, id, interaction.user.id);
+        if (action === "closeconfirm") {
+            if (order.ticketDeletedAt) return interaction.editReply({ content: "Channel tiket ini sudah dihapus." });
+            await Order.updateOne({ _id: order._id, guildId: interaction.guildId }, { $set: { ticketClosing: true }, $inc: { revision: 1 } });
+            await interaction.editReply({ content: "🔒 Tiket ditutup. Channel tiket sedang dihapus." });
+            await deleteTicket(client, order);
+            return refreshQuietly(client, await orders.get(interaction.guildId, id));
+        }
     } else if (action === "take" && interaction.isModalSubmit()) {
         if (!buyer) throw new PreorderError("Hanya pembeli pemilik preorder yang bisa mengambil stok.");
         const result = await orders.collect(interaction.guildId, id, interaction.user.id, interaction.id, interaction.fields.getTextInputValue("amount"));
         await refreshQuietly(client, result.order);
-        return deliver(interaction, result.order, result.lines, interaction.id);
-    } else if (action === "download" && interaction.isButton()) {
-        if (!buyer) throw new PreorderError("Hanya pembeli pemilik preorder yang bisa mengunduh stok.");
-        if (!order.collectedQty) throw new PreorderError("Belum ada pengambilan untuk diunduh.");
-        return deliver(interaction, order, order.items.slice(0, order.collectedQty), interaction.id);
+        return deliver(client, interaction, result.order, result.lines, interaction.id);
     }
     await refreshQuietly(client, order);
     await interaction.editReply({ content: `${order.code} · ${progress(order)} · Disetor ${order.depositedQty}/${order.quantity} · Diambil ${order.collectedQty} · Siap diambil ${order.depositedQty - order.collectedQty}.` });
@@ -407,7 +437,7 @@ async function safeRun(interaction, operation) {
     try { await operation(); }
     catch (error) {
         if (!(error instanceof PreorderError)) console.error("[PREORDER] Operasi gagal:", error.code || error.name);
-        let content = error instanceof PreorderError ? error.message : "Preorder belum bisa diproses. Buka panel → Pesanan saya → pilih pesananmu untuk cek status atau mengunduh pengambilan.";
+        let content = error instanceof PreorderError ? error.message : "Preorder belum bisa diproses. Buka panel → Pesanan saya → pilih pesananmu untuk cek status atau melanjutkan lewat Ambil pesanan.";
         if (error.code === 50013 || error.code === 50001) content = "Discord menolak akses bot. Periksa izin Manage Channels dan Manage Roles pada kategori tiket, serta izin melihat dan mengirim pesan pada channel panel. Pesanan yang sudah tercatat bisa dibuka melalui tombol Pesanan saya.";
         const payload = { content, allowedMentions: { parse: [] } };
         if (interaction.deferred || interaction.replied) await interaction.editReply(payload).catch(() => {});
@@ -416,7 +446,13 @@ async function safeRun(interaction, operation) {
 }
 
 async function repairSummaries(client) {
-    const pending = await Order.find({ summaryDirty: true, channelId: { $ne: null } }).select("_id guildId code").limit(20).lean();
+    const closing = await Order.find({ ticketClosing: true, ticketDeletedAt: null }).limit(20).lean();
+    for (const order of closing) {
+        if (!client.guilds.cache.has(order.guildId)) continue;
+        try { await deleteTicket(client, order); }
+        catch { console.error("[PREORDER] Channel tiket belum bisa dihapus", order.code); }
+    }
+    const pending = await Order.find({ summaryDirty: true, channelId: { $ne: null }, ticketClosing: { $ne: true }, ticketDeletedAt: null }).select("_id guildId code").limit(20).lean();
     for (const order of pending) {
         if (client.guilds.cache.has(order.guildId)) await refreshQuietly(client, order);
     }

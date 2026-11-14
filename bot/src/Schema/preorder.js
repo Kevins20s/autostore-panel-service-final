@@ -7,6 +7,7 @@ const claim = new Schema({
     start: { type: Number, required: true },
     quantity: { type: Number, required: true },
     createdAt: { type: Date, required: true },
+    deliveredAt: Date,
 }, { _id: false });
 
 const schema = new Schema({
@@ -20,6 +21,8 @@ const schema = new Schema({
     channelId: { type: String, default: null },
     messageId: { type: String, default: null },
     ticketLeaseUntil: { type: Date, default: null },
+    ticketClosing: { type: Boolean, default: false },
+    ticketDeletedAt: { type: Date, default: null },
     paidAt: { type: Date, default: null },
     paidBy: String,
     handledBy: { type: String, default: null },

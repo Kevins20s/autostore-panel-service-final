@@ -112,7 +112,7 @@ function createPreorders({ Order = require("../Schema/preorder").Order } = {}) {
             { $expr: { $eq: ["$collectedQty", "$quantity"] } }, { paidAt: null, depositedQty: 0 },
         ] }, { $set: { status: "closed", closedAt: new Date(), closedBy: staffId, updatedAt: new Date(), summaryDirty: true }, $inc: { revision: 1 } }, { new: true }).lean();
         const current = order || await get(guildId, id);
-        if (current.status !== "closed") throw new PreorderError("Preorder masih punya kewajiban atau stok. Selesaikan pengambilan sebelum menutup tiket.");
+        if (!["closed", "cancelled"].includes(current.status)) throw new PreorderError("Preorder masih punya kewajiban atau stok. Selesaikan pesanan, atau pilih Batalkan paksa terlebih dahulu sebelum menutup tiket.");
         return current;
     }
     async function handle(guildId, id, staffId) {

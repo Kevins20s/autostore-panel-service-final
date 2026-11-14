@@ -103,16 +103,26 @@ async function main() {
             return message;
         }, toString: () => "<#panel>" };
     const channels = new Collection();
+    let deletedChannels = 0, channelDeleted = false, failDelete = false;
     const channel = {
         id: "100000000000000008", guildId, messages: { fetch: async () => ({ edit: async () => {} }) },
         send: async () => ({ id: "100000000000000009" }), permissionOverwrites: { edit: async () => {} },
+        delete: async () => {
+            if (failDelete) throw Object.assign(new Error("Missing Permissions"), { code: 50013 });
+            deletedChannels++; channelDeleted = true;
+        },
     };
     const category = { id: settings.categoryId, guildId, name: "Preorder Tickets", type: ChannelType.GuildCategory, permissionsFor: () => ({ has: () => true }) };
-    const client = { user: { id: botId }, channels: { fetch: async id => id === panel.id ? panel : channel } };
+    const client = { user: { id: botId }, channels: { fetch: async id => {
+        if (id === panel.id) return panel;
+        if (channelDeleted) throw Object.assign(new Error("Unknown Channel"), { code: 10003 });
+        return channel;
+    } } };
     const guild = { id: guildId, members: { me: {} }, channels: {
         fetch: async id => id ? category : channels,
         create: async payload => { createdChannels++; creationPayload = payload; channel.topic = payload.topic; channels.set(channel.id, channel); return channel; },
     } };
+    client.guilds = { cache: new Collection([[guildId, guild]]) };
     let reply;
     const interaction = {
         guildId, guild, id: "100000000000000010", customId: "po:new",
@@ -158,7 +168,8 @@ async function main() {
     assert.equal((await service.get(guildId, ticket._id)).collectedQty, 25);
     await discord.handleComponent(client, interaction);
     assert.equal((await service.get(guildId, ticket._id)).collectedQty, 25);
-    interaction.customId = "po:download:" + ticket._id;
+    await Order.updateOne({ _id: ticket._id, "claims.requestId": interaction.id }, { $unset: { "claims.$.deliveredAt": "" } });
+    interaction.customId = "po:collect:" + ticket._id;
     interaction.isButton = () => true;
     interaction.isModalSubmit = () => false;
     await discord.handleComponent(client, interaction);
@@ -277,14 +288,46 @@ async function main() {
     assert.equal(reply.files[0].attachment.toString().split("\n").length, 85);
     assert.equal(reply.files[0].attachment.toString().split("\n")[0], "TICKET-SECRET 25");
     interaction.user.id = buyerId;
-    interaction.customId = `po:download:${ticket._id}`;
+    await Order.updateOne({ _id: ticket._id, "claims.requestId": "100000000000000011" }, { $unset: { "claims.$.deliveredAt": "" } });
+    interaction.customId = `po:collect:${ticket._id}`;
     await discord.handleComponent(client, interaction);
     assert.equal(reply.files[0].attachment.toString().split("\n").length, 25);
-    const cancelledSummary = discord.summary(cancelledTicket);
+    const cancelledSummary = discord.summary(await service.get(guildId, ticket._id));
     assert.ok(cancelledSummary.components[0].toJSON().components[0].disabled);
+    assert.equal(cancelledSummary.components[0].toJSON().components[0].label, "Ambil pesanan");
+    assert.equal(cancelledSummary.components.flatMap(row => row.toJSON().components).some(button => button.label === "Unduh pesanan"), false);
     assert.ok(cancelledSummary.components[0].toJSON().components[0].emoji);
     assert.equal(JSON.stringify(cancelledSummary).includes("TICKET-SECRET"), false);
     for (const row of cancelledSummary.components) row.toJSON();
+    interaction.customId = "po:manage:2";
+    await assert.rejects(discord.handleComponent(client, interaction), /Hanya admin/);
+    interaction.user.id = ownerId;
+    await discord.handleComponent(client, interaction);
+    assert.ok(JSON.stringify(reply).includes(ticket.code));
+    interaction.customId = `po:closeconfirm:${ticket._id}`;
+    interaction.isButton = () => false;
+    interaction.isModalSubmit = () => true;
+    interaction.fields.getTextInputValue = () => "TUTUP";
+    failDelete = true;
+    await assert.rejects(discord.handleComponent(client, interaction), /Missing Permissions/);
+    assert.equal(deletedChannels, 0);
+    assert.equal((await service.get(guildId, ticket._id)).ticketClosing, true);
+    failDelete = false;
+    await discord.repairSummaries(client);
+    const deletedTicket = await service.get(guildId, ticket._id);
+    assert.equal(deletedChannels, 1);
+    assert.ok(deletedTicket.ticketDeletedAt);
+    assert.equal(deletedTicket.ticketClosing, false);
+    assert.equal(deletedTicket.items.length, 110);
+    assert.equal(deletedTicket.collectedQty, 25);
+    interaction.isButton = () => true;
+    interaction.isModalSubmit = () => false;
+    interaction.customId = `po:open:${ticket._id}`;
+    await discord.handleComponent(client, interaction);
+    assert.equal(reply.content, "Channel tiket sudah ditutup.");
+    interaction.customId = `po:remaining:${ticket._id}`;
+    await discord.handleComponent(client, interaction);
+    assert.equal(reply.files[0].attachment.toString().split("\n").length, 85);
     const racing = await make("race-cancel", 50, otherGuild, "race-buyer");
     await service.deposit(otherGuild, racing._id, "race-batch", lines("RACE", 50));
     await service.markPaid(otherGuild, racing._id, ownerId);
@@ -301,6 +344,7 @@ async function main() {
     console.log("OK: private ticket permissions, replay-safe ticket creation, DM fallback and redownload, admin controls, and secret-free summaries");
     console.log("OK: single setup command, live paginated public list, private order recovery, modal file upload, and staff claim");
     console.log("OK: admin-only forced cancellation, explicit confirmation, retained collected files, leftover stock recovery, and concurrent cancellation/collection");
+    console.log("OK: renamed collect control, no download button, recoverable delivery, confirmed channel deletion, delete retry, and admin access to retained orders");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

@@ -22,6 +22,7 @@ const schema = new Schema({
     ticketLeaseUntil: { type: Date, default: null },
     paidAt: { type: Date, default: null },
     paidBy: String,
+    handledBy: { type: String, default: null },
     items: { type: [String], default: [] },
     depositedQty: { type: Number, default: 0 },
     collectedQty: { type: Number, default: 0 },
@@ -45,6 +46,9 @@ const settings = new Schema({
     panelMessageId: String,
     categoryId: String,
     staffRoleId: { type: String, default: null },
+    panelPage: { type: Number, default: 0 },
+    panelDirty: { type: Boolean, default: true },
+    panelRevision: { type: Number, default: 0 },
 });
 
 module.exports = { Order: model("preorder", schema), Settings: model("preordersetting", settings) };

@@ -78,14 +78,23 @@ async function main() {
 
     const discord = require("../bot/src/utils/preorderDiscord");
     const settings = await Settings.create({ guildId, categoryId: "100000000000000006", staffRoleId: "100000000000000007" });
+    const command = require("../bot/src/slashCommands/information/setpreorder");
+    assert.equal(command.name, "setpreorder");
+    assert.deepEqual(command.options.map(option => option.name), ["channel", "kategori"]);
+    assert.equal(require("node:fs").existsSync(require("node:path").join(__dirname, "../bot/src/slashCommands/information/preorder.js")), false);
     let createdChannels = 0, creationPayload;
+    let lastPanel;
+    const panelMessage = { id: "100000000000000030", edit: async value => { lastPanel = value; return panelMessage; } };
+    const panel = { id: "100000000000000031", guildId, type: ChannelType.GuildText,
+        permissionsFor: () => ({ has: () => true }), messages: { fetch: async () => panelMessage },
+        send: async value => { lastPanel = value; return panelMessage; }, toString: () => "<#panel>" };
     const channels = new Collection();
     const channel = {
         id: "100000000000000008", guildId, messages: { fetch: async () => ({ edit: async () => {} }) },
         send: async () => ({ id: "100000000000000009" }), permissionOverwrites: { edit: async () => {} },
     };
-    const category = { id: settings.categoryId, type: ChannelType.GuildCategory, permissionsFor: () => ({ has: () => true }) };
-    const client = { user: { id: botId }, channels: { fetch: async () => channel } };
+    const category = { id: settings.categoryId, guildId, name: "Preorder Tickets", type: ChannelType.GuildCategory, permissionsFor: () => ({ has: () => true }) };
+    const client = { user: { id: botId }, channels: { fetch: async id => id === panel.id ? panel : channel } };
     const guild = { id: guildId, members: { me: {} }, channels: {
         fetch: async id => id ? category : channels,
         create: async payload => { createdChannels++; creationPayload = payload; channel.topic = payload.topic; channels.set(channel.id, channel); return channel; },
@@ -99,6 +108,17 @@ async function main() {
         isButton: () => false, isModalSubmit: () => true,
         deferReply: async () => {}, editReply: async value => { reply = value; },
     };
+    interaction.user.id = ownerId;
+    interaction.options = { getChannel: name => name === "channel" ? panel : category };
+    const fullPanelPermissions = panel.permissionsFor;
+    panel.permissionsFor = () => ({ has: flag => flag !== P.SendMessages });
+    await assert.rejects(discord.runCommand(client, interaction), error => /Send Messages/.test(error.message) && !/Manage Roles/.test(error.message));
+    panel.permissionsFor = fullPanelPermissions;
+    await discord.runCommand(client, interaction);
+    assert.equal(lastPanel.embeds.length, 2);
+    assert.equal(lastPanel.embeds[1].title, "Daftar Preorder");
+    assert.ok(lastPanel.components[0].toJSON().components.some(button => button.custom_id === "po:mine:0"));
+    interaction.user.id = buyerId;
     await discord.handleComponent(client, interaction);
     await discord.handleComponent(client, interaction);
     assert.equal(createdChannels, 1);
@@ -128,9 +148,10 @@ async function main() {
     interaction.user.id = buyerId;
     interaction.customId = "po:deposit:" + ticket._id;
     await assert.rejects(discord.handleComponent(client, interaction), /Hanya admin/);
-    interaction.options = { getSubcommand: () => "list", getInteger: () => 1 };
-    await discord.runCommand(client, interaction);
+    interaction.customId = "po:mine:0";
+    await discord.handleComponent(client, interaction);
     assert.equal(JSON.stringify(reply).includes("SECRET"), false);
+    assert.equal(JSON.stringify(reply).includes(second.code), false);
     const publicSummary = discord.summary(await service.get(guildId, ticket._id));
     for (const row of publicSummary.components) assert.ok(row.toJSON().components.length > 0);
     assert.equal(JSON.stringify(publicSummary).includes("TICKET-SECRET"), false);
@@ -140,17 +161,51 @@ async function main() {
     let openedModal;
     interaction.showModal = async value => { openedModal = value.toJSON(); };
     interaction.user.id = ownerId;
-    for (const action of ["paid", "deposit", "close"]) {
+    for (const action of ["paid", "deposit", "upload", "close"]) {
         interaction.customId = `po:${action}:${ticket._id}`;
         await discord.handleComponent(client, interaction);
         assert.ok(openedModal.custom_id.startsWith("po:"));
         assert.ok(openedModal.components.length > 0);
+        if (action === "upload") assert.equal(openedModal.components[0].component.type, 19);
     }
     interaction.user.id = buyerId;
     interaction.customId = `po:collect:${ticket._id}`;
     await discord.handleComponent(client, interaction);
     assert.ok(openedModal.components.length > 0);
+    interaction.user.id = ownerId;
+    interaction.customId = `po:handle:${ticket._id}`;
+    await discord.handleComponent(client, interaction);
+    assert.equal((await service.get(guildId, ticket._id)).handledBy, ownerId);
+    await assert.rejects(service.handle(guildId, ticket._id, "other-admin"), /admin lain/);
+    const originalFetch = global.fetch;
+    try {
+        global.fetch = async () => ({ ok: true, arrayBuffer: async () => new TextEncoder().encode(lines("FILE-SECRET", 10)).buffer });
+        interaction.id = "100000000000000032";
+        interaction.customId = `po:stockfile:${ticket._id}`;
+        interaction.isButton = () => false;
+        interaction.isModalSubmit = () => true;
+        interaction.fields.getUploadedFiles = () => new Collection([["file", {
+            name: "stocks.txt", size: 200, url: "https://cdn.discordapp.com/ephemeral-attachments/1/2/stocks.txt",
+        }]]);
+        await discord.handleComponent(client, interaction);
+        assert.equal((await service.get(guildId, ticket._id)).depositedQty, 110);
+        assert.match(lastPanel.embeds[1].description, /110\/200/);
+        assert.equal(JSON.stringify(lastPanel).includes("FILE-SECRET"), false);
+    } finally { global.fetch = originalFetch; }
+    await Order.insertMany(Array.from({ length: 10 }, (_, i) => ({ guildId, buyerId: "another-buyer", requestId: "page-" + i,
+        code: "PO-PAGE" + i, productName: "Pagination product", quantity: 10 })));
+    interaction.customId = "po:panel:1";
+    interaction.isButton = () => true;
+    interaction.isModalSubmit = () => false;
+    interaction.deferUpdate = async () => {};
+    await discord.handleComponent(client, interaction);
+    assert.match(lastPanel.embeds[1].footer.text, /Halaman 2/);
+    for (const row of lastPanel.components) row.toJSON();
+    const isolatedPanel = await discord.panelPayload(otherGuild);
+    assert.ok(isolatedPanel.embeds[1].description.includes(second.code));
+    assert.equal(isolatedPanel.embeds[1].description.includes(ticket.code), false);
     console.log("OK: private ticket permissions, replay-safe ticket creation, DM fallback and redownload, admin controls, and secret-free summaries");
+    console.log("OK: single setup command, live paginated public list, private order recovery, modal file upload, and staff claim");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

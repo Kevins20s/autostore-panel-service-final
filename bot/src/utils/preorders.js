@@ -114,7 +114,14 @@ function createPreorders({ Order = require("../Schema/preorder").Order } = {}) {
         if (current.status !== "closed") throw new PreorderError("Preorder masih punya kewajiban atau stok. Selesaikan pengambilan sebelum menutup tiket.");
         return current;
     }
-    return { get, byCode, create, deposit, markPaid, collect, close, Order };
+    async function handle(guildId, id, staffId) {
+        const order = await Order.findOneAndUpdate({ ...filter(guildId, id), status: "open", handledBy: null },
+            { $set: { handledBy: staffId, updatedAt: new Date(), summaryDirty: true }, $inc: { revision: 1 } }, { new: true }).lean();
+        const current = order || await get(guildId, id);
+        if (current.handledBy !== staffId) throw new PreorderError("Tiket sudah ditangani admin lain atau sudah ditutup.");
+        return current;
+    }
+    return { get, byCode, create, deposit, markPaid, collect, close, handle, Order };
 }
 
 module.exports = { createPreorders, PreorderError, stockLines, quantity, progress };

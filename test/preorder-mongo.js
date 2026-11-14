@@ -293,7 +293,7 @@ async function main() {
     await discord.handleComponent(client, interaction);
     assert.equal(reply.files[0].attachment.toString().split("\n").length, 25);
     const cancelledSummary = discord.summary(await service.get(guildId, ticket._id));
-    assert.ok(cancelledSummary.components[0].toJSON().components[0].disabled);
+    assert.equal(cancelledSummary.components[0].toJSON().components[0].disabled, false, "collect control can recover previously collected files after cancellation");
     assert.equal(cancelledSummary.components[0].toJSON().components[0].label, "Ambil pesanan");
     assert.equal(cancelledSummary.components.flatMap(row => row.toJSON().components).some(button => button.label === "Unduh pesanan"), false);
     assert.ok(cancelledSummary.components[0].toJSON().components[0].emoji);
@@ -328,6 +328,17 @@ async function main() {
     interaction.customId = `po:remaining:${ticket._id}`;
     await discord.handleComponent(client, interaction);
     assert.equal(reply.files[0].attachment.toString().split("\n").length, 85);
+    interaction.user.id = buyerId;
+    interaction.customId = `po:collect:${ticket._id}`;
+    await discord.handleComponent(client, interaction);
+    assert.match(reply.content, /Salinan/);
+    assert.equal(reply.files[0].attachment.toString().split("\n").length, 25);
+    assert.equal((await service.get(guildId, ticket._id)).collectedQty, 25);
+    const legacyDeleted = await Order.create({ guildId, buyerId, requestId: "legacy-deleted", code: "PO-LEGACY", productName: "Legacy cancelled ticket",
+        quantity: 2, status: "cancelled", channelId: "100000000000000090", messageId: "100000000000000091" });
+    await discord.repairSummaries(client);
+    assert.ok((await service.get(guildId, legacyDeleted._id)).ticketDeletedAt, "already removed cancelled channels are reconciled without issuing another deletion");
+    assert.equal(deletedChannels, 1);
     const racing = await make("race-cancel", 50, otherGuild, "race-buyer");
     await service.deposit(otherGuild, racing._id, "race-batch", lines("RACE", 50));
     await service.markPaid(otherGuild, racing._id, ownerId);

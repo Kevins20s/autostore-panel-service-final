@@ -43,7 +43,7 @@ function summary(order) {
     const cancelled = progress(order) === "Dibatalkan";
     const pendingDelivery = order.claims?.some(claim => !claim.deliveredAt);
     const components = [
-        row(button(`po:collect:${order._id}`, "Ambil pesanan", ButtonStyle.Success).setDisabled(!pendingDelivery && (order.status !== "open" || !order.paidAt || order.depositedQty <= order.collectedQty)),
+        row(button(`po:collect:${order._id}`, "Ambil pesanan", ButtonStyle.Success).setDisabled(!pendingDelivery && !order.collectedQty && (order.status !== "open" || !order.paidAt || order.depositedQty <= order.collectedQty)),
             button(`po:refresh:${order._id}`, "Cek status")),
         row(button(`po:deposit:${order._id}`, "Setor teks").setDisabled(order.status !== "open" || order.depositedQty === order.quantity),
             button(`po:upload:${order._id}`, "Upload .txt").setDisabled(order.status !== "open" || order.depositedQty === order.quantity),
@@ -86,7 +86,13 @@ async function refresh(client, guildId, id) {
     const current = previous.catch(() => {}).then(async () => {
         const order = await orders.get(guildId, id);
         if (!order.channelId || order.ticketClosing || order.ticketDeletedAt) return;
-        const channel = await client.channels.fetch(order.channelId);
+        const channel = await client.channels.fetch(order.channelId).catch(async error => {
+            if (error.code !== 10003 || order.status === "open") throw error;
+            await Order.updateOne({ _id: order._id, guildId, channelId: order.channelId, status: { $in: ["closed", "cancelled"] } },
+                { $set: { ticketDeletedAt: new Date(), ticketClosing: false, summaryDirty: false } });
+            return null;
+        });
+        if (!channel) return;
         if (channel?.guildId !== guildId) throw new PreorderError("Channel tiket tidak ditemukan di server ini.");
         let message = order.messageId ? await channel.messages.fetch(order.messageId).catch(() => null) : null;
         if (message) await message.edit(summary(order));
@@ -377,6 +383,11 @@ async function handleComponent(client, interaction) {
             if (pending) {
                 await interaction.deferReply(privateReply);
                 return deliver(client, interaction, order, order.items.slice(pending.start, pending.start + pending.quantity), pending.requestId);
+            }
+            if (order.collectedQty > 0 && (order.status !== "open" || order.depositedQty === order.collectedQty)) {
+                await interaction.deferReply(privateReply);
+                return interaction.editReply({ content: `📦 Salinan **${order.collectedQty} stok yang sudah diambil**. Jumlah pengambilan tetap sama.`,
+                    files: [{ attachment: Buffer.from(order.items.slice(0, order.collectedQty).join("\n"), "utf8"), name: `${order.code}-salinan-pesanan.txt` }] });
             }
             return interaction.showModal(modal(`po:take:${id}`, "Ambil Pesanan", [
                 { id: "amount", label: "Jumlah yang ingin diambil", max: 5, placeholder: `Tersedia: ${order.depositedQty - order.collectedQty}` },

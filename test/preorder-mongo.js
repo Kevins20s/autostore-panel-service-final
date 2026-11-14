@@ -116,7 +116,7 @@ async function main() {
     panel.permissionsFor = fullPanelPermissions;
     await discord.runCommand(client, interaction);
     assert.equal(lastPanel.embeds.length, 2);
-    assert.equal(lastPanel.embeds[1].title, "Daftar Preorder");
+    assert.ok(lastPanel.embeds[1].title.endsWith("Daftar Preorder"));
     assert.ok(lastPanel.components[0].toJSON().components.some(button => button.custom_id === "po:mine:0"));
     interaction.user.id = buyerId;
     await discord.handleComponent(client, interaction);
@@ -156,7 +156,7 @@ async function main() {
     for (const row of publicSummary.components) assert.ok(row.toJSON().components.length > 0);
     assert.equal(JSON.stringify(publicSummary).includes("TICKET-SECRET"), false);
     assert.match(publicSummary.embeds[0].description, /100\/200/);
-    assert.equal(publicSummary.embeds[0].fields.find(field => field.name === "Sudah diambil").value, "25");
+    assert.match(publicSummary.embeds[0].fields.find(field => field.name.includes("Sudah diambil")).value, /25/);
     assert.equal((await service.get(guildId, ticket._id)).collectedQty, 25);
     let openedModal;
     interaction.showModal = async value => { openedModal = value.toJSON(); };
@@ -204,8 +204,65 @@ async function main() {
     const isolatedPanel = await discord.panelPayload(otherGuild);
     assert.ok(isolatedPanel.embeds[1].description.includes(second.code));
     assert.equal(isolatedPanel.embeds[1].description.includes(ticket.code), false);
+    interaction.user.id = buyerId;
+    interaction.customId = `po:cancel:${ticket._id}`;
+    await assert.rejects(discord.handleComponent(client, interaction), /Hanya admin/);
+    interaction.user.id = ownerId;
+    await discord.handleComponent(client, interaction);
+    assert.equal(openedModal.components.length, 2);
+    const beforeCancel = await service.get(guildId, ticket._id);
+    interaction.isButton = () => false;
+    interaction.isModalSubmit = () => true;
+    interaction.customId = `po:cancelconfirm:${ticket._id}`;
+    interaction.fields.getTextInputValue = key => key === "confirm" ? "CLOSE" : "Pembeli meminta pembatalan";
+    await assert.rejects(discord.handleComponent(client, interaction), /Ketik BATAL/);
+    interaction.fields.getTextInputValue = key => key === "confirm" ? "BATAL" : "Pembeli meminta pembatalan";
+    await discord.handleComponent(client, interaction);
+    const cancelledTicket = await service.get(guildId, ticket._id);
+    assert.equal(cancelledTicket.status, "cancelled");
+    assert.equal(progress(cancelledTicket), "Dibatalkan");
+    assert.equal(cancelledTicket.collectedQty, 25);
+    assert.equal(cancelledTicket.depositedQty, 110);
+    assert.deepEqual(cancelledTicket.items, beforeCancel.items);
+    assert.equal(cancelledTicket.paidAt.getTime(), beforeCancel.paidAt.getTime());
+    assert.equal(cancelledTicket.closedBy, ownerId);
+    assert.match(cancelledTicket.cancelReason, /Pembeli meminta/);
+    await assert.rejects(service.collect(guildId, ticket._id, buyerId, "after-cancel", 1), /ditolak/);
+    await assert.rejects(service.deposit(guildId, ticket._id, "after-cancel-deposit", "stock"), /ditolak/);
+    interaction.isButton = () => true;
+    interaction.isModalSubmit = () => false;
+    interaction.customId = `po:remaining:${ticket._id}`;
+    interaction.user.id = buyerId;
+    await assert.rejects(discord.handleComponent(client, interaction), /Hanya admin/);
+    interaction.user.id = ownerId;
+    await discord.handleComponent(client, interaction);
+    assert.equal(reply.files[0].attachment.toString().split("\n").length, 85);
+    assert.equal(reply.files[0].attachment.toString().split("\n")[0], "TICKET-SECRET 25");
+    interaction.user.id = buyerId;
+    interaction.customId = `po:download:${ticket._id}`;
+    await discord.handleComponent(client, interaction);
+    assert.equal(reply.files[0].attachment.toString().split("\n").length, 25);
+    const cancelledSummary = discord.summary(cancelledTicket);
+    assert.ok(cancelledSummary.components[0].toJSON().components[0].disabled);
+    assert.ok(cancelledSummary.components[0].toJSON().components[0].emoji);
+    assert.equal(JSON.stringify(cancelledSummary).includes("TICKET-SECRET"), false);
+    for (const row of cancelledSummary.components) row.toJSON();
+    const racing = await make("race-cancel", 50, otherGuild, "race-buyer");
+    await service.deposit(otherGuild, racing._id, "race-batch", lines("RACE", 50));
+    await service.markPaid(otherGuild, racing._id, ownerId);
+    const race = await Promise.allSettled([
+        service.collect(otherGuild, racing._id, "race-buyer", "racing-claim", 10),
+        service.cancel(otherGuild, racing._id, ownerId, "Batalkan setelah verifikasi admin"),
+    ]);
+    assert.equal(race[1].status, "fulfilled");
+    const raced = await service.get(otherGuild, racing._id);
+    assert.equal(raced.status, "cancelled");
+    assert.ok([0, 10].includes(raced.collectedQty));
+    assert.equal(raced.items.length, 50);
+    await assert.rejects(service.collect(otherGuild, racing._id, "race-buyer", "racing-after", 1), /ditolak/);
     console.log("OK: private ticket permissions, replay-safe ticket creation, DM fallback and redownload, admin controls, and secret-free summaries");
     console.log("OK: single setup command, live paginated public list, private order recovery, modal file upload, and staff claim");
+    console.log("OK: admin-only forced cancellation, explicit confirmation, retained collected files, leftover stock recovery, and concurrent cancellation/collection");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

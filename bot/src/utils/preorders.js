@@ -25,6 +25,7 @@ function stockLines(text) {
 }
 
 function progress(order) {
+    if (order.status === "cancelled") return "Dibatalkan";
     if (order.status === "closed") return order.collectedQty === order.quantity ? "Selesai" : "Dibatalkan";
     if (order.collectedQty === order.quantity) return "Selesai";
     if (!order.paidAt) return "Menunggu konfirmasi pembayaran";
@@ -121,7 +122,17 @@ function createPreorders({ Order = require("../Schema/preorder").Order } = {}) {
         if (current.handledBy !== staffId) throw new PreorderError("Tiket sudah ditangani admin lain atau sudah ditutup.");
         return current;
     }
-    return { get, byCode, create, deposit, markPaid, collect, close, handle, Order };
+    async function cancel(guildId, id, staffId, reason) {
+        const text = String(reason || "").trim();
+        if (text.length < 3 || text.length > 300) throw new PreorderError("Isi alasan pembatalan antara 3 dan 300 karakter.");
+        const order = await Order.findOneAndUpdate({ ...filter(guildId, id), status: "open", $expr: { $lt: ["$collectedQty", "$quantity"] } },
+            { $set: { status: "cancelled", cancelReason: text, closedAt: new Date(), closedBy: staffId, updatedAt: new Date(), summaryDirty: true },
+                $inc: { revision: 1 } }, { new: true }).lean();
+        const current = order || await get(guildId, id);
+        if (current.status !== "cancelled") throw new PreorderError("Preorder sudah selesai atau ditutup. Gunakan Tutup tiket untuk pesanan yang sudah selesai.");
+        return current;
+    }
+    return { get, byCode, create, deposit, markPaid, collect, close, handle, cancel, Order };
 }
 
 module.exports = { createPreorders, PreorderError, stockLines, quantity, progress };

@@ -16,7 +16,7 @@ const schema = new Schema({
     buyerId: { type: String, required: true },
     productName: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1, max: 10000 },
-    status: { type: String, enum: ["open", "closed"], default: "open" },
+    status: { type: String, enum: ["open", "closed", "cancelled"], default: "open" },
     channelId: { type: String, default: null },
     messageId: { type: String, default: null },
     ticketLeaseUntil: { type: Date, default: null },
@@ -35,6 +35,7 @@ const schema = new Schema({
     updatedAt: { type: Date, default: Date.now },
     closedAt: Date,
     closedBy: String,
+    cancelReason: String,
 });
 schema.index({ guildId: 1, requestId: 1 }, { unique: true });
 schema.index({ guildId: 1, code: 1 }, { unique: true });

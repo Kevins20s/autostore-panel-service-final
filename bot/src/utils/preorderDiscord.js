@@ -229,9 +229,9 @@ async function panelPayload(guildId, requestedPage = 0, context = {}) {
         const cancelled = progress(order) === "Dibatalkan";
         const icon = cancelled ? "⛔" : order.depositedQty >= order.quantity ? emojis.preorderReady : emojis.preorderLoading;
         const product = escapeMarkdown(order.productName.replace(/\s+/g, " "));
-        return `**${page * 8 + index + 1}.** <@${order.buyerId}> · **${product}** · \`${order.depositedQty}/${order.quantity}\` ${icon}${cancelled ? " · Dibatalkan" : ""}`;
+        return `**${page * 8 + index + 1}.** <@${order.buyerId}> · **${product}** · \`${order.depositedQty}/${order.quantity}\` ${icon}`;
     }).join("\n");
-    const navigation = [row(button("po:mine:0", "Pesanan saya"), button("po:manage:0", "Kelola (admin)"), button(`po:panel:${page}`, "Perbarui daftar"))];
+    const navigation = [];
     if (pages > 1) navigation.push(row(button(`po:panel:${page - 1}`, "Sebelumnya").setEmoji("◀️").setDisabled(page === 0),
         button(`po:panel:${page + 1}`, "Selanjutnya").setEmoji("▶️").setDisabled(page === pages - 1)));
     return {
@@ -320,7 +320,8 @@ async function setup(client, interaction) {
         if (listMessage && !existingList) await listMessage.delete().catch(() => {});
         throw error;
     }
-    await interaction.editReply({ content: `Panel dan daftar preorder dibuat di ${channel}. Tiket akan masuk kategori **${escapeMarkdown(category.name || "Preorder")}**. Selanjutnya buyer dan admin cukup memakai tombol.` });
+    await interaction.editReply({ content: `Panel dan daftar preorder dibuat di ${channel}. Tiket akan masuk kategori **${escapeMarkdown(category.name || "Preorder")}**. Selanjutnya buyer dan admin cukup memakai tombol.`,
+        components: [row(button("po:manage:0", "Kelola preorder"))] });
 }
 
 async function runCommand(client, interaction) {
@@ -356,7 +357,8 @@ async function handleComponent(client, interaction) {
         let order = await orders.create({ guildId: interaction.guildId, buyerId: interaction.user.id, requestId: interaction.id,
             productName: interaction.fields.getTextInputValue("product"), amount: interaction.fields.getTextInputValue("amount") });
         order = await ensureTicket(client, interaction.guild, order, settings);
-        return interaction.editReply({ content: `Preorder ${order.code} dibuat. Lanjutkan di <#${order.channelId}>. Pembayaran diurus bersama admin di tiket.` });
+        return interaction.editReply({ content: `Preorder ${order.code} dibuat. Lanjutkan di <#${order.channelId}>. Pembayaran diurus bersama admin di tiket.`,
+            components: [row(button("po:mine:0", "Pesanan saya"))] });
     }
     let order = await orders.get(interaction.guildId, id);
     const buyer = order.buyerId === interaction.user.id;

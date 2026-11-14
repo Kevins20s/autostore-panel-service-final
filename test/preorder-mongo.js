@@ -147,7 +147,7 @@ async function main() {
     assert.equal(lastPanel.embeds[0].title, "Daftar PreOrder");
     assert.ok(lastPanel.embeds[0].description.includes("`200/200` ✅"));
     assert.equal(lastPanel.embeds[0].description.split("\n").length, 2, "one logical line per preorder");
-    assert.ok(lastPanel.components[0].toJSON().components.some(button => button.custom_id === "po:mine:0"));
+    assert.equal(lastPanel.components.length, 0, "single-page public list has no control buttons");
     interaction.user.id = buyerId;
     await discord.handleComponent(client, interaction);
     await discord.handleComponent(client, interaction);

@@ -135,6 +135,8 @@ async function main() {
     assert.ok(mainPanel.embeds[0].description.length < 100);
     assert.equal(mainPanel.components[0].toJSON().components[0].label, "Create PreOrder");
     assert.equal(lastPanel.embeds[0].title, "Daftar PreOrder");
+    assert.ok(lastPanel.embeds[0].description.includes("`200/200` ✅"));
+    assert.equal(lastPanel.embeds[0].description.split("\n").length, 2, "one logical line per preorder");
     assert.ok(lastPanel.components[0].toJSON().components.some(button => button.custom_id === "po:mine:0"));
     interaction.user.id = buyerId;
     await discord.handleComponent(client, interaction);
@@ -224,12 +226,16 @@ async function main() {
     const isolatedPanel = await discord.panelPayload(otherGuild);
     assert.ok(isolatedPanel.list.embeds[0].description.includes("Other store product"));
     assert.equal(isolatedPanel.list.embeds[0].description.includes("Private product"), false);
+    assert.ok(isolatedPanel.list.embeds[0].description.endsWith("⏳"));
+    await service.deposit(otherGuild, second._id, "finish-second", lines("READY", 50));
+    assert.ok((await discord.panelPayload(otherGuild)).list.embeds[0].description.endsWith("✅"), "fully stocked preorder uses ready emoji even before manual payment confirmation");
     const custom = "<:preorder_test:100000000000000099>";
     guild.emojis = { cache: new Collection([["100000000000000099", { available: true, roles: { cache: new Collection() }, toString: () => custom }]]) };
     await mongoose.connection.collection("storefronts").updateOne({ _id: guildId },
-        { $set: { preorderEmojis: { preorderTitleLeft: custom } } }, { upsert: true });
+        { $set: { preorderEmojis: { preorderTitleLeft: custom, preorderLoading: custom, preorderReady: custom } } }, { upsert: true });
     const customPanel = await discord.panelPayload(guildId, 0, { guild });
     assert.equal(customPanel.panel.embeds[0].title, custom + " Create Ticket PreOrder 🎫");
+    assert.ok(customPanel.list.embeds[0].description.split("\n").every(line => line.endsWith(custom)), "pending status uses configured custom emoji");
     const oldSettings = await Settings.findOne({ guildId }).lean();
     panelMessages.delete(oldSettings.listMessageId);
     await Settings.updateOne({ guildId }, { $unset: { listMessageId: "" } });

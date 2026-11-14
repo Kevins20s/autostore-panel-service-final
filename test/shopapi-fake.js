@@ -181,7 +181,7 @@ const srv = http.createServer(app).listen(0, async () => {
         assert.deepStrictEqual(await resolveRestockEmojis(storefronts.get(guildA), guild, { has: () => true }), restock);
         assert.strictEqual((await resolveRestockEmojis(storefronts.get(guildA), guild, { has: () => false })).restockQuantity, "🟢");
         assert.deepStrictEqual((await j("GET", emojiPath, null, "B")).j.restockEmotes, {});
-        const preorder = { preorderTitleLeft: botEmote, preorderTitleRight: custom };
+        const preorder = { preorderTitleLeft: botEmote, preorderTitleRight: custom, preorderLoading: botEmote, preorderReady: custom };
         assert.strictEqual(initial.defaults.preorderTitleLeft, preorderEmojiDefaults.preorderTitleLeft);
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: {}, preorderEmojis: { unknown: custom } })).s, 400);
         assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: {}, preorderEmojis: { preorderTitleLeft: "<:locked:623456789012345678>" } })).s, 400);

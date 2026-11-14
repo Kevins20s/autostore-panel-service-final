@@ -198,8 +198,12 @@ async function panelPayload(guildId, requestedPage = 0, context = {}) {
     const page = Math.max(0, Math.min(pages - 1, Number(requestedPage) || 0));
     const list = await Order.find({ guildId }).select("code buyerId productName quantity depositedQty collectedQty paidAt status handledBy")
         .sort({ createdAt: -1, _id: -1 }).skip(page * 8).limit(8).lean();
-    const description = list.map((order, index) => `**${page * 8 + index + 1}.** <@${order.buyerId}> · **${escapeMarkdown(order.productName)}**\n` +
-        `\`${order.depositedQty}/${order.quantity}\` disetor · \`${order.collectedQty}\` diambil · ${displayStatus(order).text}`).join("\n\n");
+    const description = list.map((order, index) => {
+        const cancelled = progress(order) === "Dibatalkan";
+        const icon = cancelled ? "⛔" : order.depositedQty >= order.quantity ? emojis.preorderReady : emojis.preorderLoading;
+        const product = escapeMarkdown(order.productName.replace(/\s+/g, " "));
+        return `**${page * 8 + index + 1}.** <@${order.buyerId}> · **${product}** · \`${order.depositedQty}/${order.quantity}\` ${icon}${cancelled ? " · Dibatalkan" : ""}`;
+    }).join("\n");
     const navigation = [row(button("po:mine:0", "Pesanan saya"), button(`po:panel:${page}`, "Perbarui daftar"))];
     if (pages > 1) navigation.push(row(button(`po:panel:${page - 1}`, "Sebelumnya").setEmoji("◀️").setDisabled(page === 0),
         button(`po:panel:${page + 1}`, "Selanjutnya").setEmoji("▶️").setDisabled(page === pages - 1)));

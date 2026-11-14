@@ -75,7 +75,8 @@ const hostedRestockEmojiDefaults = Object.freeze({
     restockQuantity: "<a:a_online:1568807334707204177>",
 });
 const restockDefaultsFor = hosted => hosted ? hostedRestockEmojiDefaults : restockEmojiDefaults;
-const preorderEmojiDefaults = Object.freeze({ preorderTitleLeft: "🎫", preorderTitleRight: "🎫" });
+const preorderEmojiDefaults = Object.freeze({ preorderTitleLeft: "🎫", preorderTitleRight: "🎫",
+    preorderLoading: "⏳", preorderReady: "✅" });
 const customEmoji = /^<(a?):([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
 const applicationEmojiLists = new WeakMap();
 

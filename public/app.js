@@ -1353,6 +1353,8 @@ const isRestockEmoji = key => RESTOCK_EMOJI_FIELDS.some(([slot]) => slot === key
 const PREORDER_EMOJI_FIELDS = [
     ["preorderTitleLeft", "Emoji kiri judul preorder", "Preorder title left emoji"],
     ["preorderTitleRight", "Emoji kanan judul preorder", "Preorder title right emoji"],
+    ["preorderLoading", "Preorder — stok belum lengkap", "Preorder — stock pending"],
+    ["preorderReady", "Preorder — stok sudah lengkap", "Preorder — stock ready"],
 ];
 const isPreorderEmoji = key => PREORDER_EMOJI_FIELDS.some(([slot]) => slot === key);
 
@@ -1366,6 +1368,10 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
         h("div", { class: "emoji-preview-author" }, "GevraStore", h("span", {}, "BOT")),
         h("div", { class: "emoji-preview-embed" }, h("strong", { class: "emoji-preview-heading" }, ...title), ...content));
 
+    if (["preorderLoading", "preorderReady"].includes(selected)) {
+        return message(["Daftar PreOrder"], line("1. @Buyer · Produk A · 0/200", icon("preorderLoading")),
+            line("2. @Buyer · Produk B · 200/200", icon("preorderReady")));
+    }
     if (isPreorderEmoji(selected)) {
         return message([icon("preorderTitleLeft"), "Create Ticket PreOrder", icon("preorderTitleRight")],
             line(t("Klik tombol di bawah, lalu isi produk dan jumlah preorder kamu.", "Click below, then enter your product and quantity.")),

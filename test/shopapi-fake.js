@@ -24,6 +24,9 @@ const nativeFetch = globalThis.fetch;
 globalThis.fetch = (url, options) => {
     if (!url.startsWith("https://discord.com/api/v10/")) return nativeFetch(url, options);
     const path = new URL(url).pathname;
+    if (options?.headers?.Authorization === "Bot own-no-source" && path.includes(`/guilds/${sourceGuild}`)) {
+        return Promise.resolve(new Response(null, { status: 403 }));
+    }
     if (path.endsWith(`/applications/${botId}/emojis`)) return Promise.resolve(Response.json({ items: [{ id: botEmoteId, name: "bot_gem" }] }));
     if (path.endsWith(`/guilds/${guildA}/emojis`)) return Promise.resolve(Response.json([
         { id: serverEmoteId, name: "gem", animated: true }, { id: "623456789012345678", name: "locked", roles: [guildA] },
@@ -84,6 +87,12 @@ const app = express(); app.use(express.json());
 app.use("/api/shop", (req, res, next) => {
     const guildId = req.get("X-Test-Store") === "B" ? guildB : guildA;
     req.lic = { id: guildId, expiresAt: now + 60000, paymentMode: "auto", discordLoginId: guildId, hostedBot: { enabled: true, guildId } };
+    if (req.get("X-Test-Store")?.startsWith("Own")) {
+        delete req.lic.hostedBot;
+        delete req.lic.discordLoginId;
+        req.lic.config = { guildId, clientId: botId, mongoUrl: "mongodb://tiruan",
+            botToken: req.get("X-Test-Store") === "OwnNoSource" ? "own-no-source" : "own-bot" };
+    }
     next();
 }, createShopRouter({ valid: () => true, decrypt: config => config }));
 const srv = http.createServer(app).listen(0, async () => {
@@ -242,6 +251,30 @@ const srv = http.createServer(app).listen(0, async () => {
         } finally {
             delete process.env.HOSTED_PILOT_BINDING;
         }
+        const own = await j("GET", emojiPath, null, "Own");
+        assert.strictEqual(own.s, 200);
+        assert.ok(own.j.library.some(x => x.code === sourceCode && x.source === "external"));
+        const ownSaved = await j("PUT", emojiPath, { guildId: guildA, model: "model1", emojis: { profile: sourceCode },
+            restockEmojis: { restockTitle: sourceCode }, preorderEmojis: { preorderReady: sourceCode } }, "Own");
+        assert.strictEqual(ownSaved.s, 200);
+        assert.strictEqual(storefronts.get(guildA).preorderEmojiSourceGuildId, sourceGuild);
+        assert.strictEqual((await j("PUT", emojiPath, { guildId: guildA, emojis: { profile: sourceCode } }, "OwnNoSource")).s, 400);
+        const noSource = (await j("GET", emojiPath, null, "OwnNoSource")).j;
+        assert.ok(!noSource.library.some(x => x.source === "external"));
+        const configuredSource = process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID;
+        delete process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID;
+        try {
+            assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => true })).profile, sourceCode);
+            assert.strictEqual((await resolveRestockEmojis(storefronts.get(guildA), guild, { has: () => true })).restockTitle, sourceCode);
+            assert.strictEqual((await resolvePreorderEmojis(storefronts.get(guildA), guild, { has: () => true })).preorderReady, sourceCode);
+            assert.strictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => false })).profile, emojiDefaults.profile);
+            process.env.HOSTED_PILOT_BINDING = "test";
+            assert.notStrictEqual((await resolveEmojis({ profile: sourceCode }, guild, sourceGuild, { has: () => true })).profile, sourceCode);
+        } finally {
+            process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID = configuredSource;
+            delete process.env.HOSTED_PILOT_BINDING;
+        }
+        console.log("ok  own bot: source emoji gallery, saving, display, permissions, and hosted isolation");
         console.log("ok  emoji Model 1: simpan per server, reset, validasi, dan fallback emoji Discord");
         console.log("\nSemua tes shopapi (tiruan) lulus.");
     } catch (e) { console.error("GAGAL:", e); process.exitCode = 1; }

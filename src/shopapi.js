@@ -49,7 +49,7 @@ async function* orderCsv(cursor) {
     }
 }
 
-async function discordEmotes(guildId, token, botId, sourceGuildId, discordUserId) {
+async function discordEmotes(guildId, token, botId, sourceGuildId, discordUserId, ownBot = false) {
     if (!token) return { library: null };
     const get = async path => {
         try {
@@ -68,7 +68,16 @@ async function discordEmotes(guildId, token, botId, sourceGuildId, discordUserId
             (!emoji.roles?.length || emoji.roles.some(role => member?.roles?.includes(role))));
     };
     const extraGuild = async () => {
-        if (!ID_RE.test(sourceGuildId) || !ID_RE.test(discordUserId) || sourceGuildId === guildId) return null;
+        if (!ID_RE.test(sourceGuildId) || sourceGuildId === guildId) return null;
+        // The customer's own token only exposes servers that their bot can access.
+        // Shared-bot tenants still require authorization for the source server.
+        if (ownBot) {
+            const server = await get(`/guilds/${sourceGuildId}`);
+            if (!server?.roles) return null;
+            const emojis = await guildEmotes(sourceGuildId);
+            return emojis ? { name: server.name, id: sourceGuildId, emojis } : null;
+        }
+        if (!ID_RE.test(discordUserId)) return null;
         const [server, member] = await Promise.all([
             get(`/guilds/${sourceGuildId}`), get(`/guilds/${sourceGuildId}/members/${discordUserId}`),
         ]);
@@ -116,7 +125,8 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
             req.shopDiscord = hosted
                 ? { hosted: true, token: process.env.DISCORD_CATALOG_PILOT_TOKEN, botId: process.env.DISCORD_HOSTED_BOT_CLIENT_ID,
                     sourceGuildId: process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID, discordUserId: l.discordLoginId }
-                : { token: config.botToken, botId: config.clientId };
+                : { token: config.botToken, botId: config.clientId,
+                    sourceGuildId: process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID };
             req.db = hosted
                 ? await getDb("hosted:" + hosted.tenantId, config.mongoUrl, hosted.dbName)
                 : await getDb(l.id, config.mongoUrl);
@@ -130,7 +140,7 @@ module.exports = function createShopRouter({ valid, decrypt, licenses = () => []
     const c = (req, k) => req.db.collection(COL[k]);
     const storeEmotes = req => {
         const { token, botId, sourceGuildId, discordUserId } = req.shopDiscord;
-        return discordEmotes(req.shopGuildId, token, botId, sourceGuildId, discordUserId);
+        return discordEmotes(req.shopGuildId, token, botId, sourceGuildId, discordUserId, !req.shopDiscord.hosted);
     };
 
     // ---------- ringkasan ----------

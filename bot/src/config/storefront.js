@@ -101,7 +101,8 @@ function availableGuildEmoji(guild, id) {
 
 async function resolveConfiguredEmojis(emojis, preset, config, guild, sourceGuildId, permissions) {
     const configured = Object.keys(emojis).map(key => [key, customEmojiId(config?.[key]), customEmojiId(preset[key])]);
-    const source = sourceGuildId && sourceGuildId === process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID && permissions?.has("UseExternalEmojis")
+    const allowedSource = !process.env.HOSTED_PILOT_BINDING || sourceGuildId === process.env.DISCORD_HOSTED_EMOTE_SOURCE_GUILD_ID;
+    const source = sourceGuildId && allowedSource && permissions?.has("UseExternalEmojis")
         ? guild?.client?.guilds?.cache.get(sourceGuildId) : null;
     const owned = configured.some(([, id, presetId]) => presetId || (id && !guild?.emojis?.cache.has(id) && !source?.emojis?.cache.has(id)))
         ? await applicationEmojis(guild) : null;

@@ -62,7 +62,7 @@ async function sendRestockNotif(client, guildId, productName, added, tag) {
         const emojis = await resolveRestockEmojis(storefront, guild, permissions);
         const embed = new EmbedBuilder()
             .setTitle(`${emojis.restockTitle} Restock Notification`)
-            .setDescription(`· Product: **${escapeMarkdown(productName)}** ${emojis.restockProduct}\n· Added QTY: **x ${added}** ${emojis.restockQuantity}`)
+            .setDescription(`${emojis.restockArrow} Product: **${escapeMarkdown(productName)}** ${emojis.restockProduct}\n${emojis.restockArrow} Added QTY: **x ${added}** ${emojis.restockQuantity}`)
             .setColor(0x39e914)
             .setImage(storefrontBannerUrl(storefront))
             .setTimestamp();

@@ -68,11 +68,12 @@ function emojiDefaultsFor(model, hosted = false) {
     return hosted ? { ...base, ...hostedPresets[model] } : base;
 }
 const emojiDefaults = Object.freeze(emojiDefaultsFor(models.model1));
-const restockEmojiDefaults = Object.freeze({ restockTitle: "✅", restockProduct: "🎁", restockQuantity: "🟢" });
+const restockEmojiDefaults = Object.freeze({ restockTitle: "✅", restockProduct: "🎁", restockQuantity: "🟢", restockArrow: "➡️" });
 const hostedRestockEmojiDefaults = Object.freeze({
     restockTitle: "<a:Benar:1568807352159838281>",
     restockProduct: "<:productdet:1568808022988423220>",
     restockQuantity: "<a:a_online:1568807334707204177>",
+    restockArrow: "<a:arrow_animated:1568807221985288224>",
 });
 const restockDefaultsFor = hosted => hosted ? hostedRestockEmojiDefaults : restockEmojiDefaults;
 const preorderEmojiDefaults = Object.freeze({ preorderTitleLeft: "🎫", preorderTitleRight: "🎫",

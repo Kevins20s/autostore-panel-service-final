@@ -1349,6 +1349,7 @@ const RESTOCK_EMOJI_FIELDS = [
     ["restockTitle", "Judul notifikasi", "Notification title"],
     ["restockProduct", "Nama produk", "Product name"],
     ["restockQuantity", "Jumlah ditambahkan", "Added quantity"],
+    ["restockArrow", "Arrow di awal baris", "Arrow before each line"],
 ];
 const isRestockEmoji = key => RESTOCK_EMOJI_FIELDS.some(([slot]) => slot === key);
 const PREORDER_EMOJI_FIELDS = [
@@ -1380,8 +1381,8 @@ function storefrontEmojiPreview(model, selected, emojis, t) {
     }
     if (isRestockEmoji(selected)) {
         return message([icon("restockTitle"), "Restock Notification"],
-            line("· Product:", h("strong", {}, "Voucher Digital"), icon("restockProduct")),
-            line("· Added QTY:", h("strong", {}, "x 200"), icon("restockQuantity")));
+            line(icon("restockArrow"), "Product:", h("strong", {}, "Voucher Digital"), icon("restockProduct")),
+            line(icon("restockArrow"), "Added QTY:", h("strong", {}, "x 200"), icon("restockQuantity")));
     }
     if (["inStock", "outOfStock"].includes(selected)) {
         return message([t("Pilihan produk", "Product options")],
